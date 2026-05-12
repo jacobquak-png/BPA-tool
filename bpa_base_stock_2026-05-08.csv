@@ -1,0 +1,69 @@
+Code;Descr;n_klanten;lambda_jr;LT_dagen;mu;bron;s@98.0%;s@99.0%;s@99.5%;s@99.9%
+MOTSBERVRDM3913#A;Motor, stepper;25;2,5;30;0,2055;excel;2;3;3;4
+REDUAPE100#A;Gearbox;25;2,5;15;0,1027;excel;2;2;2;3
+000332792;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+000548992;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUAPEAE090#D-FG;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUPLAN-00000006;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUAPE090#A;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+000348761;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUPLAN-00000005;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUAPE075#A-FG;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUAPE060#C-FG;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUPLAN-00000014;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUAPE100#B-FG;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUAPEAE090#A-FG;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+REDUPLAN-00000041;Reductor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+MOTOADJU-00000040;Motor, three-phase geared;25;2,5;20;0,137;excel;2;2;3;3
+000608495;Vision, camera;25;2,5;20;0,137;excel;2;2;3;3
+BECK_CX5130-COM-1;CPU module CX5130-0175 64Bit TC3 40GB;25;2,5;45;0,3082;excel;3;3;3;4
+BECK_CX5140-0125;CPU module CX5140-0125 32Bit TC3 40GB;25;2,5;45;0,3082;excel;3;3;3;4
+BECK_CX5140-COM-1;CPU module CX5140-0175 64Bit TC3 40GB;25;2,5;45;0,3082;excel;3;3;3;4
+000377208;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+BECK_CP6706-COM-1;Panel PC 7-inch display 800 x 480 WVGA;25;2,5;35;0,2397;excel;3;3;3;4
+BECK_CP2913-0000;Touch panel 12.1 inch;25;2,5;21;0,1438;excel;2;2;3;3
+BECK_CP2916-0000;Touch panel 15,6 Inch - 1366x768;25;2,5;21;0,1438;excel;2;2;3;3
+REX_CML75.1-3P-905;IndraControl MLC CML75;25;2,5;30;0,2055;excel;2;3;3;4
+000593729;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+000715081;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+MOTOSERV-00000001;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+MOTOSERV-00000002;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+000591867;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+000593746;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+000523087;Motor, servo;25;2,5;30;0,2055;excel;2;3;3;4
+000603975;Motor, servo;25;2,5;20;0,137;excel;2;2;3;3
+MOTSINDMKD041B#A;Motor, servo;25;2,5;15;0,1027;excel;2;2;2;3
+MOTSINDMKD071B#A;Servo motor;25;2,5;30;0,2055;excel;2;3;3;4
+000678348;Vacuum pump;25;2,5;10;0,0685;excel;2;2;2;3
+000539962;Vacuum pump;25;2,5;10;0,0685;excel;2;2;2;3
+CILDFES50500NCI;Cylinder, standard;25;3,125;2;0,0171;excel;1;2;2;2
+000548820;Motor, servo;25;2,5;7;0,0479;excel;2;2;2;3
+000548818;Motor, servo;25;2,5;10;0,0685;excel;2;2;2;3
+MOTOGEAR-00000089;Motor, three-phase geared;25;2,5;10;0,0685;excel;2;2;2;3
+REDUPLAN-00000025;Reductor, servo;25;5,0;35;0,4795;excel;3;4;4;5
+000691131;Cylinder, semi-rotary;25;3,125;2;0,0171;excel;1;2;2;2
+PISTHOTM-00000003;Hotmelt, pistol;25;2,5;30;0,2055;excel;2;3;3;4
+PEN_761000-PMD0;Weighing unit Penko 1020 & ETH;25;2,5;30;0,2055;excel;2;3;3;4
+000550111;Motor, three-phase geared;25;2,5;30;0,2055;excel;2;3;3;4
+000550113;Motor, three-phase geared;25;2,5;30;0,2055;excel;2;3;3;4
+000464998;Motor, three-phase geared;25;2,5;30;0,2055;excel;2;3;3;4
+000271315;Motor, servo;25;2,5;55;0,3767;excel;3;3;4;4
+000283849;Motor, servo;25;2,5;55;0,3767;excel;3;3;4;4
+000271316;Motor, servo;25;2,5;55;0,3767;excel;3;3;4;4
+SIG_MDP2200-HHH-03;Power/Drive Module;25;2,5;40;0,274;excel;3;3;3;4
+SIG_MDP 101-1;Servo Power Supply-mod 5A/400V;25;2,5;40;0,274;excel;3;3;3;4
+SIE_6AV7862-2BC00-0AA0;Monitor 12,1 IFP1200 Basic Flat Panel;25;2,5;30;0,2055;excel;2;3;3;4
+SIE_6AV2124-0MC01;Touch panel TP1200 Comfort 12 inch;25;2,5;2;0,0137;excel;1;2;2;2
+000361279;Motor, three-phase;25;2,5;35;0,2397;excel;3;3;3;4
+MOTODRUM-00000022;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+MOTODRUM-00000005;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+MOTODRUM-00000002;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+MOTODRUM-00000008;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+MOTODRUM-00000034;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+MOTODRUM-00000095;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+MOTODRUM-00000017;Motor, drum;25;2,5;30;0,2055;excel;2;3;3;4
+000283850;Reductor, servo;25;2,5;35;0,2397;excel;3;3;3;4
+REDUPLAN-00000008;Reductor, servo;25;5,0;20;0,274;excel;3;3;3;4
+CILDNORM6028690;Cylinder, semi-rotary;25;3,125;20;0,1712;excel;2;3;3;3
+henkjan;de eerste;5;0,5;20;0,0274;handmatig;2;2;2;2
+peter;henk;10;0,7;40;0,0767;handmatig;2;2;2;3

@@ -1,0 +1,16 @@
+{
+  "aangemaakt": "2026-05-08",
+  "aangepast": "2026-05-12",
+  "standaard_n_klanten": 3,
+  "n_klanten_overrides": {
+    "MOTSBERVRDM3913#A": 3,
+    "REDUPLAN-00000008": 3
+  },
+  "handmatige_componenten": {},
+  "uitgesloten_componenten": [],
+  "ip_overrides": {},
+  "lt_overrides": {
+    "MOTSBERVRDM3913#A": 1,
+    "REDUPLAN-00000008": 20
+  }
+}
