@@ -235,7 +235,7 @@ def bereken_overzicht(cfg: dict) -> pd.DataFrame:
             'lambda_jr': round(lam, 4),
             'LT_dagen':  lt_d,
             'IP':        round(ip, 2),
-            'VP':        round(float(row['VP']), 2),
+            'VP':        round(ip * 2, 2),
             'mu':        round(mu, 4),
             'bron':      'excel',
         }
