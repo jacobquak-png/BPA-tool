@@ -59,30 +59,8 @@ if "cfg" not in st.session_state:
 
 cfg = st.session_state.cfg
 
-# ── Excel upload (sidebar) ─────────────────────────────────────────────────
-with st.sidebar:
-    st.header("📂 Excel bestand")
-    _uploaded = st.file_uploader(
-        "Upload de artikeldata Excel",
-        type=["xlsx"],
-        help="Verwacht tabblad 'Filtered ' met de artikelkolommen.",
-    )
-    if _uploaded is not None:
-        import io as _io
-        _excel_bytes = _io.BytesIO(_uploaded.read())
-        _excel_bytes.name = _uploaded.name
-        st.session_state.excel_file = _excel_bytes
-        st.success(f"Geladen: {_uploaded.name}")
-    elif 'excel_file' not in st.session_state:
-        import os as _os
-        from bpa_beheer import EXCEL_PATH as _EXCEL_PATH_CHECK
-        if _os.path.exists(_EXCEL_PATH_CHECK):
-            st.session_state.excel_file = None  # gebruik lokaal pad
-            st.caption("Lokale Excel gevonden.")
-        else:
-            st.warning("Geen Excel geladen. Upload een bestand om te beginnen.")
-
-_excel_file = st.session_state.get('excel_file', None)
+# ── Excel altijd uit de repository ────────────────────────────────────────
+_excel_file = None  # gebruik altijd EXCEL_PATH uit de repo
 
 # Overzicht altijd vers berekenen bij opstarten van de sessie
 if "overzicht_df" not in st.session_state:
@@ -770,6 +748,4 @@ with tab_kosten:
                     use_container_width=True,
                 )
 
-if __name__ == '__main__':
-    main()
 
