@@ -204,7 +204,7 @@ def bereken_overzicht(cfg: dict) -> pd.DataFrame:
     # 1. Excel-onderdelen
     try:
         excel_parts = laad_excel_onderdelen()
-    except FileNotFoundError:
+    except Exception:
         print(f"  ⚠  Excel niet gevonden: {EXCEL_PATH}")
         excel_parts = pd.DataFrame()
 
