@@ -151,9 +151,12 @@ def _parse_dutch_price(val):
         return 0.0
 
 
-def laad_excel_onderdelen() -> pd.DataFrame:
-    """Laad gefilterde onderdelen uit de Excel-spreadsheet."""
-    df = pd.read_excel(EXCEL_PATH, sheet_name=SHEET_NAME)
+def laad_excel_onderdelen(excel_file=None) -> pd.DataFrame:
+    """Laad gefilterde onderdelen uit de Excel-spreadsheet.
+    excel_file: bestandspad (str) of file-like object (BytesIO / UploadedFile).
+    Valt terug op EXCEL_PATH als niet opgegeven."""
+    bron = excel_file if excel_file is not None else EXCEL_PATH
+    df = pd.read_excel(bron, sheet_name=SHEET_NAME)
     df = df.rename(columns={
         'Verkooporderregel artikel.Artikel.Artikelcode': 'Code',
         'Omschrijving_standaard_artikelen':             'Descr',
@@ -193,19 +196,20 @@ def _lambda_voor_rij(row, n_klanten: int) -> float:
 #  BEREKEN OVERZICHT
 # ══════════════════════════════════════════════════════════════════════════════
 
-def bereken_overzicht(cfg: dict) -> pd.DataFrame:
+def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
     """
     Geeft een DataFrame terug met per component:
       Code, Descr, n_klanten, lambda_per_jaar, LT_dagen, mu, en s per serviceniveau.
     Combineert Excel-onderdelen met handmatige toevoegingen.
+    excel_file: optioneel bestandspad of file-like object; valt terug op EXCEL_PATH.
     """
     rijen = []
 
     # 1. Excel-onderdelen
     try:
-        excel_parts = laad_excel_onderdelen()
-    except Exception:
-        print(f"  ⚠  Excel niet gevonden: {EXCEL_PATH}")
+        excel_parts = laad_excel_onderdelen(excel_file)
+    except Exception as e:
+        print(f"  ⚠  Excel niet geladen: {e}")
         excel_parts = pd.DataFrame()
 
     standaard_n = cfg['standaard_n_klanten']
@@ -264,7 +268,7 @@ def bereken_overzicht(cfg: dict) -> pd.DataFrame:
             'lambda_jr': round(lam, 4),
             'LT_dagen':  lt_d,
             'IP':        round(ip, 2),
-            'VP':        round(hcomp.get('vp', ip), 2),
+            'VP':        round(ip * 2, 2),
             'mu':        round(mu, 4),
             'bron':      'handmatig',
         }
@@ -603,3 +607,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
