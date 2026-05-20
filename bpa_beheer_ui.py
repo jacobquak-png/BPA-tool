@@ -447,6 +447,121 @@ with tab_historie:
                 _sla_history_snapshot(cfg)
                 st.success("Snapshot toegevoegd.")
                 st.rerun()
+    # ─────────────────────────────────────────────────────────────────────────────────
+#  TAB 8 – SUBSCRIPTIEDREMPEL
+# ─────────────────────────────────────────────────────────────────────────────────
+
+with tab_drempel:
+    st.subheader("Subscriptiedrempel per component")
+    st.caption(
+        "Per component: hoeveel extra subscripties zijn er nodig voordat S\u002a met 1 stijgt? "
+        "Aanname: λ schaalt lineair met N (λ = N × λ_huidig / N_huidig). "
+        "Van toepassing op MTBF-gebaseerde componenten."
+    )
+
+    if "overzicht_df" not in st.session_state or st.session_state.overzicht_df.empty:
+        st.warning("Laad eerst het overzicht via het tabblad 📊 Overzicht.")
+    else:
+        _df_ov = st.session_state.overzicht_df.copy().reset_index()
+
+        _sl_d = st.selectbox(
+            "Service level",
+            options=SERVICE_LEVELS,
+            index=SERVICE_LEVELS.index(0.990) if 0.990 in SERVICE_LEVELS else 0,
+            format_func=lambda v: f"{v:.1%}",
+            key="drempel_sl",
+        )
+        _sl_col = f"s@{_sl_d:.1%}"
+
+        _MAX_N_SEARCH = 100_000
+        _drempel_rows = []
+
+        for _, _row in _df_ov.iterrows():
+            _code  = _row["Code"]
+            _n     = int(_row["n_klanten"])
+            _lam   = float(_row["lambda_jr"])
+            _lt_jr = float(_row["LT_dagen"]) / 365
+            _s_now = int(_row[_sl_col]) if _sl_col in _df_ov.columns else 0
+
+            if _n > 0 and _lam > 0 and _lt_jr > 0:
+                _lam_pn = _lam / _n
+                # Binary search: kleinste N_drempel waarbij S* > _s_now
+                _lo, _hi = _n + 1, _n + _MAX_N_SEARCH
+                _s_hi = BPAOptimizationModel.inverse_service_level(
+                    _sl_d, _lam_pn * _hi, _lt_jr
+                )
+                if _s_hi <= _s_now:
+                    _n_drempel = None
+                else:
+                    while _lo < _hi:
+                        _mid = (_lo + _hi) // 2
+                        _s_mid = BPAOptimizationModel.inverse_service_level(
+                            _sl_d, _lam_pn * _mid, _lt_jr
+                        )
+                        if _s_mid > _s_now:
+                            _hi = _mid
+                        else:
+                            _lo = _mid + 1
+                    _n_drempel = _lo
+            else:
+                _n_drempel = None
+
+            _extra = (_n_drempel - _n) if _n_drempel is not None else None
+            _drempel_rows.append({
+                "Code":          _code,
+                "Omschrijving":  str(_row.get("Descr", ""))[:35],
+                "N huidig":      _n,
+                "S* huidig":     _s_now,
+                "N voor S*+1":   _n_drempel if _n_drempel is not None else f">{_n + _MAX_N_SEARCH}",
+                "Extra N nodig": _extra,
+                "λ/jr":          round(_lam, 4),
+                "μ = λ·L":       round(float(_row["mu"]), 4),
+            })
+
+        _tbl_d = pd.DataFrame(_drempel_rows).set_index("Code")
+        _tbl_d_sorted = _tbl_d.sort_values("Extra N nodig", na_position="last")
+
+        # Tabel weergeven
+        _tbl_display = _tbl_d_sorted.copy()
+        _tbl_display["Extra N nodig"] = _tbl_display["Extra N nodig"].apply(
+            lambda v: int(v) if pd.notna(v) else "—"
+        )
+        st.dataframe(
+            _tbl_display.style.format({
+                "N huidig":  "{:.0f}",
+                "S* huidig": "{:.0f}",
+                "λ/jr":      "{:.4f}",
+                "μ = λ·L": "{:.4f}",
+            }),
+            use_container_width=True,
+            height=500,
+        )
+
+        # ── Bar chart: Extra N nodig per component ─────────────────────────
+        _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra N nodig"].notna()].copy()
+        if not _plot_d.empty:
+            import matplotlib.pyplot as _plt_d
+            _fig_d, _ax_d = _plt_d.subplots(
+                figsize=(max(8, len(_plot_d) * 0.55), 5)
+            )
+            _ax_d.bar(
+                range(len(_plot_d)),
+                _plot_d["Extra N nodig"].astype(int),
+                color="#1976D2",
+            )
+            _ax_d.set_xticks(range(len(_plot_d)))
+            _ax_d.set_xticklabels(
+                _plot_d.index, rotation=45, ha="right", fontsize=9
+            )
+            _ax_d.set_ylabel("Extra subscripties voor S*+1", fontsize=11)
+            _ax_d.set_title(
+                f"Subscriptiedrempel per component  (SL = {_sl_d:.1%})",
+                fontsize=12,
+            )
+            _ax_d.grid(True, axis="y", alpha=0.3)
+            _fig_d.tight_layout()
+            st.pyplot(_fig_d)
+            _plt_d.close(_fig_d)
 
     # ── Sensitivity grafieken ──────────────────────────────────────────────
     st.divider()
