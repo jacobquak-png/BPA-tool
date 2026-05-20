@@ -616,20 +616,20 @@ with tab_kosten:
         col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
             k_alpha = st.number_input(
-                "α (abonnementstarief)",
-                min_value=1.0, max_value=50.0, value=15.0, step=1.0, format="%.0f%%",
+                "α (abonnementstarief, %)",
+                min_value=1.0, max_value=50.0, value=15.0, step=1.0, format="%.0f",
                 help="Abonnementsprijs als percentage van verkoopprijs",
             ) / 100
         with col_b:
             k_kappa_bpa = st.number_input(
-                "κ_BPA",
-                min_value=1.0, max_value=100.0, value=20.0, step=1.0, format="%.0f%%",
+                "κ_BPA (%)",
+                min_value=1.0, max_value=100.0, value=20.0, step=1.0, format="%.0f",
                 help="κ_BPA = financiering + opslag + obsolescence (BPA)",
             ) / 100
         with col_c:
             k_kappa_c = st.number_input(
-                "κ_c",
-                min_value=1.0, max_value=100.0, value=25.0, step=1.0, format="%.0f%%",
+                "κ_c (%)",
+                min_value=1.0, max_value=100.0, value=25.0, step=1.0, format="%.0f",
                 help="κ_c = financiering + opslag + obsolescence (klant)",
             ) / 100
         with col_d:
