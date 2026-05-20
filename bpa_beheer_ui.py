@@ -616,21 +616,21 @@ with tab_kosten:
         with col_a:
             k_alpha = st.number_input(
                 "α (abonnementstarief)",
-                min_value=0.01, max_value=0.50, value=0.15, step=0.01, format="%.2f",
-                help="Abonnementsprijs als fractie van verkoopprijs",
-            )
+                min_value=1.0, max_value=50.0, value=15.0, step=1.0, format="%.0f%%",
+                help="Abonnementsprijs als percentage van verkoopprijs",
+            ) / 100
         with col_b:
             k_kappa_bpa = st.number_input(
                 "κ_BPA",
-                min_value=0.01, max_value=1.0, value=0.20, step=0.01, format="%.2f",
+                min_value=1.0, max_value=100.0, value=20.0, step=1.0, format="%.0f%%",
                 help="κ_BPA = financiering + opslag + obsolescence (BPA)",
-            )
+            ) / 100
         with col_c:
             k_kappa_c = st.number_input(
                 "κ_c",
-                min_value=0.01, max_value=1.0, value=0.25, step=0.01, format="%.2f",
+                min_value=1.0, max_value=100.0, value=25.0, step=1.0, format="%.0f%%",
                 help="κ_c = financiering + opslag + obsolescence (klant)",
-            )
+            ) / 100
         with col_d:
             k_sl = st.selectbox(
                 "Service level",
