@@ -823,18 +823,29 @@ with tab_drempel:
         _tbl_d = pd.DataFrame(_drempel_rows).set_index("Code")
         _tbl_d_sorted = _tbl_d.sort_values("Extra N nodig", na_position="last")
 
-        # Tabel weergeven
-        _tbl_display = _tbl_d_sorted.copy()
-        _tbl_display["Extra N nodig"] = _tbl_display["Extra N nodig"].apply(
-            lambda v: int(v) if pd.notna(v) else "—"
-        )
+        # Tabel weergeven met kleurcodering op basis van drempel
+        def _kleur_drempel(row):
+            v = row["Extra N nodig"]
+            if pd.isna(v):
+                bg = "#d4edda"   # groen: geen drempel gevonden in zoekbereik
+            elif int(v) <= 2:
+                bg = "#f8d7da"   # rood: 1-2 extra subscripties
+            elif int(v) <= 5:
+                bg = "#fff3cd"   # oranje: 3-5 extra subscripties
+            else:
+                bg = "#d4edda"   # groen: 6+ extra subscripties
+            return [f"background-color: {bg}"] * len(row)
+
         st.dataframe(
-            _tbl_display.style.format({
-                "N huidig":  "{:.0f}",
-                "S* huidig": "{:.0f}",
-                "λ/jr":      "{:.4f}",
-                "μ = λ·L": "{:.4f}",
-            }),
+            _tbl_d_sorted.style
+                .apply(_kleur_drempel, axis=1)
+                .format({
+                    "N huidig":      "{:.0f}",
+                    "S* huidig":     "{:.0f}",
+                    "λ/jr":          "{:.4f}",
+                    "μ = λ·L":       "{:.4f}",
+                    "Extra N nodig": lambda v: f"{int(v)}" if pd.notna(v) else "—",
+                }),
             use_container_width=True,
             height=500,
         )
