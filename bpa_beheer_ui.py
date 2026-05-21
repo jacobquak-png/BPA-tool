@@ -916,6 +916,73 @@ with tab_historie:
             st.pyplot(_fig_sp)
             _plt_sl.close(_fig_sp)
 
+            # ── S*(X,N)/N detail: N = 1 … 20 ────────────────────────────────
+            st.caption(
+                "Detail: S*(X,N) / N voor N = 1 … 20, "
+                "berekend per component via inverse_service_level."
+            )
+            if st.button("📊 Bereken S*/N voor N = 1 … 20"):
+                _ov_det = st.session_state.overzicht_df.reset_index()
+                # Collect (lambda_per_N, lt_jr) per component
+                _comp_det = []
+                for _, _rd in _ov_det.iterrows():
+                    _ni = float(_rd.get('n_klanten', 0) or 0)
+                    _li = float(_rd.get('lambda_jr', 0) or 0)
+                    _lt = float(_rd.get('LT_dagen', 0) or 0)
+                    if _ni > 0 and _li > 0 and _lt > 0:
+                        _comp_det.append((_li / _ni, _lt / 365.0))
+
+                _N_DET = list(range(1, 21))
+                _det_results = {sl: [] for sl in SERVICE_LEVELS}
+                with st.spinner("Berekenen S*/N voor N = 1 … 20…"):
+                    for _n_det in _N_DET:
+                        for _sl_det in SERVICE_LEVELS:
+                            _s_tot = sum(
+                                BPAOptimizationModel.inverse_service_level(
+                                    _sl_det, _lam_pn * _n_det, _lt_c
+                                )
+                                for _lam_pn, _lt_c in _comp_det
+                            )
+                            _det_results[_sl_det].append(
+                                {'n': _n_det, 's_per_n': _s_tot / _n_det}
+                            )
+                st.session_state.sens_spn_det = _det_results
+                st.session_state.sens_spn_mu = _mu_per_sub
+
+            if 'sens_spn_det' in st.session_state:
+                _spn_d = st.session_state.sens_spn_det
+                _mu_ref = st.session_state.sens_spn_mu
+                _N_DET_x = list(range(1, 21))
+
+                _fig_det, _ax_det = _plt_sl.subplots(figsize=(11, 5))
+                for _sl_det, _col_det in zip(SERVICE_LEVELS, _COLORS_SL):
+                    _pts_det = [(r['n'], r['s_per_n']) for r in _spn_d[_sl_det]]
+                    if _pts_det:
+                        _xd, _yd = zip(*_pts_det)
+                        _ax_det.plot(_xd, _yd, marker='o', linewidth=2,
+                                     color=_col_det, label=f'SL = {_sl_det:.1%}')
+                        for _xv, _yv in zip(_xd, _yd):
+                            _ax_det.annotate(f'{_yv:.2f}', (_xv, _yv),
+                                             textcoords='offset points', xytext=(0, 7),
+                                             ha='center', fontsize=7)
+                _ax_det.axhline(_mu_ref, color='grey', linewidth=1.0, linestyle='--',
+                                label=f'μ/N (ondergrens, ≈{_mu_ref:.3f})')
+                _ax_det.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
+                                label=f'N huidig = {_n_std_sl}')
+                _ax_det.set_xlabel('Aantal subscripties N', fontsize=11)
+                _ax_det.set_ylabel('S*(X,N) / N  (voorraad per subscriptie)', fontsize=11)
+                _ax_det.set_title(
+                    'Benodigde voorraad per subscriptie  S*(X,N) / N  (N = 1… 20)',
+                    fontsize=12,
+                )
+                _ax_det.set_xticks(_N_DET_x)
+                _ax_det.legend(fontsize=9)
+                _ax_det.grid(True, alpha=0.3)
+                _fig_det.tight_layout()
+                st.pyplot(_fig_det)
+                _plt_sl.close(_fig_det)
+
+
             # ── Plot 3: Safety stock / N per service level ──────────────────
             _fig_ss, _ax_ss = _plt_sl.subplots(figsize=(11, 5))
             for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
@@ -1231,7 +1298,6 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
-
 
 
 
