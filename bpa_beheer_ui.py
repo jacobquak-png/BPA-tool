@@ -769,52 +769,6 @@ with tab_historie:
             _nsl_p    = st.session_state.sens_nsl_params
             _n_std_sl = int(cfg['standaard_n_klanten'])
 
-            # ── Grafiek 1: max. haalbaar SL als stapfunctie van N ──────────────────────
-            _n_all   = [r['n'] for r in _nsl_d]
-            _sl_best = [r['max_feasible_sl'] for r in _nsl_d]
-            _sl_pct  = [v * 100 if v is not None else None for v in _sl_best]
-
-            _fig_sl, _ax_sl = _plt_sl.subplots(figsize=(11, 5))
-            _n_ok  = [n for n, s in zip(_n_all, _sl_pct) if s is not None]
-            _s_ok  = [s for s in _sl_pct if s is not None]
-            if _n_ok:
-                _ax_sl.step(_n_ok + [_n_ok[-1]], _s_ok + [_s_ok[-1]],
-                            where='post', linewidth=2.5, color='#1976D2')
-                _ax_sl.plot(_n_ok, _s_ok, 'o', color='#1976D2', markersize=8,
-                            label='Max. haalbaar SL')
-                for _xv, _yv in zip(_n_ok, _s_ok):
-                    _ax_sl.annotate(f'{_yv:.2f}%', (_xv, _yv),
-                                    textcoords='offset points', xytext=(0, 9),
-                                    ha='center', fontsize=8)
-            for _sl_ref in SERVICE_LEVELS:
-                _ax_sl.axhline(_sl_ref * 100, color='grey', linewidth=0.8,
-                               linestyle='--', alpha=0.5)
-            _ax_sl.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std_sl}')
-            _ax_sl.set_xlabel('Aantal subscripties (N)', fontsize=11)
-            _ax_sl.set_ylabel('Max. haalbaar service level', fontsize=11)
-            _ax_sl.set_title(
-                f'Max. haalbaar SL vs. N  '
-                f'(α = {_nsl_p["alpha"]:.0%}, '
-                f'κ_BPA = {_nsl_p["kappa_bpa"]:.0%}, '
-                f'κ_c = {_nsl_p["kappa_c"]:.0%})',
-                fontsize=12,
-            )
-            _ax_sl.set_xticks(_N_FEAS_VALS)
-            _plt_sl.setp(_ax_sl.get_xticklabels(), rotation=30, ha='right')
-            _ax_sl.yaxis.set_major_formatter(
-                _mt_sl.FuncFormatter(lambda v, _: f'{v:.2f}%')
-            )
-            _ax_sl.set_ylim(
-                min(sl * 100 for sl in SERVICE_LEVELS) - 0.3,
-                max(sl * 100 for sl in SERVICE_LEVELS) + 0.3,
-            )
-            _ax_sl.legend(fontsize=9)
-            _ax_sl.grid(True, alpha=0.3)
-            _fig_sl.tight_layout()
-            st.pyplot(_fig_sl)
-            _plt_sl.close(_fig_sl)
-
             # ── Grafiek 2: totale S* vs N per service level ─────────────────────────
             _COLORS_SL = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
             _fig_bs, _ax_bs = _plt_sl.subplots(figsize=(11, 5))
@@ -848,40 +802,41 @@ with tab_historie:
             st.pyplot(_fig_bs)
             _plt_sl.close(_fig_bs)
 
-            # ── Haalbaarheids-heatmap: N × SL ───────────────────────────────────────
-            _heat_sl = _np_sl.array([
-                [1.0 if _row.get(_sl_v, False) else 0.0 for _row in _nsl_d]
-                for _sl_v in SERVICE_LEVELS
-            ])  # shape: (len(SL), len(N))
-            _fig_hm_sl, _ax_hm_sl = _plt_sl.subplots(figsize=(11, 3))
-            _ax_hm_sl.imshow(_heat_sl, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
-            _ax_hm_sl.set_xticks(range(len(_N_FEAS_VALS)))
-            _ax_hm_sl.set_xticklabels(_N_FEAS_VALS, fontsize=9)
-            _ax_hm_sl.set_yticks(range(len(SERVICE_LEVELS)))
-            _ax_hm_sl.set_yticklabels([f'{sl:.1%}' for sl in SERVICE_LEVELS], fontsize=9)
-            _ax_hm_sl.set_xlabel('Aantal subscripties (N)', fontsize=11)
-            _ax_hm_sl.set_ylabel('Service level', fontsize=11)
-            _ax_hm_sl.set_title(
-                'Haalbaarheid per (N, SL)  (✓ = haalbaar, ✗ = niet haalbaar)',
+
+            # ── ΔS* per extra subscriptie (pooling-effect) ────────────────────────────
+            _fig_ds, _ax_ds = _plt_sl.subplots(figsize=(11, 5))
+            for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
+                _bs_all = [
+                    (r['n'], r['base_stocks'].get(_sl_v))
+                    for r in _nsl_d
+                    if r['base_stocks'].get(_sl_v) is not None
+                ]
+                if len(_bs_all) >= 2:
+                    _nd, _dd = [], []
+                    for (_n1, _s1), (_n2, _s2) in zip(_bs_all[:-1], _bs_all[1:]):
+                        _nd.append((_n1 + _n2) / 2)
+                        _dd.append((_s2 - _s1) / (_n2 - _n1))
+                    _ax_ds.plot(_nd, _dd, marker='o', linewidth=2,
+                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                    for _xv, _yv in zip(_nd, _dd):
+                        _ax_ds.annotate(f'{_yv:.3f}', (_xv, _yv),
+                                        textcoords='offset points', xytext=(0, 7),
+                                        ha='center', fontsize=7)
+            _ax_ds.axhline(0, color='grey', linewidth=0.8, linestyle='--')
+            _ax_ds.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
+                           label=f'N huidig = {_n_std_sl}')
+            _ax_ds.set_xlabel('Aantal subscripties N (midden interval)', fontsize=11)
+            _ax_ds.set_ylabel('ΔS* / ΔN  (stuks per extra subscriptie)', fontsize=11)
+            _ax_ds.set_title(
+                f'Pooling-effect: extra voorraad per extra subscriptie  '
+                f'(α = {_nsl_p["alpha"]:.0%})',
                 fontsize=12,
             )
-            for _i in range(len(SERVICE_LEVELS)):
-                for _j in range(len(_N_FEAS_VALS)):
-                    _ax_hm_sl.text(_j, _i,
-                                   '✓' if _heat_sl[_i, _j] else '✗',
-                                   ha='center', va='center', fontsize=11,
-                                   color='#1a5c1a' if _heat_sl[_i, _j] else '#7a0000')
-            try:
-                _n_idx_sl = min(range(len(_N_FEAS_VALS)),
-                                key=lambda k: abs(_N_FEAS_VALS[k] - _n_std_sl))
-                _ax_hm_sl.axvline(_n_idx_sl, color='black', linewidth=2.0, linestyle=':')
-                _ax_hm_sl.text(_n_idx_sl + 0.15, -0.6, f'N={_n_std_sl}',
-                               fontsize=8, color='black')
-            except Exception:
-                pass
-            _fig_hm_sl.tight_layout()
-            st.pyplot(_fig_hm_sl)
-            _plt_sl.close(_fig_hm_sl)
+            _ax_ds.legend(fontsize=9)
+            _ax_ds.grid(True, alpha=0.3)
+            _fig_ds.tight_layout()
+            st.pyplot(_fig_ds)
+            _plt_sl.close(_fig_ds)
 
 
 
