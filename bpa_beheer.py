@@ -113,6 +113,10 @@ def _sla_history_snapshot(cfg: dict) -> None:
         'n_klanten':  cfg['standaard_n_klanten'],
         'n_actief':   len(df),
         'totalen':    {c: int(df[c].sum()) for c in sl_cols},
+        'componenten': {
+            str(code): {c: int(df.at[code, c]) for c in sl_cols}
+            for code in df.index
+        },
     }
 
     history = []
@@ -607,4 +611,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
