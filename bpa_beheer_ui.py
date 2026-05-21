@@ -122,13 +122,61 @@ with tab_overzicht:
         st.write("**Totale basisvoorraad:**  " +
                  "  |  ".join(f"`{c}` = **{totals[c]}**" for c in sl_cols))
 
+        # Laad vorige snapshot voor Δ-kolommen
+        _prev_comp = {}
+        _prev_datum = None
+        if os.path.exists(HISTORY_PATH):
+            try:
+                with open(HISTORY_PATH, encoding='utf-8') as _fh:
+                    _hist_ov = json.load(_fh)
+                for _snap_ov in reversed(_hist_ov):
+                    if 'componenten' in _snap_ov:
+                        _prev_comp  = _snap_ov['componenten']
+                        _prev_datum = _snap_ov['datum']
+                        break
+            except Exception:
+                pass
+
+        # Bouw weergave-df met Δ-kolommen
+        _df_disp = df.reset_index().copy()
+        _delta_cols = []
+        for _sc in sl_cols:
+            _dc = f"\u0394{_sc}"
+            _delta_cols.append(_dc)
+            def _calc_delta(row, _sc=_sc):
+                _code = str(row.get('Code', ''))
+                _prev = _prev_comp.get(_code, {})
+                if _sc in _prev:
+                    return int(row[_sc]) - int(_prev[_sc])
+                return float('nan')
+            _df_disp[_dc] = _df_disp.apply(_calc_delta, axis=1)
+
+        def _fmt_delta(v):
+            if pd.isna(v): return '\u2014'
+            iv = int(v)
+            return f"+{iv}" if iv > 0 else str(iv)
+
+        def _style_delta(v):
+            if pd.isna(v): return ''
+            if v > 0: return 'background-color: #f8d7da'   # rood: omhoog
+            if v < 0: return 'background-color: #cce5ff'   # blauw: omlaag
+            return 'background-color: #d4edda'              # groen: gelijk
+
+        if _prev_datum:
+            st.caption(f"\u0394 ten opzichte van snapshot: **{_prev_datum}**")
+        else:
+            st.caption("\u0394-kolommen beschikbaar na eerste snapshot (tabblad \U0001f4c8 Historiek).")
+
         # Tabel
         st.dataframe(
-            df.reset_index().style.format({
-                "lambda_jr": "{:.4f}",
-                "mu":        "{:.4f}",
-                **{c: "{:.0f}" for c in sl_cols},
-            }),
+            _df_disp.style
+                .format({
+                    "lambda_jr": "{:.4f}",
+                    "mu":        "{:.4f}",
+                    **{c: "{:.0f}" for c in sl_cols},
+                    **{dc: _fmt_delta for dc in _delta_cols},
+                })
+                .applymap(_style_delta, subset=_delta_cols),
             use_container_width=True,
             height=500,
         )
@@ -683,66 +731,7 @@ with tab_historie:
             _fig_nf.tight_layout()
             st.pyplot(_fig_nf)
             _plt_nf.close(_fig_nf)
-             # ── BPA-marge vs N detail: N = 1 … 20 ─────────────────────────────────────
-            st.caption(
-                "Detail: BPA-marge vs. N voor N\u202f=\u202f1\u2026\u202f20, "
-                "SL, \u03ba_BPA en \u03ba_c vast vanuit tabblad Kostenanalyse."
-            )
-            if st.button("📊 Bereken marge vs N voor N = 1 … 20"):
-                _N_DET_M = list(range(1, 21))
-                _marge_det = {a: [] for a in _ALPHA_FEAS}
-                with st.spinner("Berekenen marge vs. N voor N\u202f=\u202f1\u2026\u202f20…"):
-                    for _a_det in _ALPHA_FEAS:
-                        for _n_det_m in _N_DET_M:
-                            try:
-                                _, _r_det = bouw_model_kosten(
-                                    st.session_state.overzicht_df,
-                                    _a_det, _nfp['kappa_bpa'], _nfp['kappa_c'], _nfp['sl'],
-                                    n_klanten_override=_n_det_m,
-                                )
-                                _marge_det[_a_det].append(
-                                    {'n': _n_det_m, 'marge': _r_det['bpa_margin']}
-                                )
-                            except Exception:
-                                _marge_det[_a_det].append(
-                                    {'n': _n_det_m, 'marge': None}
-                                )
-                st.session_state.sens_marge_det = _marge_det
 
-            if 'sens_marge_det' in st.session_state:
-                _fig_md, _ax_md = _plt_nf.subplots(figsize=(11, 6))
-                for _a_det, _col_det in zip(_ALPHA_FEAS, _COLORS_FEAS):
-                    _pts_md = [
-                        (r['n'], r['marge'])
-                        for r in st.session_state.sens_marge_det[_a_det]
-                        if r['marge'] is not None
-                    ]
-                    if _pts_md:
-                        _xm, _ym = zip(*_pts_md)
-                        _ax_md.plot(_xm, _ym, marker='o', linewidth=2,
-                                    color=_col_det, label=f'α\u202f=\u202f{_a_det:.0%}')
-                _ax_md.axhline(0, color='grey', linewidth=1.2, linestyle='--',
-                               label='Break-even')
-                _ax_md.axvline(_n_std, color='black', linewidth=1.0, linestyle=':',
-                               label=f'N huidig\u202f=\u202f{_n_std}')
-                _ax_md.set_xlabel('Aantal subscripties N', fontsize=11)
-                _ax_md.set_ylabel('Jaarlijkse BPA-marge (€)', fontsize=11)
-                _ax_md.set_title(
-                    f'BPA-marge vs. N per α  (N\u202f=\u202f1…\u202f20,  '
-                    f'SL\u202f=\u202f{_nfp["sl"]:.1%}, '
-                    f'κ_BPA\u202f=\u202f{_nfp["kappa_bpa"]:.0%}, '
-                    f'κ_c\u202f=\u202f{_nfp["kappa_c"]:.0%})',
-                    fontsize=12,
-                )
-                _ax_md.yaxis.set_major_formatter(
-                    _mt_nf.FuncFormatter(lambda v, _: f'€{v:,.0f}')
-                )
-                _ax_md.set_xticks(list(range(1, 21)))
-                _ax_md.legend(fontsize=9, ncol=2)
-                _ax_md.grid(True, alpha=0.3)
-                _fig_md.tight_layout()
-                st.pyplot(_fig_md)
-                _plt_nf.close(_fig_md)
             # ── Grafiek 2: haalbaarheids-heatmap (N × α) ───────────────────────────────
             _heat = _np_nf.array([
                 [1.0 if p['feasible'] else 0.0 for p in _nfd[_a_f]]
@@ -1357,6 +1346,7 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
 
 
