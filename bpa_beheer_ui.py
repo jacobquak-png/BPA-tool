@@ -838,6 +838,120 @@ with tab_historie:
             st.pyplot(_fig_ds)
             _plt_sl.close(_fig_ds)
 
+            # ── Pooling-effect: analytische curves ──────────────────────────────
+            # Bereken mu_per_sub = sum_i( lambda_i/N_i * L_i ) uit overzicht
+            _ov_pa = st.session_state.overzicht_df.reset_index()
+            _mu_per_sub = 0.0
+            for _, _rpa in _ov_pa.iterrows():
+                _ni = float(_rpa.get('n_klanten', 0) or 0)
+                _li = float(_rpa.get('lambda_jr', 0) or 0)
+                _lt = float(_rpa.get('LT_dagen', 0) or 0)
+                if _ni > 0 and _li > 0 and _lt > 0:
+                    _mu_per_sub += _li / _ni * _lt / 365.0
+
+            _N_arr   = [float(r['n']) for r in _nsl_d]
+            _mu_arr  = [n * _mu_per_sub for n in _N_arr]  # mu_total(N)
+
+            # ── Plot 1: CV(N) = 1/sqrt(mu_total(N)) ───────────────────────
+            import math as _math_pa
+            _cv_arr = [1.0 / _math_pa.sqrt(mu) if mu > 0 else None for mu in _mu_arr]
+
+            _fig_cv, _ax_cv = _plt_sl.subplots(figsize=(11, 4))
+            _n_cv_ok = [n for n, cv in zip(_N_arr, _cv_arr) if cv is not None]
+            _cv_ok   = [cv for cv in _cv_arr if cv is not None]
+            if _n_cv_ok:
+                _ax_cv.plot(_n_cv_ok, _cv_ok, marker='o', linewidth=2.5,
+                            color='#1976D2', label='CV(N) = 1/√(μₜₒₜ(N))')
+                for _xv, _yv in zip(_n_cv_ok, _cv_ok):
+                    _ax_cv.annotate(f'{_yv:.3f}', (_xv, _yv),
+                                    textcoords='offset points', xytext=(0, 7),
+                                    ha='center', fontsize=8)
+            _ax_cv.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
+                           label=f'N huidig = {_n_std_sl}')
+            _ax_cv.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_cv.set_ylabel('CV lead-time demand', fontsize=11)
+            _ax_cv.set_title(
+                'Relatieve onzekerheid lead-time demand  '
+                'CV(N) = 1 / √(N · Σ λᵢ · Lᵢ / Nᵢ)',
+                fontsize=12,
+            )
+            _ax_cv.set_xticks(_N_FEAS_VALS)
+            _plt_sl.setp(_ax_cv.get_xticklabels(), rotation=30, ha='right')
+            _ax_cv.legend(fontsize=9)
+            _ax_cv.grid(True, alpha=0.3)
+            _fig_cv.tight_layout()
+            st.pyplot(_fig_cv)
+            _plt_sl.close(_fig_cv)
+
+            # ── Plot 2: S*(X,N) / N per service level ──────────────────────
+            _fig_sp, _ax_sp = _plt_sl.subplots(figsize=(11, 5))
+            for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
+                _sp_pts = [
+                    (r['n'], r['base_stocks'].get(_sl_v) / r['n'])
+                    for r in _nsl_d
+                    if r['base_stocks'].get(_sl_v) is not None and r['n'] > 0
+                ]
+                if _sp_pts:
+                    _xp, _yp = zip(*_sp_pts)
+                    _ax_sp.plot(_xp, _yp, marker='o', linewidth=2,
+                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                    for _xv, _yv in zip(_xp, _yp):
+                        _ax_sp.annotate(f'{_yv:.2f}', (_xv, _yv),
+                                        textcoords='offset points', xytext=(0, 7),
+                                        ha='center', fontsize=7)
+            # Also plot mu/N = mu_per_sub as reference (pooling limit)
+            _ax_sp.axhline(_mu_per_sub, color='grey', linewidth=1.0,
+                           linestyle='--', label=f'μ/N (lead-time demand per sub., ≈{_mu_per_sub:.3f})')
+            _ax_sp.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
+                           label=f'N huidig = {_n_std_sl}')
+            _ax_sp.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_sp.set_ylabel('S*(X,N) / N  (voorraad per subscriptie)', fontsize=11)
+            _ax_sp.set_title('Benodigde voorraad per subscriptie  S*(X,N) / N',
+                             fontsize=12)
+            _ax_sp.set_xticks(_N_FEAS_VALS)
+            _plt_sl.setp(_ax_sp.get_xticklabels(), rotation=30, ha='right')
+            _ax_sp.legend(fontsize=9)
+            _ax_sp.grid(True, alpha=0.3)
+            _fig_sp.tight_layout()
+            st.pyplot(_fig_sp)
+            _plt_sl.close(_fig_sp)
+
+            # ── Plot 3: Safety stock / N per service level ──────────────────
+            _fig_ss, _ax_ss = _plt_sl.subplots(figsize=(11, 5))
+            for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
+                _ss_pts = []
+                for r in _nsl_d:
+                    _bs = r['base_stocks'].get(_sl_v)
+                    _mu_n = r['n'] * _mu_per_sub
+                    if _bs is not None and r['n'] > 0:
+                        _ss_pts.append((r['n'], (_bs - _mu_n) / r['n']))
+                if _ss_pts:
+                    _xs, _ys = zip(*_ss_pts)
+                    _ax_ss.plot(_xs, _ys, marker='o', linewidth=2,
+                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                    for _xv, _yv in zip(_xs, _ys):
+                        _ax_ss.annotate(f'{_yv:.3f}', (_xv, _yv),
+                                        textcoords='offset points', xytext=(0, 7),
+                                        ha='center', fontsize=7)
+            _ax_ss.axhline(0, color='grey', linewidth=0.8, linestyle='--')
+            _ax_ss.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
+                           label=f'N huidig = {_n_std_sl}')
+            _ax_ss.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_ss.set_ylabel('(S*(X,N) − μ(N)) / N  (safety stock per subscriptie)',
+                              fontsize=11)
+            _ax_ss.set_title(
+                'Safety stock per subscriptie  (S*(X,N) − N · ΣλᵢLᵢ/Nᵢ) / N',
+                fontsize=12,
+            )
+            _ax_ss.set_xticks(_N_FEAS_VALS)
+            _plt_sl.setp(_ax_ss.get_xticklabels(), rotation=30, ha='right')
+            _ax_ss.legend(fontsize=9)
+            _ax_ss.grid(True, alpha=0.3)
+            _fig_ss.tight_layout()
+            st.pyplot(_fig_ss)
+            _plt_sl.close(_fig_ss)
+
+
 
 
 
@@ -1117,6 +1231,7 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
 
 
