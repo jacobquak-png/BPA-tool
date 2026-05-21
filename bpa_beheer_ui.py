@@ -599,6 +599,126 @@ with tab_historie:
             st.pyplot(_fig3)
             _plt.close(_fig3)
 
+        # ── N vs. haalbaarheid per α ──────────────────────────────────────────────
+        st.divider()
+        st.subheader("N vs. haalbaarheid per α")
+        st.caption(
+            "Effect van het aantal subscripties op de BPA-marge en haalbaarheid "
+            "voor verschillende abonnementstarieven. "
+            "SL, κ_BPA en κ_c worden overgenomen uit tabblad 💰 Kostenanalyse."
+        )
+
+        _N_FEAS_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+        _ALPHA_FEAS  = [0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30]
+        _COLORS_FEAS = [
+            '#D32F2F', '#F57C00', '#FBC02D', '#8BC34A', '#388E3C',
+            '#1976D2', '#7B1FA2', '#0097A7', '#5D4037',
+        ]
+
+        if st.button("📊 Bereken N vs. haalbaarheid"):
+            _kp_f = st.session_state.get('kosten_params', {})
+            _sl_f = _kp_f.get('service_level', 0.990)
+            _kb_f = _kp_f.get('kappa_bpa',    0.20)
+            _kc_f = _kp_f.get('kappa_c',      0.25)
+
+            _nfeas = {a: [] for a in _ALPHA_FEAS}
+            with st.spinner("Berekenen N vs. haalbaarheid…"):
+                for _a_f in _ALPHA_FEAS:
+                    for _n_f in _N_FEAS_VALS:
+                        try:
+                            _, _rf = bouw_model_kosten(
+                                st.session_state.overzicht_df,
+                                _a_f, _kb_f, _kc_f, _sl_f,
+                                n_klanten_override=_n_f,
+                            )
+                            _nfeas[_a_f].append({
+                                'n': _n_f,
+                                'marge': _rf['bpa_margin'],
+                                'feasible': _rf['feasible'],
+                            })
+                        except Exception:
+                            _nfeas[_a_f].append({'n': _n_f, 'marge': None, 'feasible': False})
+
+            st.session_state.sens_nfeas = _nfeas
+            st.session_state.sens_nfeas_params = {
+                'sl': _sl_f, 'kappa_bpa': _kb_f, 'kappa_c': _kc_f,
+            }
+
+        if 'sens_nfeas' in st.session_state:
+            import matplotlib.pyplot as _plt_nf
+            import matplotlib.ticker as _mt_nf
+            import numpy as _np_nf
+
+            _nfd   = st.session_state.sens_nfeas
+            _nfp   = st.session_state.sens_nfeas_params
+            _n_std = int(cfg['standaard_n_klanten'])
+
+            # ── Grafiek 1: marge vs N per α ──────────────────────────────────────────
+            _fig_nf, _ax_nf = _plt_nf.subplots(figsize=(11, 6))
+            for _a_f, _col_f in zip(_ALPHA_FEAS, _COLORS_FEAS):
+                _pts_nf = [(p['n'], p['marge']) for p in _nfd[_a_f] if p['marge'] is not None]
+                if _pts_nf:
+                    _xs_nf, _ys_nf = zip(*_pts_nf)
+                    _ax_nf.plot(_xs_nf, _ys_nf, marker='o', linewidth=2,
+                                color=_col_f, label=f'α = {_a_f:.0%}')
+            _ax_nf.axhline(0, color='grey', linewidth=1.2, linestyle='--', label='Break-even')
+            _ax_nf.axvline(_n_std, color='black', linewidth=1.0, linestyle=':',
+                           label=f'N huidig = {_n_std}')
+            _ax_nf.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_nf.set_ylabel('Jaarlijkse BPA-marge (€)', fontsize=11)
+            _ax_nf.set_title(
+                f'BPA-marge vs. N per α  '
+                f'(SL = {_nfp["sl"]:.1%}, '
+                f'κ_BPA = {_nfp["kappa_bpa"]:.0%}, '
+                f'κ_c = {_nfp["kappa_c"]:.0%})',
+                fontsize=12,
+            )
+            _ax_nf.yaxis.set_major_formatter(
+                _mt_nf.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            )
+            _ax_nf.set_xticks(_N_FEAS_VALS)
+            _plt_nf.setp(_ax_nf.get_xticklabels(), rotation=30, ha='right')
+            _ax_nf.legend(fontsize=9, ncol=2)
+            _ax_nf.grid(True, alpha=0.3)
+            _fig_nf.tight_layout()
+            st.pyplot(_fig_nf)
+            _plt_nf.close(_fig_nf)
+
+            # ── Grafiek 2: haalbaarheids-heatmap (N × α) ───────────────────────────────
+            _heat = _np_nf.array([
+                [1.0 if p['feasible'] else 0.0 for p in _nfd[_a_f]]
+                for _a_f in _ALPHA_FEAS
+            ])
+            _fig_hm, _ax_hm = _plt_nf.subplots(figsize=(11, 4))
+            _ax_hm.imshow(_heat, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
+            _ax_hm.set_xticks(range(len(_N_FEAS_VALS)))
+            _ax_hm.set_xticklabels(_N_FEAS_VALS, fontsize=9)
+            _ax_hm.set_yticks(range(len(_ALPHA_FEAS)))
+            _ax_hm.set_yticklabels([f'{a:.0%}' for a in _ALPHA_FEAS], fontsize=9)
+            _ax_hm.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_hm.set_ylabel('α', fontsize=12)
+            _ax_hm.set_title(
+                'Haalbaarheid BPA per (N, α)  (✓ = haalbaar, ✗ = niet haalbaar)',
+                fontsize=12,
+            )
+            for _i in range(len(_ALPHA_FEAS)):
+                for _j in range(len(_N_FEAS_VALS)):
+                    _ax_hm.text(_j, _i,
+                                '✓' if _heat[_i, _j] else '✗',
+                                ha='center', va='center', fontsize=11,
+                                color='#1a5c1a' if _heat[_i, _j] else '#7a0000')
+            try:
+                _n_idx = min(range(len(_N_FEAS_VALS)),
+                             key=lambda k: abs(_N_FEAS_VALS[k] - _n_std))
+                _ax_hm.axvline(_n_idx, color='black', linewidth=2.0, linestyle=':')
+                _ax_hm.text(_n_idx + 0.15, -0.6, f'N={_n_std}', fontsize=8, color='black')
+            except Exception:
+                pass
+            _fig_hm.tight_layout()
+            st.pyplot(_fig_hm)
+            _plt_nf.close(_fig_hm)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 7 – KOSTENANALYSE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -875,4 +995,5 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
