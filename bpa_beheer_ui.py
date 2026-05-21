@@ -176,7 +176,7 @@ with tab_overzicht:
                     **{c: "{:.0f}" for c in sl_cols},
                     **{dc: _fmt_delta for dc in _delta_cols},
                 })
-                .applymap(_style_delta, subset=_delta_cols),
+                .map(_style_delta, subset=_delta_cols),
             use_container_width=True,
             height=500,
         )
@@ -1346,6 +1346,7 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
 
 
