@@ -1066,8 +1066,130 @@ with tab_historie:
             st.pyplot(_fig_ss)
             _plt_sl.close(_fig_ss)
 
+        # ── Marginale kosten vs. N (pooling-effect) ─────────────────────
+        st.divider()
+        st.subheader("Marginale kosten vs. N")
+        st.caption(
+            "Hoe nemen de incrementele kosten per extra subscriptie af naarmate N groeit? "
+            "Dit visualiseert het pooling-effect: elke extra subscriptie vereist minder "
+            "extra inventariskosten dan de vorige. "
+            "α, κ_BPA, κ_c en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
+        )
 
+        _N_MC_VALS = list(range(1, 21))
 
+        if st.button("📊 Bereken marginale kosten vs. N"):
+            _kp_mc = st.session_state.get('kosten_params', {})
+            _a_mc  = _kp_mc.get('alpha',         0.15)
+            _kb_mc = _kp_mc.get('kappa_bpa',     0.20)
+            _kc_mc = _kp_mc.get('kappa_c',       0.25)
+            _sl_mc = _kp_mc.get('service_level', 0.990)
+
+            _mc_results = []
+            with st.spinner("Berekenen marginale kosten (N = 1 … 20)…"):
+                for _n_mc in _N_MC_VALS:
+                    try:
+                        _m_mc, _r_mc = bouw_model_kosten(
+                            st.session_state.overzicht_df,
+                            _a_mc, _kb_mc, _kc_mc, _sl_mc,
+                            n_klanten_override=_n_mc,
+                        )
+                        _mc_results.append({
+                            'n':      _n_mc,
+                            'cost':   _r_mc['bpa_costs'],
+                            'margin': _r_mc['bpa_margin'],
+                        })
+                    except Exception:
+                        _mc_results.append({'n': _n_mc, 'cost': None, 'margin': None})
+
+            st.session_state.sens_mc = _mc_results
+            st.session_state.sens_mc_params = {
+                'alpha': _a_mc, 'kappa_bpa': _kb_mc, 'kappa_c': _kc_mc, 'sl': _sl_mc,
+            }
+
+        if 'sens_mc' in st.session_state:
+            import matplotlib.pyplot as _plt_mc
+            import matplotlib.ticker as _mt_mc
+
+            _mc_d     = st.session_state.sens_mc
+            _mc_p     = st.session_state.sens_mc_params
+            _n_std_mc = int(cfg['standaard_n_klanten'])
+            _fmt_mc   = _mt_mc.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+
+            _mc_ok = [(r['n'], r['cost']) for r in _mc_d if r['cost'] is not None]
+
+            if _mc_ok:
+                _ns_mc, _cs_mc = zip(*_mc_ok)
+                _avg_c_mc = [c / n for n, c in _mc_ok]
+
+                _n_mid_mc, _delta_c_mc = [], []
+                for (_n1, _c1), (_n2, _c2) in zip(_mc_ok[:-1], _mc_ok[1:]):
+                    _n_mid_mc.append((_n1 + _n2) / 2)
+                    _delta_c_mc.append((_c2 - _c1) / (_n2 - _n1))
+
+                _fig_mc, (_ax_mc1, _ax_mc2) = _plt_mc.subplots(
+                    2, 1, figsize=(11, 10), sharex=False
+                )
+
+                _col_tot = '#1976D2'
+                _col_avg = '#388E3C'
+                _ax_mc1.plot(_ns_mc, _cs_mc, marker='o', linewidth=2,
+                             color=_col_tot, label='Totale kosten C(N)')
+                for _xv, _yv in zip(_ns_mc, _cs_mc):
+                    _ax_mc1.annotate(f'€{_yv:,.0f}', (_xv, _yv),
+                                     textcoords='offset points', xytext=(0, 7),
+                                     ha='center', fontsize=7)
+                _ax_mc1b = _ax_mc1.twinx()
+                _ax_mc1b.plot(_ns_mc, _avg_c_mc, marker='s', linewidth=2,
+                              color=_col_avg, linestyle='--',
+                              label='Gemiddelde kosten C(N)/N')
+                for _xv, _yv in zip(_ns_mc, _avg_c_mc):
+                    _ax_mc1b.annotate(f'€{_yv:,.0f}', (_xv, _yv),
+                                      textcoords='offset points', xytext=(0, -12),
+                                      ha='center', fontsize=7, color=_col_avg)
+                _ax_mc1.axvline(_n_std_mc, color='black', linewidth=1.0,
+                                linestyle=':', label=f'N huidig = {_n_std_mc}')
+                _ax_mc1.set_ylabel('Totale BPA-kosten (€)', fontsize=11, color=_col_tot)
+                _ax_mc1b.set_ylabel('Gem. kosten per subscriptie (€)', fontsize=11,
+                                    color=_col_avg)
+                _ax_mc1.set_title(
+                    f'BPA-kosten vs. N  '
+                    f'(SL = {_mc_p["sl"]:.1%}, α = {_mc_p["alpha"]:.0%}, '
+                    f'κ_BPA = {_mc_p["kappa_bpa"]:.0%})',
+                    fontsize=12,
+                )
+                _ax_mc1.yaxis.set_major_formatter(_fmt_mc)
+                _ax_mc1b.yaxis.set_major_formatter(_fmt_mc)
+                _ax_mc1.set_xticks(_N_MC_VALS)
+                _lines1  = _ax_mc1.get_lines() + _ax_mc1b.get_lines()
+                _labels1 = [_l.get_label() for _l in _lines1]
+                _ax_mc1.legend(_lines1, _labels1, fontsize=9)
+                _ax_mc1.grid(True, alpha=0.3)
+
+                _ax_mc2.plot(_n_mid_mc, _delta_c_mc, marker='o', linewidth=2,
+                             color='#F57C00', label='Marginale kosten ΔC/ΔN')
+                for _xv, _yv in zip(_n_mid_mc, _delta_c_mc):
+                    _ax_mc2.annotate(f'€{_yv:,.0f}', (_xv, _yv),
+                                     textcoords='offset points', xytext=(0, 7),
+                                     ha='center', fontsize=7)
+                _ax_mc2.axhline(0, color='grey', linewidth=0.8, linestyle='--')
+                _ax_mc2.axvline(_n_std_mc, color='black', linewidth=1.0,
+                                linestyle=':', label=f'N huidig = {_n_std_mc}')
+                _ax_mc2.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                _ax_mc2.set_ylabel('ΔC / ΔN  (extra kosten per extra subscriptie, €)',
+                                   fontsize=11)
+                _ax_mc2.set_title(
+                    'Pooling-effect: marginale inventariskosten per extra subscriptie',
+                    fontsize=12,
+                )
+                _ax_mc2.yaxis.set_major_formatter(_fmt_mc)
+                _ax_mc2.set_xticks([int(_x) for _x in _n_mid_mc])
+                _ax_mc2.legend(fontsize=9)
+                _ax_mc2.grid(True, alpha=0.3)
+
+                _fig_mc.tight_layout(h_pad=3)
+                st.pyplot(_fig_mc)
+                _plt_mc.close(_fig_mc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
