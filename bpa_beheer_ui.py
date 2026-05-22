@@ -1076,7 +1076,7 @@ with tab_historie:
             "α, κ_BPA, κ_c en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
         )
 
-        _N_MC_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+        _N_MC_VALS = list(range(1, 21))
 
         if st.button("📊 Bereken marginale kosten vs. N"):
             _kp_mc = st.session_state.get('kosten_params', {})
@@ -1183,7 +1183,7 @@ with tab_historie:
                     fontsize=12,
                 )
                 _ax_mc2.yaxis.set_major_formatter(_fmt_mc)
-                _ax_mc2.set_xticks(_N_MC_VALS)
+                _ax_mc2.set_xticks([int(_x) for _x in _n_mid_mc])
                 _ax_mc2.legend(fontsize=9)
                 _ax_mc2.grid(True, alpha=0.3)
 
