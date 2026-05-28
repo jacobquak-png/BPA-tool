@@ -1368,21 +1368,28 @@ with tab_historie:
 
         if st.button("📊 Bereken investering vs. N"):
             _ov_inv = st.session_state.overzicht_df.reset_index()
-            # Verzamel per component: lambda per subscriptie, LT, IP
+            # Verzamel per component: lambda per subscriptie, LT, IP, VP, code
             _comp_inv = []
             for _, _ri in _ov_inv.iterrows():
                 _ni = float(_ri.get('n_klanten', 0) or 0)
                 _li = float(_ri.get('lambda_jr', 0) or 0)
                 _lt = float(_ri.get('LT_dagen', 0) or 0)
                 _ip = float(_ri.get('IP', 0) or 0)
+                _vp = float(_ri.get('VP', 0) or 0)
                 if _ni > 0 and _li > 0 and _lt > 0:
                     _comp_inv.append({
+                        'code':        str(_ri.get('Code', '')),
                         'lam_per_sub': _li / _ni,
                         'lt_jr':       _lt / 365,
                         'ip':          _ip,
+                        'vp':          _vp,
                     })
 
             _inv_results = {sl: [] for sl in SERVICE_LEVELS}
+            # Per-component resultaten voor top-5 grafiek (gebruik kosten_params SL)
+            _sl_top = st.session_state.get('kosten_params', {}).get('service_level', 0.990)
+            _inv_per_comp = {c['code']: [] for c in _comp_inv}
+
             with st.spinner("Berekenen investering vs. N…"):
                 for _n_inv in _N_INV_VALS:
                     for _sl_inv in SERVICE_LEVELS:
@@ -1393,8 +1400,22 @@ with tab_historie:
                             for _c in _comp_inv
                         )
                         _inv_results[_sl_inv].append({'n': _n_inv, 'inv': _totaal})
+                    # Per-component bij geselecteerde SL
+                    for _c in _comp_inv:
+                        _s = BPAOptimizationModel.inverse_service_level(
+                            _sl_top, _c['lam_per_sub'] * _n_inv, _c['lt_jr']
+                        )
+                        _inv_per_comp[_c['code']].append({'n': _n_inv, 'inv': _s * _c['ip']})
 
-            st.session_state.sens_inv = _inv_results
+            # Top 5 duurste componenten op VP
+            _top5_codes = sorted(
+                _comp_inv, key=lambda c: c['vp'], reverse=True
+            )[:5]
+
+            st.session_state.sens_inv        = _inv_results
+            st.session_state.sens_inv_comp   = _inv_per_comp
+            st.session_state.sens_inv_top5   = _top5_codes
+            st.session_state.sens_inv_sl_top = _sl_top
 
         if 'sens_inv' in st.session_state:
             import matplotlib.pyplot as _plt_inv
@@ -1442,6 +1463,50 @@ with tab_historie:
                     _row_t[f'SL {_sl_v:.1%}'] = f"€{_pts[0]['inv']:,.0f}" if _pts else '—'
                 _inv_tbl_rows.append(_row_t)
             st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('N'), use_container_width=False)
+
+            # ── Top-5 duurste componenten per VP ──────────────────────────
+            if 'sens_inv_top5' in st.session_state:
+                _top5    = st.session_state.sens_inv_top5
+                _comp_d  = st.session_state.sens_inv_comp
+                _sl_lbl  = st.session_state.sens_inv_sl_top
+
+                _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
+                st.subheader(f"Top 5 duurste componenten (VP) — investering vs. N  (SL = {_sl_lbl:.1%})")
+                st.caption(
+                    "Investeringswaarde per component (S\u002a × IP) als functie van N, "
+                    "voor de 5 componenten met de hoogste verkoopprijs (VP)."
+                )
+
+                _fig_t5, _ax_t5 = _plt_inv.subplots(figsize=(11, 5))
+                for _c5, _col5 in zip(_top5, _COLORS_TOP5):
+                    _pts5 = _comp_d.get(_c5['code'], [])
+                    if _pts5:
+                        _x5 = [p['n'] for p in _pts5]
+                        _y5 = [p['inv'] for p in _pts5]
+                        _lbl5 = f"{_c5['code']}  (VP €{_c5['vp']:,.0f})"
+                        _ax_t5.plot(_x5, _y5, marker='o', linewidth=2,
+                                    color=_col5, label=_lbl5)
+                        for _xv, _yv in zip(_x5, _y5):
+                            _ax_t5.annotate(f'€{_yv:,.0f}', (_xv, _yv),
+                                            textcoords='offset points', xytext=(0, 7),
+                                            ha='center', fontsize=6.5)
+
+                _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
+                               label=f'N huidig = {_n_std_inv}')
+                _ax_t5.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                _ax_t5.set_ylabel('Investeringswaarde S\u002a × IP  (€)', fontsize=11)
+                _ax_t5.set_title(
+                    f'Top 5 duurste componenten: investeringswaarde vs. N  (SL = {_sl_lbl:.1%})',
+                    fontsize=12,
+                )
+                _ax_t5.yaxis.set_major_formatter(_fmt_inv)
+                _ax_t5.set_xticks(_N_INV_VALS)
+                _plt_inv.setp(_ax_t5.get_xticklabels(), rotation=30, ha='right')
+                _ax_t5.legend(fontsize=9)
+                _ax_t5.grid(True, alpha=0.3)
+                _fig_t5.tight_layout()
+                st.pyplot(_fig_t5)
+                _plt_inv.close(_fig_t5)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
