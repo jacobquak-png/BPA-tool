@@ -829,7 +829,7 @@ with tab_historie:
             "α wordt overgenomen uit tabblad 💰 Kostenanalyse; κ_BPA en κ_c idem."
         )
 
-        _N_NSL_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+        _N_NSL_VALS = [1, 2, 3, 5, 7, 10, 15, 20]
 
         if st.button("📊 Bereken haalbaarheid (N × SL)"):
             _kp_nsl = st.session_state.get('kosten_params', {})
