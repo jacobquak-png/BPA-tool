@@ -48,7 +48,7 @@ FILTER_MIN_VP        = 1000
 FILTER_MIN_KLANTEN   = 5
 
 # Standaard serviceniveaus voor het overzicht
-SERVICE_LEVELS = [0.95, 0.980, 0.990, 0.995, 0.999]
+SERVICE_LEVELS = [0.980, 0.990, 0.995, 0.999]
 
 # Standaard aantal subscripties (globale fallback)
 DEFAULT_N_KLANTEN = 20
