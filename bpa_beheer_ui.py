@@ -1473,40 +1473,61 @@ with tab_historie:
                 _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
                 st.subheader(f"Top 5 duurste componenten (VP) — investering vs. N  (SL = {_sl_lbl:.1%})")
                 st.caption(
-                    "Investeringswaarde per component (S\u002a × IP) als functie van N, "
-                    "voor de 5 componenten met de hoogste verkoopprijs (VP)."
+                    "Gestapelde investeringswaarde (S\u002a × IP) per component als functie van N, "
+                    "voor de 5 componenten met de hoogste verkoopprijs (VP). "
+                    "De bovenste lijn toont de gesommeerde investering van deze top 5."
                 )
 
-                _fig_t5, _ax_t5 = _plt_inv.subplots(figsize=(11, 5))
-                for _c5, _col5 in zip(_top5, _COLORS_TOP5):
+                import numpy as _np_t5
+                # Bouw y-matrix: rijen = componenten, kolommen = N-waarden
+                _x5_vals = [p['n'] for p in (_comp_d.get(_top5[0]['code'], []) if _top5 else [])]
+                _y5_matrix = []
+                _labels5   = []
+                for _c5 in _top5:
                     _pts5 = _comp_d.get(_c5['code'], [])
                     if _pts5:
-                        _x5 = [p['n'] for p in _pts5]
-                        _y5 = [p['inv'] for p in _pts5]
-                        _lbl5 = f"{_c5['code']}  (VP €{_c5['vp']:,.0f})"
-                        _ax_t5.plot(_x5, _y5, marker='o', linewidth=2,
-                                    color=_col5, label=_lbl5)
-                        for _xv, _yv in zip(_x5, _y5):
-                            _ax_t5.annotate(f'€{_yv:,.0f}', (_xv, _yv),
-                                            textcoords='offset points', xytext=(0, 7),
-                                            ha='center', fontsize=6.5)
+                        _y5_matrix.append([p['inv'] for p in _pts5])
+                        _labels5.append(f"{_c5['code']}  (VP €{_c5['vp']:,.0f})")
 
-                _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                               label=f'N huidig = {_n_std_inv}')
-                _ax_t5.set_xlabel('Aantal subscripties (N)', fontsize=11)
-                _ax_t5.set_ylabel('Investeringswaarde S\u002a × IP  (€)', fontsize=11)
-                _ax_t5.set_title(
-                    f'Top 5 duurste componenten: investeringswaarde vs. N  (SL = {_sl_lbl:.1%})',
-                    fontsize=12,
-                )
-                _ax_t5.yaxis.set_major_formatter(_fmt_inv)
-                _ax_t5.set_xticks(_N_INV_VALS)
-                _plt_inv.setp(_ax_t5.get_xticklabels(), rotation=30, ha='right')
-                _ax_t5.legend(fontsize=9)
-                _ax_t5.grid(True, alpha=0.3)
-                _fig_t5.tight_layout()
-                st.pyplot(_fig_t5)
-                _plt_inv.close(_fig_t5)
+                if _x5_vals and _y5_matrix:
+                    _y5_arr = _np_t5.array(_y5_matrix)   # shape: (n_comp, n_N)
+                    _cum    = _np_t5.cumsum(_y5_arr, axis=0)
+
+                    _fig_t5, _ax_t5 = _plt_inv.subplots(figsize=(11, 5))
+                    _zero = _np_t5.zeros(len(_x5_vals))
+                    for _i, (_lbl5, _col5) in enumerate(zip(_labels5, _COLORS_TOP5)):
+                        _bottom = _cum[_i - 1] if _i > 0 else _zero
+                        _top_line = _cum[_i]
+                        _ax_t5.fill_between(_x5_vals, _bottom, _top_line,
+                                            alpha=0.65, color=_col5, label=_lbl5)
+                        _ax_t5.plot(_x5_vals, _top_line, color=_col5,
+                                    linewidth=1.2, alpha=0.9)
+
+                    # Annoteer de totaallijn (bovenste)
+                    _totaal5 = _cum[-1]
+                    _ax_t5.plot(_x5_vals, _totaal5, color='black', linewidth=2.0,
+                                linestyle='--', label='Totaal top 5')
+                    for _xv, _yv in zip(_x5_vals, _totaal5):
+                        _ax_t5.annotate(f'€{_yv:,.0f}', (_xv, _yv),
+                                        textcoords='offset points', xytext=(0, 8),
+                                        ha='center', fontsize=7, color='black')
+
+                    _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
+                                   label=f'N huidig = {_n_std_inv}')
+                    _ax_t5.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                    _ax_t5.set_ylabel('Gesommeerde investeringswaarde (€)', fontsize=11)
+                    _ax_t5.set_title(
+                        f'Top 5 duurste componenten: gestapelde investering vs. N  (SL = {_sl_lbl:.1%})',
+                        fontsize=12,
+                    )
+                    _ax_t5.yaxis.set_major_formatter(_fmt_inv)
+                    _ax_t5.set_xticks(_N_INV_VALS)
+                    _plt_inv.setp(_ax_t5.get_xticklabels(), rotation=30, ha='right')
+                    _ax_t5.legend(fontsize=9, loc='upper left')
+                    _ax_t5.grid(True, alpha=0.3)
+                    _fig_t5.tight_layout()
+                    st.pyplot(_fig_t5)
+                    _plt_inv.close(_fig_t5)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1785,6 +1806,7 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
 
 
