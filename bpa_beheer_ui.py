@@ -168,28 +168,64 @@ with tab_overzicht:
 
         def _style_delta(v):
             if pd.isna(v): return ''
-            if v > 0: return 'background-color: #d4edda'   # rood: omhoog
-            if v < 0: return 'background-color: #f8d7da'   # blauw: omlaag
-            return 'background-color: #cce5ff'              # groen: gelijk
+            if v > 0: return 'background-color: #f8d7da'   # rood: omhoog
+            if v < 0: return 'background-color: #cce5ff'   # blauw: omlaag
+            return 'background-color: #d4edda'              # groen: gelijk
 
         if _prev_datum:
             st.caption(f"\u0394 ten opzichte van snapshot: **{_prev_datum}**")
         else:
             st.caption("\u0394-kolommen beschikbaar na eerste snapshot (tabblad \U0001f4c8 Historiek).")
 
+        # ── Investering per component ──────────────────────────────────────
+        _kp_ov = st.session_state.get('kosten_params', {})
+        _sl_ov = _kp_ov.get('service_level', 0.990)
+        _sl_ov_col = f"s@{_sl_ov:.1%}"
+        # Fallback: gebruik de eerste beschikbare SL-kolom als de gewenste er niet in zit
+        if _sl_ov_col not in df.columns and sl_cols:
+            _sl_ov_col = sl_cols[0]
+            _sl_ov = float(_sl_ov_col[2:-1]) / 100
+        if _sl_ov_col in df.columns and 'IP' in df.columns:
+            _df_disp['Inv. (€)'] = (_df_disp[_sl_ov_col] * df['IP'].values).round(2)
+            _inv_totaal = _df_disp['Inv. (€)'].sum()
+            _df_disp['Inv. %'] = (
+                (_df_disp['Inv. (€)'] / _inv_totaal * 100).round(1)
+                if _inv_totaal > 0 else 0.0
+            )
+            _inv_cols = ['Inv. (€)', 'Inv. %']
+            st.caption(
+                f"Inv. (€) = S\u002a × IP bij **{_sl_ov_col}** · "
+                f"Totale voorraadwaarde: **€ {_inv_totaal:,.0f}** · "
+                f"_(pas service level aan via tabblad 💰 Kostenanalyse)_"
+            )
+        else:
+            _inv_cols = []
+
         # Tabel
-        st.dataframe(
+        _fmt_inv  = {c: "{:.0f}" for c in _inv_cols if 'Inv. (€)' in c}
+        _fmt_inv |= {c: "{:.1f}%" for c in _inv_cols if 'Inv. %' in c}
+
+        def _style_inv_share(v):
+            if pd.isna(v) or _inv_totaal == 0:
+                return ''
+            intensity = min(int(v / 100 * 255), 255)
+            return f'background-color: rgba(25, 118, 210, {v/100:.2f}); color: {"white" if v > 50 else "black"}'
+
+        styled = (
             _df_disp.style
                 .format({
                     "lambda_jr": "{:.4f}",
                     "mu":        "{:.4f}",
                     **{c: "{:.0f}" for c in sl_cols},
                     **{dc: _fmt_delta for dc in _delta_cols},
+                    **({'Inv. (€)': '€ {:,.0f}', 'Inv. %': '{:.1f}%'} if _inv_cols else {}),
                 })
-                .map(_style_delta, subset=_delta_cols),
-            use_container_width=True,
-            height=500,
+                .map(_style_delta, subset=_delta_cols)
         )
+        if _inv_cols and 'Inv. %' in _df_disp.columns:
+            styled = styled.map(_style_inv_share, subset=['Inv. %'])
+
+        st.dataframe(styled, use_container_width=True, height=500)
 
         # Download
         csv = df.to_csv(sep=";", decimal=",").encode("utf-8")
@@ -1406,7 +1442,8 @@ with tab_historie:
                     _row_t[f'SL {_sl_v:.1%}'] = f"€{_pts[0]['inv']:,.0f}" if _pts else '—'
                 _inv_tbl_rows.append(_row_t)
             st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('N'), use_container_width=False)
-            
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 7 – KOSTENANALYSE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1683,7 +1720,6 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
-
 
 
 
