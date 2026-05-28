@@ -1514,61 +1514,62 @@ with tab_historie:
                     _fig_t5.tight_layout()
                     st.pyplot(_fig_t5)
                     _plt_inv.close(_fig_t5)
-            # ── Top-10 duurste componenten — individuele lijnen ────────────
-            if 'sens_inv_top10' in st.session_state:
-                import matplotlib.cm as _cm_inv
-                _top10   = st.session_state.sens_inv_top10
-                _comp_d  = st.session_state.sens_inv_comp
-
-                _sl_opts_t10 = [f'SL {s:.1%}' for s in SERVICE_LEVELS]
-                _sl_sel_t10  = st.selectbox(
-                    'Service level voor top-10 grafiek',
-                    _sl_opts_t10,
-                    index=1,
-                    key='top10_sl_select',
-                )
-                _sl_val_t10 = SERVICE_LEVELS[_sl_opts_t10.index(_sl_sel_t10)]
-
-                st.subheader("Top 10 duurste componenten (VP) — investering per component vs. N")
-                st.caption(
-                    "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van N "
-                    "voor het geselecteerde service level."
-                )
-
-                _cd10_sl = _comp_d.get(_sl_val_t10, {})
-                _x10_vals = [p['n'] for p in _cd10_sl.get(_top10[0]['code'], [])] if _top10 else []
-
-                if _x10_vals:
-                    _cmap10  = _cm_inv.get_cmap('tab10')
-                    _fig_t10, _ax_t10 = _plt_inv.subplots(figsize=(12, 5))
-
-                    for _ci, _c10 in enumerate(_top10):
-                        _pts10 = [p['inv'] for p in _cd10_sl.get(_c10['code'], [])]
-                        if _pts10:
-                            _lbl10 = f"{_c10['code']} – {_c10.get('descr', '')[:25]}"
-                            _ax_t10.plot(
-                                _x10_vals, _pts10,
-                                color=_cmap10(_ci / 10),
-                                marker='o', linewidth=1.8, markersize=5,
-                                label=_lbl10,
-                            )
-
-                    _ax_t10.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                    label=f'N huidig = {_n_std_inv}')
-                    _ax_t10.set_xlabel('Aantal subscripties (N)', fontsize=11)
-                    _ax_t10.set_ylabel('Investeringswaarde per component (€)', fontsize=11)
-                    _ax_t10.set_title(
-                        f'Top 10 duurste componenten — investering vs. N  ({_sl_sel_t10})',
-                        fontsize=12,
+                    
+                # ── Top-10 duurste componenten — individuele lijnen ────────────
+                if 'sens_inv_top10' in st.session_state:
+                    import matplotlib.cm as _cm_inv
+                    _top10   = st.session_state.sens_inv_top10
+                    _comp_d  = st.session_state.sens_inv_comp
+    
+                    _sl_opts_t10 = [f'SL {s:.1%}' for s in SERVICE_LEVELS]
+                    _sl_sel_t10  = st.selectbox(
+                        'Service level voor top-10 grafiek',
+                        _sl_opts_t10,
+                        index=1,
+                        key='top10_sl_select',
                     )
-                    _ax_t10.yaxis.set_major_formatter(_fmt_inv)
-                    _ax_t10.set_xticks(_N_INV_VALS)
-                    _plt_inv.setp(_ax_t10.get_xticklabels(), rotation=30, ha='right')
-                    _ax_t10.legend(fontsize=8, loc='upper left', ncol=2)
-                    _ax_t10.grid(True, alpha=0.3)
-                    _fig_t10.tight_layout()
-                    st.pyplot(_fig_t10)
-                    _plt_inv.close(_fig_t10)           
+                    _sl_val_t10 = SERVICE_LEVELS[_sl_opts_t10.index(_sl_sel_t10)]
+    
+                    st.subheader("Top 10 duurste componenten (VP) — investering per component vs. N")
+                    st.caption(
+                        "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van N "
+                        "voor het geselecteerde service level."
+                    )
+    
+                    _cd10_sl = _comp_d.get(_sl_val_t10, {})
+                    _x10_vals = [p['n'] for p in _cd10_sl.get(_top10[0]['code'], [])] if _top10 else []
+    
+                    if _x10_vals:
+                        _cmap10  = _cm_inv.get_cmap('tab10')
+                        _fig_t10, _ax_t10 = _plt_inv.subplots(figsize=(12, 5))
+    
+                        for _ci, _c10 in enumerate(_top10):
+                            _pts10 = [p['inv'] for p in _cd10_sl.get(_c10['code'], [])]
+                            if _pts10:
+                                _lbl10 = f"{_c10['code']} – {_c10.get('descr', '')[:25]}"
+                                _ax_t10.plot(
+                                    _x10_vals, _pts10,
+                                    color=_cmap10(_ci / 10),
+                                    marker='o', linewidth=1.8, markersize=5,
+                                    label=_lbl10,
+                                )
+    
+                        _ax_t10.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
+                                        label=f'N huidig = {_n_std_inv}')
+                        _ax_t10.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                        _ax_t10.set_ylabel('Investeringswaarde per component (€)', fontsize=11)
+                        _ax_t10.set_title(
+                            f'Top 10 duurste componenten — investering vs. N  ({_sl_sel_t10})',
+                            fontsize=12,
+                        )
+                        _ax_t10.yaxis.set_major_formatter(_fmt_inv)
+                        _ax_t10.set_xticks(_N_INV_VALS)
+                        _plt_inv.setp(_ax_t10.get_xticklabels(), rotation=30, ha='right')
+                        _ax_t10.legend(fontsize=8, loc='upper left', ncol=2)
+                        _ax_t10.grid(True, alpha=0.3)
+                        _fig_t10.tight_layout()
+                        st.pyplot(_fig_t10)
+                        _plt_inv.close(_fig_t10)           
         # ── Marge over tijd (groeiend klantenbestand) ─────────────────────────
         st.divider()
         st.subheader("Marge over tijd (groeiend klantenbestand)")
