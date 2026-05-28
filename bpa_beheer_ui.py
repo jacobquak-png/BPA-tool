@@ -1523,7 +1523,48 @@ with tab_historie:
                     import matplotlib.cm as _cm_inv
                     _top10   = st.session_state.sens_inv_top10
                     _comp_d  = st.session_state.sens_inv_comp
-    
+                                    _comp_d_sl0_t10 = _comp_d.get(SERVICE_LEVELS[0], {})
+                _x10_sum_vals = [p['n'] for p in _comp_d_sl0_t10.get(_top10[0]['code'], [])] if _top10 else []
+
+                st.subheader("Top 10 duurste componenten (VP) — gesommeerde investering vs. N (per service level)")
+                st.caption(
+                    "Gesommeerde investeringswaarde (S\u002a × IP) van de top 10 duurste componenten "
+                    "(op verkoopprijs) als functie van N, per service level."
+                )
+
+                if _x10_sum_vals:
+                    _fig_t10s, _ax_t10s = _plt_inv.subplots(figsize=(11, 5))
+                    for _sl_t10s, _col_t10s, _ls_t10s in zip(
+                            SERVICE_LEVELS, _COLORS_INV, ['-', '--', '-.', ':']):
+                        _cd10s = _comp_d.get(_sl_t10s, {})
+                        _tot10s = [
+                            sum(
+                                next((p['inv'] for p in _cd10s.get(_c10['code'], [])
+                                      if p['n'] == _nv), 0)
+                                for _c10 in _top10
+                            )
+                            for _nv in _x10_sum_vals
+                        ]
+                        _ax_t10s.plot(_x10_sum_vals, _tot10s, color=_col_t10s, marker='o',
+                                      linewidth=2.0, linestyle=_ls_t10s,
+                                      label=f'SL {_sl_t10s:.1%}')
+                    _ax_t10s.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
+                                     label=f'N huidig = {_n_std_inv}')
+                    _ax_t10s.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                    _ax_t10s.set_ylabel('Gesommeerde investeringswaarde top 10 (€)', fontsize=11)
+                    _ax_t10s.set_title(
+                        'Top 10 duurste componenten (VP): gesommeerde investering vs. N per SL',
+                        fontsize=12,
+                    )
+                    _ax_t10s.yaxis.set_major_formatter(_fmt_inv)
+                    _ax_t10s.set_xticks(_N_INV_VALS)
+                    _plt_inv.setp(_ax_t10s.get_xticklabels(), rotation=30, ha='right')
+                    _ax_t10s.legend(fontsize=9, loc='upper left')
+                    _ax_t10s.grid(True, alpha=0.3)
+                    _fig_t10s.tight_layout()
+                    st.pyplot(_fig_t10s)
+                    _plt_inv.close(_fig_t10s)
+
                     _sl_opts_t10 = [f'SL {s:.1%}' for s in SERVICE_LEVELS]
                     _sl_sel_t10  = st.selectbox(
                         'Service level voor top-10 grafiek',
