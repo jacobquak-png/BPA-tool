@@ -1412,7 +1412,9 @@ with tab_historie:
             _top5_codes = sorted(
                 _comp_inv, key=lambda c: c['vp'], reverse=True
             )[:5]
-
+            _top10_codes = sorted(
+                _comp_inv, key=lambda c: c['vp'], reverse=True
+            )[:10]
             st.session_state.sens_inv        = _inv_results
             st.session_state.sens_inv_comp   = _inv_per_comp
             st.session_state.sens_inv_top5   = _top5_codes
@@ -1527,7 +1529,7 @@ with tab_historie:
     
                     # Haal x-waarden op uit de data
                     _comp_d_sl0 = _comp_d.get(SERVICE_LEVELS[0], {})
-                    _x5_vals = [p['n'] for p in _comp_d_sl0.get(_top5[0]['code'], [])] if _top5 else []
+                    _x5_vals = [p['n'] for p in _comp_d_sl0.get(_top10_codes[0]['code'], [])] if _top10_codes else []
     
                     if _x5_vals:
                         _fig_t5, _ax_t5 = _plt_inv.subplots(figsize=(11, 5))
