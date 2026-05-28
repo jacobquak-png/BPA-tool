@@ -168,9 +168,9 @@ with tab_overzicht:
 
         def _style_delta(v):
             if pd.isna(v): return ''
-            if v > 0: return 'background-color: #f8d7da'   # rood: omhoog
-            if v < 0: return 'background-color: #cce5ff'   # blauw: omlaag
-            return 'background-color: #d4edda'              # groen: gelijk
+            if v > 0: return 'background-color: #d4edda'   # rood: omhoog
+            if v < 0: return 'background-color: #f8d7da'   # blauw: omlaag
+            return 'background-color: #cce5ff'              # groen: gelijk
 
         if _prev_datum:
             st.caption(f"\u0394 ten opzichte van snapshot: **{_prev_datum}**")
