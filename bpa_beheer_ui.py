@@ -1363,7 +1363,7 @@ with tab_historie:
             "moet investeren naarmate het klantenbestand groeit."
         )
 
-        _N_INV_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+        N_INV_VALS = list(range(1, 21))
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
 
         if st.button("📊 Bereken investering vs. N"):
@@ -1386,9 +1386,9 @@ with tab_historie:
                     })
 
             _inv_results = {sl: [] for sl in SERVICE_LEVELS}
-            # Per-component resultaten voor top-5 grafiek (gebruik kosten_params SL)
+            # Per-component resultaten voor top-5 grafiek (alle SL's)
             _sl_top = st.session_state.get('kosten_params', {}).get('service_level', 0.990)
-            _inv_per_comp = {c['code']: [] for c in _comp_inv}
+            _inv_per_comp = {sl: {c['code']: [] for c in _comp_inv} for sl in SERVICE_LEVELS}
 
             with st.spinner("Berekenen investering vs. N…"):
                 for _n_inv in _N_INV_VALS:
@@ -1400,12 +1400,13 @@ with tab_historie:
                             for _c in _comp_inv
                         )
                         _inv_results[_sl_inv].append({'n': _n_inv, 'inv': _totaal})
-                    # Per-component bij geselecteerde SL
+                    # Per-component per SL (voor top-5 grafiek)
                     for _c in _comp_inv:
-                        _s = BPAOptimizationModel.inverse_service_level(
-                            _sl_top, _c['lam_per_sub'] * _n_inv, _c['lt_jr']
-                        )
-                        _inv_per_comp[_c['code']].append({'n': _n_inv, 'inv': _s * _c['ip']})
+                        for _sl_c in SERVICE_LEVELS:
+                            _s = BPAOptimizationModel.inverse_service_level(
+                                _sl_c, _c['lam_per_sub'] * _n_inv, _c['lt_jr']
+                            )
+                            _inv_per_comp[_sl_c][_c['code']].append({'n': _n_inv, 'inv': _s * _c['ip']})
 
             # Top 5 duurste componenten op VP
             _top5_codes = sorted(
