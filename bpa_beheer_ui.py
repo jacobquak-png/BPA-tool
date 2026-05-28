@@ -1476,7 +1476,11 @@ with tab_historie:
                 )
 
                 import numpy as _np_t5
-                
+                _comp_d_sl = _comp_d.get(_sl_lbl, {})
+                _x5_vals = [p['n'] for p in (_comp_d_sl.get(_top5[0]['code'], []) if _top5 else [])]
+                _y5_matrix = []
+                _labels5   = []
+                for _c5 in _top5:
                     # Totaallijnen per service level
                     for _sl_t5, _col_t5, _ls_t5 in zip(
                             SERVICE_LEVELS, _COLORS_INV, ['-', '--', '-.', ':']):
