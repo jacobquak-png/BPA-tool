@@ -125,7 +125,17 @@ with tab_overzicht:
         # Laad vorige snapshot voor Δ-kolommen
         _prev_comp = {}
         _prev_datum = None
-        if os.path.exists(HISTORY_PATH):
+        # 1) Voorkeur: vorige overzicht_df uit session_state (vastgelegd bij opslaan)
+        _prev_df = st.session_state.get("overzicht_df_prev")
+        if _prev_df is not None and not _prev_df.empty:
+            _prev_datum = "vorige opgeslagen staat"
+            for _code in _prev_df.index:
+                _prev_comp[str(_code)] = {
+                    _sc: int(_prev_df.at[_code, _sc])
+                    for _sc in _prev_df.columns if _sc.startswith("s@")
+                }
+        # 2) Fallback: oudere snapshot uit history-bestand (legacy)
+        elif os.path.exists(HISTORY_PATH):
             try:
                 with open(HISTORY_PATH, encoding='utf-8') as _fh:
                     _hist_ov = json.load(_fh)
@@ -204,6 +214,9 @@ with tab_subscripties:
         step=1,
     )
     if st.button("Opslaan standaard"):
+        # Bewaar huidige overzicht_df als vorige snapshot vóór recompute
+        if "overzicht_df" in st.session_state:
+            st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
         cfg["standaard_n_klanten"] = int(nieuw_standaard)
         sla_config_op(cfg)
         st.toast(f"Standaard aangepast naar {cfg['standaard_n_klanten']}", icon="✅")
@@ -265,6 +278,9 @@ with tab_subscripties:
         cfg["n_klanten_overrides"] = n_ov
         cfg["ip_overrides"]        = ip_ov
         cfg["lt_overrides"]        = lt_ov
+        # Bewaar huidige overzicht_df als vorige snapshot vóór recompute
+        if "overzicht_df" in st.session_state:
+            st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
         sla_config_op(cfg)
         st.toast(f"Overrides opgeslagen — {len(n_ov)} N, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="✅")
         st.session_state.pop("overzicht_df", None)
@@ -1579,6 +1595,7 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
 
 
