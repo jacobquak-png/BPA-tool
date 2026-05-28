@@ -1481,6 +1481,24 @@ with tab_historie:
                 _y5_matrix = []
                 _labels5   = []
                 for _c5 in _top5:
+                    _pts5 = _comp_d_sl.get(_c5['code'], [])
+                    if _pts5:
+                        _y5_matrix.append([p['inv'] for p in _pts5])
+                        _labels5.append(f"{_c5['code']}  (VP €{_c5['vp']:,.0f})")
+
+                if _x5_vals and _y5_matrix:
+                    _y5_arr = _np_t5.array(_y5_matrix)   # shape: (n_comp, n_N)
+                    _cum    = _np_t5.cumsum(_y5_arr, axis=0)
+
+                    _fig_t5, _ax_t5 = _plt_inv.subplots(figsize=(11, 5))
+                    _zero = _np_t5.zeros(len(_x5_vals))
+                    for _i, (_lbl5, _col5) in enumerate(zip(_labels5, _COLORS_TOP5)):
+                        _bottom = _cum[_i - 1] if _i > 0 else _zero
+                        _top_line = _cum[_i]
+                        _ax_t5.fill_between(_x5_vals, _bottom, _top_line,
+                                            alpha=0.65, color=_col5, label=_lbl5)
+                        _ax_t5.plot(_x5_vals, _top_line, color=_col5,
+                                    linewidth=1.2, alpha=0.9)
                     # Totaallijnen per service level
                     for _sl_t5, _col_t5, _ls_t5 in zip(
                             SERVICE_LEVELS, _COLORS_INV, ['-', '--', '-.', ':']):
