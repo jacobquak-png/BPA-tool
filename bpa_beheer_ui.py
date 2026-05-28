@@ -765,6 +765,128 @@ with tab_historie:
             _fig_hm.tight_layout()
             st.pyplot(_fig_hm)
             _plt_nf.close(_fig_hm)
+        # ── Haalbaarheid BPA per (N, SL) – heatmap ────────────────────────────────
+        st.divider()
+        st.subheader("Haalbaarheid BPA per (N, serviceniveau)")
+        st.caption(
+            "Groen = BPA is haalbaar (marge ≥ 0), rood = niet haalbaar. "
+            "α wordt overgenomen uit tabblad 💰 Kostenanalyse; κ_BPA en κ_c idem."
+        )
+
+        _N_NSL_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+
+        if st.button("📊 Bereken haalbaarheid (N × SL)"):
+            _kp_nsl = st.session_state.get('kosten_params', {})
+            _a_nsl  = _kp_nsl.get('alpha',     0.15)
+            _kb_nsl = _kp_nsl.get('kappa_bpa', 0.20)
+            _kc_nsl = _kp_nsl.get('kappa_c',   0.25)
+
+            _nsl_grid = {}
+            with st.spinner("Berekenen haalbaarheid (N × SL)…"):
+                for _n_nsl in _N_NSL_VALS:
+                    _nsl_grid[_n_nsl] = {}
+                    for _sl_nsl in SERVICE_LEVELS:
+                        try:
+                            _, _r_nsl = bouw_model_kosten(
+                                st.session_state.overzicht_df,
+                                _a_nsl, _kb_nsl, _kc_nsl, _sl_nsl,
+                                n_klanten_override=_n_nsl,
+                            )
+                            _nsl_grid[_n_nsl][_sl_nsl] = {
+                                'feasible': _r_nsl['feasible'],
+                                'margin':   _r_nsl['bpa_margin'],
+                            }
+                        except Exception:
+                            _nsl_grid[_n_nsl][_sl_nsl] = {'feasible': False, 'margin': None}
+
+            st.session_state.sens_nsl_grid  = _nsl_grid
+            st.session_state.sens_nsl_alpha = _a_nsl
+            st.session_state.sens_nsl_kb    = _kb_nsl
+
+        if 'sens_nsl_grid' in st.session_state:
+            import matplotlib.pyplot as _plt_nsl
+            import matplotlib.colors as _mcolors_nsl
+            import numpy as _np_nsl
+
+            _grid   = st.session_state.sens_nsl_grid
+            _a_lbl  = st.session_state.sens_nsl_alpha
+            _kb_lbl = st.session_state.sens_nsl_kb
+            _n_std_nsl = int(cfg['standaard_n_klanten'])
+
+            _rows_nsl = SERVICE_LEVELS       # y-as
+            _cols_nsl = _N_NSL_VALS          # x-as
+
+            # Bouw matrices: haalbaarheid (0/1) en genormaliseerde marge
+            _feas_mat = _np_nsl.zeros((len(_rows_nsl), len(_cols_nsl)))
+            _marg_mat = _np_nsl.full((len(_rows_nsl), len(_cols_nsl)), float('nan'))
+
+            for _ci, _n_v in enumerate(_cols_nsl):
+                for _ri, _sl_v in enumerate(_rows_nsl):
+                    _cell = _grid.get(_n_v, {}).get(_sl_v, {})
+                    _feas_mat[_ri, _ci] = 1.0 if _cell.get('feasible') else 0.0
+                    if _cell.get('margin') is not None:
+                        _marg_mat[_ri, _ci] = _cell['margin']
+
+            # Kleurschaal: rood → geel → groen via marge-waarden
+            _valid = _marg_mat[~_np_nsl.isnan(_marg_mat)]
+            if len(_valid) > 0:
+                _abs_max = max(abs(_valid.min()), abs(_valid.max()), 1)
+            else:
+                _abs_max = 1
+            _norm_nsl = _mcolors_nsl.TwoSlopeNorm(
+                vmin=-_abs_max, vcenter=0, vmax=_abs_max
+            )
+
+            _fig_nsl, _ax_nsl = _plt_nsl.subplots(figsize=(13, 5))
+            _im_nsl = _ax_nsl.imshow(
+                _marg_mat, aspect='auto',
+                cmap='RdYlGn', norm=_norm_nsl,
+                interpolation='nearest',
+            )
+            _plt_nsl.colorbar(_im_nsl, ax=_ax_nsl, label='BPA-marge (€)', fraction=0.03, pad=0.02)
+
+            # Annotaties per cel
+            for _ri, _sl_v in enumerate(_rows_nsl):
+                for _ci, _n_v in enumerate(_cols_nsl):
+                    _cell = _grid.get(_n_v, {}).get(_sl_v, {})
+                    _feas = _cell.get('feasible', False)
+                    _mg   = _cell.get('margin')
+                    _sym  = '✓' if _feas else '✗'
+                    _tc   = '#1a5c1a' if _feas else '#7a0000'
+                    _ax_nsl.text(_ci, _ri, _sym,
+                                 ha='center', va='center' if _mg is None else 'bottom',
+                                 fontsize=13, color=_tc, fontweight='bold')
+                    if _mg is not None:
+                        _ax_nsl.text(_ci, _ri + 0.28, f'€{_mg:,.0f}',
+                                     ha='center', va='center', fontsize=6.5, color=_tc)
+
+            # Assen
+            _ax_nsl.set_xticks(range(len(_cols_nsl)))
+            _ax_nsl.set_xticklabels([str(n) for n in _cols_nsl], fontsize=9)
+            _ax_nsl.set_yticks(range(len(_rows_nsl)))
+            _ax_nsl.set_yticklabels([f'{sl:.1%}' for sl in _rows_nsl], fontsize=9)
+            _ax_nsl.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_nsl.set_ylabel('Service level', fontsize=11)
+            _ax_nsl.set_title(
+                f'Haalbaarheid BPA per (N, service level)  '
+                f'(α = {_a_lbl:.0%}, κ_BPA = {_kb_lbl:.0%})',
+                fontsize=12,
+            )
+
+            # Markeer huidige N
+            try:
+                _ni_std = min(range(len(_cols_nsl)),
+                              key=lambda k: abs(_cols_nsl[k] - _n_std_nsl))
+                _ax_nsl.axvline(_ni_std, color='black', linewidth=2.0, linestyle=':')
+                _ax_nsl.text(_ni_std + 0.15, -0.7, f'N={_n_std_nsl}',
+                             fontsize=8, color='black')
+            except Exception:
+                pass
+
+            _fig_nsl.tight_layout()
+            st.pyplot(_fig_nsl)
+            _plt_nsl.close(_fig_nsl)
+
         # ── N vs. maximaal haalbaar serviceniveau ───────────────────────────────────
         st.divider()
         st.subheader("N vs. maximaal haalbaar serviceniveau")
@@ -1076,120 +1198,105 @@ with tab_historie:
             "α, κ_BPA, κ_c en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
         )
 
-        _N_MC_VALS = list(range(1, 21))
+        _N_MC_VALS   = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+        _SL_MC_COLORS = ['#2ca02c', '#ff7f0e', '#1f77b4', '#d62728', '#9467bd', '#8c564b']
 
         if st.button("📊 Bereken marginale kosten vs. N"):
             _kp_mc = st.session_state.get('kosten_params', {})
-            _a_mc  = _kp_mc.get('alpha',         0.15)
-            _kb_mc = _kp_mc.get('kappa_bpa',     0.20)
-            _kc_mc = _kp_mc.get('kappa_c',       0.25)
-            _sl_mc = _kp_mc.get('service_level', 0.990)
+            _a_mc  = _kp_mc.get('alpha',     0.15)
+            _kb_mc = _kp_mc.get('kappa_bpa', 0.20)
+            _kc_mc = _kp_mc.get('kappa_c',   0.25)
 
-            _mc_results = []
-            with st.spinner("Berekenen marginale kosten (N = 1 … 20)…"):
-                for _n_mc in _N_MC_VALS:
-                    try:
-                        _m_mc, _r_mc = bouw_model_kosten(
-                            st.session_state.overzicht_df,
-                            _a_mc, _kb_mc, _kc_mc, _sl_mc,
-                            n_klanten_override=_n_mc,
-                        )
-                        _mc_results.append({
-                            'n':      _n_mc,
-                            'cost':   _r_mc['bpa_costs'],
-                            'margin': _r_mc['bpa_margin'],
-                        })
-                    except Exception:
-                        _mc_results.append({'n': _n_mc, 'cost': None, 'margin': None})
+            _mc_results_by_sl = {}
+            with st.spinner("Berekenen marginale kosten voor alle serviceniveaus…"):
+                for _sl_mc in SERVICE_LEVELS:
+                    _mc_rows = []
+                    for _n_mc in _N_MC_VALS:
+                        try:
+                            _m_mc, _r_mc = bouw_model_kosten(
+                                st.session_state.overzicht_df,
+                                _a_mc, _kb_mc, _kc_mc, _sl_mc,
+                                n_klanten_override=_n_mc,
+                            )
+                            _mc_rows.append({
+                                'n':      _n_mc,
+                                'cost':   _r_mc['bpa_costs'],
+                                'margin': _r_mc['bpa_margin'],
+                            })
+                        except Exception:
+                            _mc_rows.append({'n': _n_mc, 'cost': None, 'margin': None})
+                    _mc_results_by_sl[_sl_mc] = _mc_rows
 
-            st.session_state.sens_mc = _mc_results
+            st.session_state.sens_mc = _mc_results_by_sl
             st.session_state.sens_mc_params = {
-                'alpha': _a_mc, 'kappa_bpa': _kb_mc, 'kappa_c': _kc_mc, 'sl': _sl_mc,
+                'alpha': _a_mc, 'kappa_bpa': _kb_mc, 'kappa_c': _kc_mc,
             }
 
         if 'sens_mc' in st.session_state:
             import matplotlib.pyplot as _plt_mc
             import matplotlib.ticker as _mt_mc
 
-            _mc_d     = st.session_state.sens_mc
+            _mc_by_sl = st.session_state.sens_mc
             _mc_p     = st.session_state.sens_mc_params
             _n_std_mc = int(cfg['standaard_n_klanten'])
             _fmt_mc   = _mt_mc.FuncFormatter(lambda v, _: f'€{v:,.0f}')
 
-            _mc_ok = [(r['n'], r['cost']) for r in _mc_d if r['cost'] is not None]
+            # Backward compatibility: oud formaat was een lijst voor één SL
+            if isinstance(_mc_by_sl, list):
+                _mc_by_sl = {0.990: _mc_by_sl}
 
-            if _mc_ok:
+            _fig_mc, (_ax_mc1, _ax_mc2) = _plt_mc.subplots(
+                2, 1, figsize=(11, 10), sharex=False
+            )
+
+            for (_sl_mc, _mc_d), _color in zip(_mc_by_sl.items(), _SL_MC_COLORS):
+                _mc_ok = [(r['n'], r['cost']) for r in _mc_d if r['cost'] is not None]
+                if not _mc_ok:
+                    continue
                 _ns_mc, _cs_mc = zip(*_mc_ok)
-                _avg_c_mc = [c / n for n, c in _mc_ok]
+                _sl_lbl = f'SL {_sl_mc:.1%}'
+
+                _ax_mc1.plot(_ns_mc, _cs_mc, marker='o', linewidth=2,
+                             color=_color, label=_sl_lbl)
 
                 _n_mid_mc, _delta_c_mc = [], []
                 for (_n1, _c1), (_n2, _c2) in zip(_mc_ok[:-1], _mc_ok[1:]):
                     _n_mid_mc.append((_n1 + _n2) / 2)
                     _delta_c_mc.append((_c2 - _c1) / (_n2 - _n1))
-
-                _fig_mc, (_ax_mc1, _ax_mc2) = _plt_mc.subplots(
-                    2, 1, figsize=(11, 10), sharex=False
-                )
-
-                _col_tot = '#1976D2'
-                _col_avg = '#388E3C'
-                _ax_mc1.plot(_ns_mc, _cs_mc, marker='o', linewidth=2,
-                             color=_col_tot, label='Totale kosten C(N)')
-                for _xv, _yv in zip(_ns_mc, _cs_mc):
-                    _ax_mc1.annotate(f'€{_yv:,.0f}', (_xv, _yv),
-                                     textcoords='offset points', xytext=(0, 7),
-                                     ha='center', fontsize=7)
-                _ax_mc1b = _ax_mc1.twinx()
-                _ax_mc1b.plot(_ns_mc, _avg_c_mc, marker='s', linewidth=2,
-                              color=_col_avg, linestyle='--',
-                              label='Gemiddelde kosten C(N)/N')
-                for _xv, _yv in zip(_ns_mc, _avg_c_mc):
-                    _ax_mc1b.annotate(f'€{_yv:,.0f}', (_xv, _yv),
-                                      textcoords='offset points', xytext=(0, -12),
-                                      ha='center', fontsize=7, color=_col_avg)
-                _ax_mc1.axvline(_n_std_mc, color='black', linewidth=1.0,
-                                linestyle=':', label=f'N huidig = {_n_std_mc}')
-                _ax_mc1.set_ylabel('Totale BPA-kosten (€)', fontsize=11, color=_col_tot)
-                _ax_mc1b.set_ylabel('Gem. kosten per subscriptie (€)', fontsize=11,
-                                    color=_col_avg)
-                _ax_mc1.set_title(
-                    f'BPA-kosten vs. N  '
-                    f'(SL = {_mc_p["sl"]:.1%}, α = {_mc_p["alpha"]:.0%}, '
-                    f'κ_BPA = {_mc_p["kappa_bpa"]:.0%})',
-                    fontsize=12,
-                )
-                _ax_mc1.yaxis.set_major_formatter(_fmt_mc)
-                _ax_mc1b.yaxis.set_major_formatter(_fmt_mc)
-                _ax_mc1.set_xticks(_N_MC_VALS)
-                _lines1  = _ax_mc1.get_lines() + _ax_mc1b.get_lines()
-                _labels1 = [_l.get_label() for _l in _lines1]
-                _ax_mc1.legend(_lines1, _labels1, fontsize=9)
-                _ax_mc1.grid(True, alpha=0.3)
-
                 _ax_mc2.plot(_n_mid_mc, _delta_c_mc, marker='o', linewidth=2,
-                             color='#F57C00', label='Marginale kosten ΔC/ΔN')
-                for _xv, _yv in zip(_n_mid_mc, _delta_c_mc):
-                    _ax_mc2.annotate(f'€{_yv:,.0f}', (_xv, _yv),
-                                     textcoords='offset points', xytext=(0, 7),
-                                     ha='center', fontsize=7)
-                _ax_mc2.axhline(0, color='grey', linewidth=0.8, linestyle='--')
-                _ax_mc2.axvline(_n_std_mc, color='black', linewidth=1.0,
-                                linestyle=':', label=f'N huidig = {_n_std_mc}')
-                _ax_mc2.set_xlabel('Aantal subscripties (N)', fontsize=11)
-                _ax_mc2.set_ylabel('ΔC / ΔN  (extra kosten per extra subscriptie, €)',
-                                   fontsize=11)
-                _ax_mc2.set_title(
-                    'Pooling-effect: marginale inventariskosten per extra subscriptie',
-                    fontsize=12,
-                )
-                _ax_mc2.yaxis.set_major_formatter(_fmt_mc)
-                _ax_mc2.set_xticks([int(_x) for _x in _n_mid_mc])
-                _ax_mc2.legend(fontsize=9)
-                _ax_mc2.grid(True, alpha=0.3)
+                             color=_color, label=_sl_lbl)
 
-                _fig_mc.tight_layout(h_pad=3)
-                st.pyplot(_fig_mc)
-                _plt_mc.close(_fig_mc)
+            _ax_mc1.axvline(_n_std_mc, color='black', linewidth=1.0,
+                            linestyle=':', label=f'N huidig = {_n_std_mc}')
+            _ax_mc1.set_ylabel('Totale BPA-kosten (€)', fontsize=11)
+            _ax_mc1.set_title(
+                f'BPA-kosten vs. N  '
+                f'(α = {_mc_p["alpha"]:.0%}, κ_BPA = {_mc_p["kappa_bpa"]:.0%})',
+                fontsize=12,
+            )
+            _ax_mc1.yaxis.set_major_formatter(_fmt_mc)
+            _ax_mc1.set_xticks(_N_MC_VALS)
+            _ax_mc1.legend(fontsize=9)
+            _ax_mc1.grid(True, alpha=0.3)
+
+            _ax_mc2.axhline(0, color='grey', linewidth=0.8, linestyle='--')
+            _ax_mc2.axvline(_n_std_mc, color='black', linewidth=1.0,
+                            linestyle=':', label=f'N huidig = {_n_std_mc}')
+            _ax_mc2.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_mc2.set_ylabel('ΔC / ΔN  (extra kosten per extra subscriptie, €)',
+                               fontsize=11)
+            _ax_mc2.set_title(
+                'Pooling-effect: marginale inventariskosten per extra subscriptie',
+                fontsize=12,
+            )
+            _ax_mc2.yaxis.set_major_formatter(_fmt_mc)
+            _ax_mc2.set_xticks(_N_MC_VALS)
+            _ax_mc2.legend(fontsize=9)
+            _ax_mc2.grid(True, alpha=0.3)
+
+            _fig_mc.tight_layout(h_pad=3)
+            st.pyplot(_fig_mc)
+            _plt_mc.close(_fig_mc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1468,6 +1575,7 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
 
 
 
