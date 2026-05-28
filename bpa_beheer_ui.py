@@ -1513,6 +1513,215 @@ with tab_historie:
                     st.pyplot(_fig_t5)
                     _plt_inv.close(_fig_t5)
 
+        # ── Marge over tijd (groeiend klantenbestand) ─────────────────────────
+        st.divider()
+        st.subheader("Marge over tijd (groeiend klantenbestand)")
+        st.caption(
+            "Cumulatieve cashflow rekening houdend met de initiële investering in basisvoorraad, "
+            "jaarlijkse voorraadkosten (κ\\_BPA × S\\* × IP) en groeiende abonnementsinkomsten "
+            "(α × VP × N). N groeit lineair van start naar doelstelling. "
+            "α, κ\\_BPA en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
+        )
+
+        _col_mt1, _col_mt2, _col_mt3 = st.columns(3)
+        with _col_mt1:
+            _N_start_mt = st.number_input(
+                "N start (jaar 0)", min_value=1,
+                value=int(cfg['standaard_n_klanten']), step=1,
+                key="marge_tijd_n_start",
+            )
+        with _col_mt2:
+            _N_end_mt = st.number_input(
+                "N eind (doelstelling)", min_value=1,
+                value=max(int(cfg['standaard_n_klanten']) * 3, 10), step=1,
+                key="marge_tijd_n_end",
+            )
+        with _col_mt3:
+            _T_mt = st.number_input(
+                "Tijdshorizon (jaar)", min_value=1, max_value=20,
+                value=5, step=1,
+                key="marge_tijd_T",
+            )
+
+        if st.button("📊 Bereken marge over tijd"):
+            _kp_mt    = st.session_state.get('kosten_params', {})
+            _alpha_mt = _kp_mt.get('alpha',         0.15)
+            _kbpa_mt  = _kp_mt.get('kappa_bpa',     0.20)
+            _sl_mt    = _kp_mt.get('service_level',  0.990)
+
+            _ov_mt = st.session_state.overzicht_df.reset_index()
+            _comp_mt = []
+            for _, _rmt in _ov_mt.iterrows():
+                _ni = float(_rmt.get('n_klanten', 0) or 0)
+                _li = float(_rmt.get('lambda_jr',  0) or 0)
+                _lt = float(_rmt.get('LT_dagen',   0) or 0)
+                _ip = float(_rmt.get('IP',          0) or 0)
+                _vp = float(_rmt.get('VP',          0) or 0)
+                if _ni > 0 and _li > 0 and _lt > 0:
+                    _comp_mt.append({
+                        'lam_per_sub': _li / _ni,
+                        'lt_jr':       _lt / 365,
+                        'ip':          _ip,
+                        'vp':          _vp,
+                    })
+
+            def _N_t_mt(t):
+                if _T_mt == 0:
+                    return float(_N_start_mt)
+                return _N_start_mt + (_N_end_mt - _N_start_mt) * t / _T_mt
+
+            def _inv_waarde_mt(n):
+                return sum(
+                    BPAOptimizationModel.inverse_service_level(
+                        _sl_mt, _c['lam_per_sub'] * n, _c['lt_jr']
+                    ) * _c['ip']
+                    for _c in _comp_mt
+                )
+
+            def _rev_jaar_mt(n):
+                return sum(_c['vp'] * _alpha_mt * n for _c in _comp_mt)
+
+            _t_arr_mt    = list(range(int(_T_mt) + 1))
+            _inv_mt_arr  = []
+            _hold_mt_arr = []
+            _rev_mt_arr  = []
+            _cum_mt_arr  = []
+            _N_mt_arr    = []
+
+            _cum = 0.0
+            with st.spinner("Berekenen marge over tijd…"):
+                for _t in _t_arr_mt:
+                    _n    = _N_t_mt(_t)
+                    _iw   = _inv_waarde_mt(_n)
+                    _hold = _kbpa_mt * _iw
+                    _rev  = _rev_jaar_mt(_n)
+                    if _t == 0:
+                        _delta_inv = _iw
+                    else:
+                        _prev_iw   = _inv_waarde_mt(_N_t_mt(_t - 1))
+                        _delta_inv = max(0.0, _iw - _prev_iw)
+                    _net  = _rev - _hold - _delta_inv
+                    _cum += _net
+                    _N_mt_arr.append(round(_n, 1))
+                    _inv_mt_arr.append(-_delta_inv)
+                    _hold_mt_arr.append(-_hold)
+                    _rev_mt_arr.append(_rev)
+                    _cum_mt_arr.append(_cum)
+
+            st.session_state.sens_marge_tijd = {
+                't':      _t_arr_mt,
+                'inv':    _inv_mt_arr,
+                'hold':   _hold_mt_arr,
+                'rev':    _rev_mt_arr,
+                'cum':    _cum_mt_arr,
+                'N':      _N_mt_arr,
+                'params': {
+                    'alpha':     _alpha_mt,
+                    'kappa_bpa': _kbpa_mt,
+                    'sl':        _sl_mt,
+                    'N_start':   int(_N_start_mt),
+                    'N_end':     int(_N_end_mt),
+                    'T':         int(_T_mt),
+                },
+            }
+
+        if 'sens_marge_tijd' in st.session_state:
+            import matplotlib.pyplot as _plt_mt
+            import matplotlib.ticker as _mt_tick
+            import numpy as _np_mt
+
+            _mtd    = st.session_state.sens_marge_tijd
+            _mtp    = _mtd['params']
+            _fmt_mt = _mt_tick.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+
+            _t_arr    = _mtd['t']
+            _x_pos    = _np_mt.arange(len(_t_arr))
+            _x_lbl    = [f'Jaar {t}' for t in _t_arr]
+            _inv_arr  = _np_mt.array(_mtd['inv'])
+            _hold_arr = _np_mt.array(_mtd['hold'])
+            _rev_arr  = _np_mt.array(_mtd['rev'])
+            _cum_arr  = _np_mt.array(_mtd['cum'])
+            _net_arr  = _rev_arr + _hold_arr + _inv_arr
+
+            _fig_mt, (_ax_mt1, _ax_mt2) = _plt_mt.subplots(2, 1, figsize=(12, 10))
+
+            # ── Grafiek 1: jaarlijkse cashflow ──────────────────────────────────
+            _w = 0.55
+            _ax_mt1.bar(_x_pos, _rev_arr,  _w,
+                        label='Inkomsten',      color='#388E3C', alpha=0.85)
+            _ax_mt1.bar(_x_pos, _hold_arr, _w,
+                        label='Voorraadkosten', color='#F57C00', alpha=0.85)
+            _ax_mt1.bar(_x_pos, _inv_arr,  _w, bottom=_hold_arr,
+                        label='Investering',    color='#D32F2F', alpha=0.85)
+            _ax_mt1.plot(_x_pos, _net_arr, color='black', marker='o',
+                         linewidth=1.8, linestyle='--', label='Netto jaar', zorder=5)
+            _ax_mt1.axhline(0, color='grey', linewidth=0.8)
+
+            _ax_mt1b = _ax_mt1.twinx()
+            _ax_mt1b.plot(_x_pos, _mtd['N'], color='#1976D2', marker='s',
+                          linewidth=1.5, linestyle=':', alpha=0.7, label='N')
+            _ax_mt1b.set_ylabel('N (subscripties)', fontsize=10, color='#1976D2')
+            _ax_mt1b.tick_params(axis='y', labelcolor='#1976D2')
+
+            _ax_mt1.set_xticks(_x_pos)
+            _ax_mt1.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
+            _ax_mt1.set_ylabel('Cashflow per jaar (€)', fontsize=11)
+            _ax_mt1.set_title(
+                f'Jaarlijkse cashflow  (α = {_mtp["alpha"]:.0%}, '
+                f'κ_BPA = {_mtp["kappa_bpa"]:.0%}, SL = {_mtp["sl"]:.1%}, '
+                f'N: {_mtp["N_start"]} → {_mtp["N_end"]})',
+                fontsize=12,
+            )
+            _ax_mt1.yaxis.set_major_formatter(_fmt_mt)
+            _h1, _l1 = _ax_mt1.get_legend_handles_labels()
+            _h2, _l2 = _ax_mt1b.get_legend_handles_labels()
+            _ax_mt1.legend(_h1 + _h2, _l1 + _l2, fontsize=9, loc='lower right')
+            _ax_mt1.grid(True, axis='y', alpha=0.3)
+
+            # ── Grafiek 2: cumulatieve cashflow ─────────────────────────────────
+            _bar_colors_mt = ['#388E3C' if v >= 0 else '#D32F2F' for v in _cum_arr]
+            _ax_mt2.bar(_x_pos, _cum_arr, _w, color=_bar_colors_mt, alpha=0.65)
+            _ax_mt2.plot(_x_pos, _cum_arr, color='#1976D2', marker='o',
+                         linewidth=2.0, linestyle='-', label='Cumulatieve CF')
+            _ax_mt2.axhline(0, color='grey', linewidth=1.0, linestyle='--')
+
+            _be_titel = 'Break-even niet bereikt binnen tijdshorizon'
+            for _bi in range(1, len(_cum_arr)):
+                if _cum_arr[_bi - 1] < 0 <= _cum_arr[_bi]:
+                    _frac     = -_cum_arr[_bi - 1] / (_cum_arr[_bi] - _cum_arr[_bi - 1])
+                    _be_x     = _bi - 1 + _frac
+                    _be_titel = f'Break-even ≈ jaar {_be_x:.1f}'
+                    _ax_mt2.axvline(_be_x, color='#F57C00', linewidth=1.8,
+                                    linestyle=':', label=_be_titel)
+                    break
+            if _cum_arr[0] >= 0:
+                _be_titel = 'Break-even in jaar 0 (direct winstgevend)'
+
+            _ax_mt2.set_xticks(_x_pos)
+            _ax_mt2.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
+            _ax_mt2.set_ylabel('Cumulatieve cashflow (€)', fontsize=11)
+            _ax_mt2.set_title(f'Cumulatieve cashflow — {_be_titel}', fontsize=12)
+            _ax_mt2.yaxis.set_major_formatter(_fmt_mt)
+            _ax_mt2.legend(fontsize=9)
+            _ax_mt2.grid(True, axis='y', alpha=0.3)
+
+            _fig_mt.tight_layout(h_pad=3)
+            st.pyplot(_fig_mt)
+            _plt_mt.close(_fig_mt)
+
+            st.dataframe(pd.DataFrame([
+                {
+                    'Jaar':               _t_arr[_ti],
+                    'N':                  _mtd['N'][_ti],
+                    'Investering (€)':    f"€{-_inv_arr[_ti]:,.0f}",
+                    'Voorraadkosten (€)': f"€{-_hold_arr[_ti]:,.0f}",
+                    'Inkomsten (€)':      f"€{_rev_arr[_ti]:,.0f}",
+                    'Netto (€)':          f"€{_net_arr[_ti]:+,.0f}",
+                    'Cumulatief (€)':     f"€{_cum_arr[_ti]:+,.0f}",
+                }
+                for _ti in range(len(_t_arr))
+            ]).set_index('Jaar'), use_container_width=False)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 7 – KOSTENANALYSE
