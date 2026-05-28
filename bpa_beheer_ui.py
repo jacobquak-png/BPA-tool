@@ -1363,7 +1363,7 @@ with tab_historie:
             "moet investeren naarmate het klantenbestand groeit."
         )
 
-        N_INV_VALS = list(range(1, 21))
+        _N_INV_VALS = list(range(1, 21))
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
 
         if st.button("📊 Bereken investering vs. N"):
@@ -1433,10 +1433,6 @@ with tab_historie:
                     _xi, _yi = zip(*_pts_inv)
                     _ax_inv.plot(_xi, _yi, marker='o', linewidth=2,
                                  color=_col_inv, label=f'SL = {_sl_inv:.1%}')
-                    for _xv, _yv in zip(_xi, _yi):
-                        _ax_inv.annotate(f'€{_yv:,.0f}', (_xv, _yv),
-                                         textcoords='offset points', xytext=(0, 7),
-                                         ha='center', fontsize=7)
 
             _ax_inv.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
                             label=f'N huidig = {_n_std_inv}')
@@ -1472,20 +1468,21 @@ with tab_historie:
                 _sl_lbl  = st.session_state.sens_inv_sl_top
 
                 _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
-                st.subheader(f"Top 5 duurste componenten (VP) — investering vs. N  (SL = {_sl_lbl:.1%})")
+                st.subheader("Top 5 duurste componenten (VP) — investering vs. N (per service level)")
                 st.caption(
-                    "Gestapelde investeringswaarde (S\u002a × IP) per component als functie van N, "
-                    "voor de 5 componenten met de hoogste verkoopprijs (VP). "
-                    "De bovenste lijn toont de gesommeerde investering van deze top 5."
+                    "Gestapelde investeringswaarde (S\u002a × IP) per component als functie van N "
+                    f"(vlakken bij SL = {_sl_lbl:.1%}), met totaallijnen voor elk service level. "
+                    "De 5 componenten met de hoogste verkoopprijs (VP)."
                 )
 
                 import numpy as _np_t5
-                # Bouw y-matrix: rijen = componenten, kolommen = N-waarden
-                _x5_vals = [p['n'] for p in (_comp_d.get(_top5[0]['code'], []) if _top5 else [])]
+                # Bouw y-matrix op basis van _sl_lbl (gestapelde vlakken)
+                _comp_d_sl = _comp_d.get(_sl_lbl, {})
+                _x5_vals = [p['n'] for p in (_comp_d_sl.get(_top5[0]['code'], []) if _top5 else [])]
                 _y5_matrix = []
                 _labels5   = []
                 for _c5 in _top5:
-                    _pts5 = _comp_d.get(_c5['code'], [])
+                    _pts5 = _comp_d_sl.get(_c5['code'], [])
                     if _pts5:
                         _y5_matrix.append([p['inv'] for p in _pts5])
                         _labels5.append(f"{_c5['code']}  (VP €{_c5['vp']:,.0f})")
@@ -1504,21 +1501,28 @@ with tab_historie:
                         _ax_t5.plot(_x5_vals, _top_line, color=_col5,
                                     linewidth=1.2, alpha=0.9)
 
-                    # Annoteer de totaallijn (bovenste)
-                    _totaal5 = _cum[-1]
-                    _ax_t5.plot(_x5_vals, _totaal5, color='black', linewidth=2.0,
-                                linestyle='--', label='Totaal top 5')
-                    for _xv, _yv in zip(_x5_vals, _totaal5):
-                        _ax_t5.annotate(f'€{_yv:,.0f}', (_xv, _yv),
-                                        textcoords='offset points', xytext=(0, 8),
-                                        ha='center', fontsize=7, color='black')
+                    # Totaallijnen per service level
+                    for _sl_t5, _col_t5, _ls_t5 in zip(
+                            SERVICE_LEVELS, _COLORS_INV, ['-', '--', '-.', ':']):
+                        _cd_sl = _comp_d.get(_sl_t5, {})
+                        _tot_sl = [
+                            sum(
+                                next((p['inv'] for p in _cd_sl.get(_c5['code'], [])
+                                      if p['n'] == _nv), 0)
+                                for _c5 in _top5
+                            )
+                            for _nv in _x5_vals
+                        ]
+                        _ax_t5.plot(_x5_vals, _tot_sl, color=_col_t5,
+                                    linewidth=2.0, linestyle=_ls_t5,
+                                    label=f'Totaal top5  SL {_sl_t5:.1%}')
 
                     _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
                                    label=f'N huidig = {_n_std_inv}')
                     _ax_t5.set_xlabel('Aantal subscripties (N)', fontsize=11)
                     _ax_t5.set_ylabel('Gesommeerde investeringswaarde (€)', fontsize=11)
                     _ax_t5.set_title(
-                        f'Top 5 duurste componenten: gestapelde investering vs. N  (SL = {_sl_lbl:.1%})',
+                        'Top 5 duurste componenten: gestapelde investering vs. N (per service level)',
                         fontsize=12,
                     )
                     _ax_t5.yaxis.set_major_formatter(_fmt_inv)
@@ -1529,7 +1533,6 @@ with tab_historie:
                     _fig_t5.tight_layout()
                     st.pyplot(_fig_t5)
                     _plt_inv.close(_fig_t5)
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 7 – KOSTENANALYSE
