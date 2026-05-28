@@ -1470,36 +1470,17 @@ with tab_historie:
                 _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
                 st.subheader("Top 5 duurste componenten (VP) — investering vs. N (per service level)")
                 st.caption(
-                    "Gestapelde investeringswaarde (S\u002a × IP) per component als functie van N "
-                    f"(vlakken bij SL = {_sl_lbl:.1%}), met totaallijnen voor elk service level. "
-                    "De 5 componenten met de hoogste verkoopprijs (VP)."
+                    "Gesommeerde investeringswaarde (S\u002a × IP) van de top 5 duurste componenten "
+                    "(op verkoopprijs) als functie van N, per service level."
                 )
 
-                import numpy as _np_t5
-                _comp_d_sl = _comp_d.get(_sl_lbl, {})
-                _x5_vals = [p['n'] for p in (_comp_d_sl.get(_top5[0]['code'], []) if _top5 else [])]
-                _y5_matrix = []
-                _labels5   = []
-                for _c5 in _top5:
-                    _pts5 = _comp_d_sl.get(_c5['code'], [])
-                    if _pts5:
-                        _y5_matrix.append([p['inv'] for p in _pts5])
-                        _labels5.append(f"{_c5['code']}  (VP €{_c5['vp']:,.0f})")
+                # Haal x-waarden op uit de data
+                _comp_d_sl0 = _comp_d.get(SERVICE_LEVELS[0], {})
+                _x5_vals = [p['n'] for p in _comp_d_sl0.get(_top5[0]['code'], [])] if _top5 else []
 
-                if _x5_vals and _y5_matrix:
-                    _y5_arr = _np_t5.array(_y5_matrix)   # shape: (n_comp, n_N)
-                    _cum    = _np_t5.cumsum(_y5_arr, axis=0)
-
+                if _x5_vals:
                     _fig_t5, _ax_t5 = _plt_inv.subplots(figsize=(11, 5))
-                    _zero = _np_t5.zeros(len(_x5_vals))
-                    for _i, (_lbl5, _col5) in enumerate(zip(_labels5, _COLORS_TOP5)):
-                        _bottom = _cum[_i - 1] if _i > 0 else _zero
-                        _top_line = _cum[_i]
-                        _ax_t5.fill_between(_x5_vals, _bottom, _top_line,
-                                            alpha=0.65, color=_col5, label=_lbl5)
-                        _ax_t5.plot(_x5_vals, _top_line, color=_col5,
-                                    linewidth=1.2, alpha=0.9)
-                    # Totaallijnen per service level
+
                     for _sl_t5, _col_t5, _ls_t5 in zip(
                             SERVICE_LEVELS, _COLORS_INV, ['-', '--', '-.', ':']):
                         _cd_sl = _comp_d.get(_sl_t5, {})
@@ -1511,16 +1492,16 @@ with tab_historie:
                             )
                             for _nv in _x5_vals
                         ]
-                        _ax_t5.plot(_x5_vals, _tot_sl, color=_col_t5,
+                        _ax_t5.plot(_x5_vals, _tot_sl, color=_col_t5, marker='o',
                                     linewidth=2.0, linestyle=_ls_t5,
-                                    label=f'Totaal top5  SL {_sl_t5:.1%}')
+                                    label=f'SL {_sl_t5:.1%}')
 
                     _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
                                    label=f'N huidig = {_n_std_inv}')
                     _ax_t5.set_xlabel('Aantal subscripties (N)', fontsize=11)
-                    _ax_t5.set_ylabel('Gesommeerde investeringswaarde (€)', fontsize=11)
+                    _ax_t5.set_ylabel('Gesommeerde investeringswaarde top 5 (€)', fontsize=11)
                     _ax_t5.set_title(
-                        'Top 5 duurste componenten: gestapelde investering vs. N (per service level)',
+                        'Top 5 duurste componenten (VP): gesommeerde investering vs. N per SL',
                         fontsize=12,
                     )
                     _ax_t5.yaxis.set_major_formatter(_fmt_inv)
@@ -1531,6 +1512,7 @@ with tab_historie:
                     _fig_t5.tight_layout()
                     st.pyplot(_fig_t5)
                     _plt_inv.close(_fig_t5)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 7 – KOSTENANALYSE
