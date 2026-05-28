@@ -206,7 +206,9 @@ with tab_subscripties:
     if st.button("Opslaan standaard"):
         cfg["standaard_n_klanten"] = int(nieuw_standaard)
         sla_config_op(cfg)
-        st.success(f"Standaard aangepast naar {cfg['standaard_n_klanten']}")
+        st.toast(f"Standaard aangepast naar {cfg['standaard_n_klanten']}", icon="✅")
+        st.session_state.pop("overzicht_df", None)
+        st.rerun()
 
     st.divider()
     st.subheader("Overrides per artikelcode")
@@ -264,7 +266,9 @@ with tab_subscripties:
         cfg["ip_overrides"]        = ip_ov
         cfg["lt_overrides"]        = lt_ov
         sla_config_op(cfg)
-        st.success(f"Overrides opgeslagen — {len(n_ov)} N, {len(ip_ov)} IP, {len(lt_ov)} LT.")
+        st.toast(f"Overrides opgeslagen — {len(n_ov)} N, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="✅")
+        st.session_state.pop("overzicht_df", None)
+        st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 3 – COMPONENT TOEVOEGEN
