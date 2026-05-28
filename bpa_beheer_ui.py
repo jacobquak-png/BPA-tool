@@ -1318,7 +1318,95 @@ with tab_historie:
             st.pyplot(_fig_mc)
             _plt_mc.close(_fig_mc)
 
+        # ── Investering vs. N ─────────────────────────────────────────────────
+        st.divider()
+        st.subheader("Investering vs. aantal subscripties")
+        st.caption(
+            "Totale voorraadwaarde (Σ S\u002a × inkoopprijs) als functie van het aantal "
+            "subscripties per service level. Toont hoeveel kapitaal BPA in voorraad "
+            "moet investeren naarmate het klantenbestand groeit."
+        )
 
+        _N_INV_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
+        _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
+
+        if st.button("📊 Bereken investering vs. N"):
+            _ov_inv = st.session_state.overzicht_df.reset_index()
+            # Verzamel per component: lambda per subscriptie, LT, IP
+            _comp_inv = []
+            for _, _ri in _ov_inv.iterrows():
+                _ni = float(_ri.get('n_klanten', 0) or 0)
+                _li = float(_ri.get('lambda_jr', 0) or 0)
+                _lt = float(_ri.get('LT_dagen', 0) or 0)
+                _ip = float(_ri.get('IP', 0) or 0)
+                if _ni > 0 and _li > 0 and _lt > 0:
+                    _comp_inv.append({
+                        'lam_per_sub': _li / _ni,
+                        'lt_jr':       _lt / 365,
+                        'ip':          _ip,
+                    })
+
+            _inv_results = {sl: [] for sl in SERVICE_LEVELS}
+            with st.spinner("Berekenen investering vs. N…"):
+                for _n_inv in _N_INV_VALS:
+                    for _sl_inv in SERVICE_LEVELS:
+                        _totaal = sum(
+                            BPAOptimizationModel.inverse_service_level(
+                                _sl_inv, _c['lam_per_sub'] * _n_inv, _c['lt_jr']
+                            ) * _c['ip']
+                            for _c in _comp_inv
+                        )
+                        _inv_results[_sl_inv].append({'n': _n_inv, 'inv': _totaal})
+
+            st.session_state.sens_inv = _inv_results
+
+        if 'sens_inv' in st.session_state:
+            import matplotlib.pyplot as _plt_inv
+            import matplotlib.ticker as _mt_inv
+
+            _inv_d    = st.session_state.sens_inv
+            _n_std_inv = int(cfg['standaard_n_klanten'])
+            _fmt_inv  = _mt_inv.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+
+            _fig_inv, _ax_inv = _plt_inv.subplots(figsize=(11, 5))
+            for _sl_inv, _col_inv in zip(SERVICE_LEVELS, _COLORS_INV):
+                _pts_inv = [(r['n'], r['inv']) for r in _inv_d[_sl_inv] if r['inv'] is not None]
+                if _pts_inv:
+                    _xi, _yi = zip(*_pts_inv)
+                    _ax_inv.plot(_xi, _yi, marker='o', linewidth=2,
+                                 color=_col_inv, label=f'SL = {_sl_inv:.1%}')
+                    for _xv, _yv in zip(_xi, _yi):
+                        _ax_inv.annotate(f'€{_yv:,.0f}', (_xv, _yv),
+                                         textcoords='offset points', xytext=(0, 7),
+                                         ha='center', fontsize=7)
+
+            _ax_inv.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
+                            label=f'N huidig = {_n_std_inv}')
+            _ax_inv.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_inv.set_ylabel('Totale voorraadwaarde (€)', fontsize=11)
+            _ax_inv.set_title(
+                'Vereiste investering in basisvoorraad vs. aantal subscripties',
+                fontsize=12,
+            )
+            _ax_inv.yaxis.set_major_formatter(_fmt_inv)
+            _ax_inv.set_xticks(_N_INV_VALS)
+            _plt_inv.setp(_ax_inv.get_xticklabels(), rotation=30, ha='right')
+            _ax_inv.legend(fontsize=9)
+            _ax_inv.grid(True, alpha=0.3)
+            _fig_inv.tight_layout()
+            st.pyplot(_fig_inv)
+            _plt_inv.close(_fig_inv)
+
+            # Tabel: investering per N en SL
+            _inv_tbl_rows = []
+            for _n_v in _N_INV_VALS:
+                _row_t = {'N': _n_v}
+                for _sl_v in SERVICE_LEVELS:
+                    _pts = [r for r in _inv_d[_sl_v] if r['n'] == _n_v]
+                    _row_t[f'SL {_sl_v:.1%}'] = f"€{_pts[0]['inv']:,.0f}" if _pts else '—'
+                _inv_tbl_rows.append(_row_t)
+            st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('N'), use_container_width=False)
+            
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 7 – KOSTENANALYSE
 # ─────────────────────────────────────────────────────────────────────────────
