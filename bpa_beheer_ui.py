@@ -1408,13 +1408,16 @@ with tab_historie:
                             )
                             _inv_per_comp[_sl_c][_c['code']].append({'n': _n_inv, 'inv': _s * _c['ip']})
 
-            # Top 5 duurste componenten op VP
-            _top5_codes = sorted(
-                _comp_inv, key=lambda c: c['vp'], reverse=True
-            )[:5]
-            _top10_codes = sorted(
-                _comp_inv, key=lambda c: c['vp'], reverse=True
-            )[:10]
+                        # Top 5 / Top 10 duurste componenten op VP
+            _top5_codes  = sorted(_comp_inv, key=lambda c: c['vp'], reverse=True)[:5]
+            _top10_codes = sorted(_comp_inv, key=lambda c: c['vp'], reverse=True)[:10]
+
+            st.session_state.sens_inv        = _inv_results
+            st.session_state.sens_inv_comp   = _inv_per_comp
+            st.session_state.sens_inv_top5   = _top5_codes
+            st.session_state.sens_inv_top10  = _top10_codes
+            st.session_state.sens_inv_sl_top = _sl_top
+
             st.session_state.sens_inv        = _inv_results
             st.session_state.sens_inv_comp   = _inv_per_comp
             st.session_state.sens_inv_top5   = _top5_codes
