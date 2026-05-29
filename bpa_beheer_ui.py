@@ -121,19 +121,23 @@ with tab_overzicht:
         totals = {c: int(df[c].sum()) for c in sl_cols}
         st.write("**Totale basisvoorraad:**  " +
                  "  |  ".join(f"`{c}` = **{totals[c]}**" for c in sl_cols))
-        # Aandeel S* > 1
-        if sl_cols:
+        # Aandeel S* > 1 — extra voorraadkosten bovenop S*=1
+        if sl_cols and 'IP' in df.columns:
             _parts = []
             for _sc in sl_cols:
-                _tot_sc = df[_sc].sum()
-                if _tot_sc > 0:
-                    _mask_gt1   = df[_sc] > 1
-                    _n_gt1      = int(_mask_gt1.sum())
-                    _stock_gt1  = df.loc[_mask_gt1, _sc].sum()
-                    _pct_gt1    = _stock_gt1 / _tot_sc * 100
-                    _parts.append(f"`{_sc}` → **{_n_gt1}** comp. met S\u002a > 1 = **{_pct_gt1:.1f}%** van totale voorraad")
+                _ip_vals     = df['IP'].fillna(0)
+                _extra_units = (df[_sc] - 1).clip(lower=0)          # max(S*-1, 0) per component
+                _base_cost   = _ip_vals.sum()                        # Σ 1 × IP (S*=1 scenario)
+                _extra_cost  = (_extra_units * _ip_vals).sum()       # Σ (S*-1) × IP
+                _total_cost  = (df[_sc] * _ip_vals).sum()
+                _pct_extra   = _extra_cost / _total_cost * 100 if _total_cost > 0 else 0.0
+                _n_gt1       = int((df[_sc] > 1).sum())
+                _parts.append(
+                    f"`{_sc}` → **{_n_gt1}** comp. met S\u002a > 1, "
+                    f"extra kost boven S\u002a=1: **€ {_extra_cost:,.0f}** (**{_pct_extra:.1f}%** van totale inv.)"
+                )
             if _parts:
-                st.caption("Aandeel S\u002a > 1:  " + "  |  ".join(_parts))
+                st.caption("Extra inv. bovenop S\u002a=1:  \n" + "  \n".join(_parts))
         # Laad vorige snapshot voor Δ-kolommen
         _prev_comp = {}
         _prev_datum = None
