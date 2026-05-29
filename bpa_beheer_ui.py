@@ -121,7 +121,19 @@ with tab_overzicht:
         totals = {c: int(df[c].sum()) for c in sl_cols}
         st.write("**Totale basisvoorraad:**  " +
                  "  |  ".join(f"`{c}` = **{totals[c]}**" for c in sl_cols))
-
+        # Aandeel S* > 1
+        if sl_cols:
+            _parts = []
+            for _sc in sl_cols:
+                _tot_sc = df[_sc].sum()
+                if _tot_sc > 0:
+                    _mask_gt1   = df[_sc] > 1
+                    _n_gt1      = int(_mask_gt1.sum())
+                    _stock_gt1  = df.loc[_mask_gt1, _sc].sum()
+                    _pct_gt1    = _stock_gt1 / _tot_sc * 100
+                    _parts.append(f"`{_sc}` → **{_n_gt1}** comp. met S\u002a > 1 = **{_pct_gt1:.1f}%** van totale voorraad")
+            if _parts:
+                st.caption("Aandeel S\u002a > 1:  " + "  |  ".join(_parts))
         # Laad vorige snapshot voor Δ-kolommen
         _prev_comp = {}
         _prev_datum = None
