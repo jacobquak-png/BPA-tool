@@ -1659,54 +1659,83 @@ with tab_historie:
                 _vp = float(_rmt.get('VP',          0) or 0)
                 if _ni > 0 and _li > 0 and _lt > 0:
                     _comp_mt.append({
+                        'code':        str(_rmt.get('Code', '')),
+                        'descr':       str(_rmt.get('Descr', '')),
                         'lam_per_sub': _li / _ni,
                         'lt_jr':       _lt / 365,
                         'ip':          _ip,
                         'vp':          _vp,
                     })
 
+            _comp_mt_top10 = sorted(_comp_mt, key=lambda c: c['vp'], reverse=True)[:10]
+
             def _N_t_mt(t):
                 if _T_mt == 0:
                     return float(_N_start_mt)
                 return _N_start_mt + (_N_end_mt - _N_start_mt) * t / _T_mt
 
-            def _inv_waarde_mt(n):
+            def _inv_waarde_for(comps, n):
                 return sum(
                     BPAOptimizationModel.inverse_service_level(
                         _sl_mt, _c['lam_per_sub'] * n, _c['lt_jr']
                     ) * _c['ip']
-                    for _c in _comp_mt
+                    for _c in comps
                 )
 
+            def _inv_waarde_mt(n):
+                return _inv_waarde_for(_comp_mt, n)
+
+            def _rev_jaar_for(comps, n):
+                return sum(_c['vp'] * _alpha_mt * n for _c in comps)
+
             def _rev_jaar_mt(n):
-                return sum(_c['vp'] * _alpha_mt * n for _c in _comp_mt)
+                return _rev_jaar_for(_comp_mt, n)
 
-            _t_arr_mt    = list(range(int(_T_mt) + 1))
-            _inv_mt_arr  = []
-            _hold_mt_arr = []
-            _rev_mt_arr  = []
-            _cum_mt_arr  = []
-            _N_mt_arr    = []
-
-            _cum = 0.0
-            with st.spinner("Berekenen marge over tijd…"):
+            def _calc_cashflow(comps):
+                _res_inv, _res_hold, _res_rev, _res_cum, _res_N = [], [], [], [], []
+                _cum_cf = 0.0
                 for _t in _t_arr_mt:
-                    _n    = _N_t_mt(_t)
-                    _iw   = _inv_waarde_mt(_n)
-                    _hold = _kbpa_mt * _iw
-                    _rev  = _rev_jaar_mt(_n)
+                    _n   = _N_t_mt(_t)
+                    _iw  = _inv_waarde_for(comps, _n)
+                    _hld = _kbpa_mt * _iw
+                    _rv  = _rev_jaar_for(comps, _n)
                     if _t == 0:
-                        _delta_inv = _iw
+                        _di = _iw
                     else:
-                        _prev_iw   = _inv_waarde_mt(_N_t_mt(_t - 1))
-                        _delta_inv = max(0.0, _iw - _prev_iw)
-                    _net  = _rev - _hold - _delta_inv
-                    _cum += _net
-                    _N_mt_arr.append(round(_n, 1))
-                    _inv_mt_arr.append(-_delta_inv)
-                    _hold_mt_arr.append(-_hold)
-                    _rev_mt_arr.append(_rev)
-                    _cum_mt_arr.append(_cum)
+                        _di = max(0.0, _iw - _inv_waarde_for(comps, _N_t_mt(_t - 1)))
+                    _cum_cf += _rv - _hld - _di
+                    _res_N.append(round(_n, 1))
+                    _res_inv.append(-_di)
+                    _res_hold.append(-_hld)
+                    _res_rev.append(_rv)
+                    _res_cum.append(_cum_cf)
+                return _res_inv, _res_hold, _res_rev, _res_cum, _res_N
+
+            _t_arr_mt = list(range(int(_T_mt) + 1))
+            _params_mt = {
+                'alpha':     _alpha_mt,
+                'kappa_bpa': _kbpa_mt,
+                'sl':        _sl_mt,
+                'N_start':   int(_N_start_mt),
+                'N_end':     int(_N_end_mt),
+                'T':         int(_T_mt),
+            }
+
+            with st.spinner("Berekenen marge over tijd…"):
+                _inv_mt_arr, _hold_mt_arr, _rev_mt_arr, _cum_mt_arr, _N_mt_arr = \
+                    _calc_cashflow(_comp_mt)
+
+                # Per top-10 component afzonderlijk
+                _top10_comp_cf = {}
+                for _c10 in _comp_mt_top10:
+                    _i10, _h10, _r10, _cum10, _ = _calc_cashflow([_c10])
+                    _top10_comp_cf[_c10['code']] = {
+                        'descr': _c10['descr'],
+                        'inv':   _i10, 'hold': _h10, 'rev': _r10, 'cum': _cum10,
+                    }
+
+                # Gesommeerde top-10
+                _i10s, _h10s, _r10s, _cum10s, _ = _calc_cashflow(_comp_mt_top10)
 
             st.session_state.sens_marge_tijd = {
                 't':      _t_arr_mt,
@@ -1715,14 +1744,17 @@ with tab_historie:
                 'rev':    _rev_mt_arr,
                 'cum':    _cum_mt_arr,
                 'N':      _N_mt_arr,
-                'params': {
-                    'alpha':     _alpha_mt,
-                    'kappa_bpa': _kbpa_mt,
-                    'sl':        _sl_mt,
-                    'N_start':   int(_N_start_mt),
-                    'N_end':     int(_N_end_mt),
-                    'T':         int(_T_mt),
-                },
+                'params': _params_mt,
+            }
+            st.session_state.sens_marge_tijd_top10 = {
+                't':        _t_arr_mt,
+                'sum_inv':  _i10s,
+                'sum_hold': _h10s,
+                'sum_rev':  _r10s,
+                'sum_cum':  _cum10s,
+                'N':        _N_mt_arr,
+                'comp':     _top10_comp_cf,
+                'params':   _params_mt,
             }
 
         if 'sens_marge_tijd' in st.session_state:
@@ -1821,6 +1853,113 @@ with tab_historie:
                 }
                 for _ti in range(len(_t_arr))
             ]).set_index('Jaar'), use_container_width=False)
+
+        # ── Marge over tijd — top 10 duurste componenten ───────────────────────
+        if 'sens_marge_tijd_top10' in st.session_state:
+            import matplotlib.pyplot as _plt_mt10
+            import matplotlib.ticker as _mt10_tick
+            import matplotlib.cm as _mt10_cm
+            import numpy as _np_mt10
+
+            _mt10d  = st.session_state.sens_marge_tijd_top10
+            _mt10p  = _mt10d['params']
+            _fmt10  = _mt10_tick.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            _t10arr = _mt10d['t']
+            _xp10   = _np_mt10.arange(len(_t10arr))
+            _xl10   = [f'Jaar {t}' for t in _t10arr]
+            _w10    = 0.55
+
+            _si10  = _np_mt10.array(_mt10d['sum_inv'])
+            _sh10  = _np_mt10.array(_mt10d['sum_hold'])
+            _sr10  = _np_mt10.array(_mt10d['sum_rev'])
+            _sc10  = _np_mt10.array(_mt10d['sum_cum'])
+            _sn10  = _mt10d['sum_rev']  # not used below, using _sr10
+            _net10 = _sr10 + _sh10 + _si10
+
+            st.divider()
+            st.subheader("Marge over tijd — top 10 duurste componenten (gesommeerd)")
+            st.caption(
+                f"Dezelfde cashflow-analyse maar enkel voor de 10 duurste componenten op VP. "
+                f"SL = {_mt10p['sl']:.1%}, α = {_mt10p['alpha']:.0%}, "
+                f"κ_BPA = {_mt10p['kappa_bpa']:.0%}."
+            )
+
+            _fig10s, (_ax10s1, _ax10s2) = _plt_mt10.subplots(2, 1, figsize=(12, 10))
+
+            _ax10s1.bar(_xp10, _sr10, _w10, label='Inkomsten',      color='#388E3C', alpha=0.85)
+            _ax10s1.bar(_xp10, _sh10, _w10, label='Voorraadkosten', color='#F57C00', alpha=0.85)
+            _ax10s1.bar(_xp10, _si10, _w10, bottom=_sh10, label='Investering', color='#D32F2F', alpha=0.85)
+            _ax10s1.plot(_xp10, _net10, color='black', marker='o', linewidth=1.8, linestyle='--', label='Netto jaar', zorder=5)
+            _ax10s1.axhline(0, color='grey', linewidth=0.8)
+            _ax10s1b = _ax10s1.twinx()
+            _ax10s1b.plot(_xp10, _mt10d['N'], color='#1976D2', marker='s', linewidth=1.5, linestyle=':', alpha=0.7, label='N')
+            _ax10s1b.set_ylabel('N (subscripties)', fontsize=10, color='#1976D2')
+            _ax10s1b.tick_params(axis='y', labelcolor='#1976D2')
+            _ax10s1.set_xticks(_xp10)
+            _ax10s1.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
+            _ax10s1.set_ylabel('Cashflow per jaar (€)', fontsize=11)
+            _ax10s1.set_title(
+                f'Jaarlijkse cashflow top 10  (α={_mt10p["alpha"]:.0%}, '
+                f'κ_BPA={_mt10p["kappa_bpa"]:.0%}, SL={_mt10p["sl"]:.1%}, '
+                f'N: {_mt10p["N_start"]} → {_mt10p["N_end"]})', fontsize=12)
+            _ax10s1.yaxis.set_major_formatter(_fmt10)
+            _h10a, _l10a = _ax10s1.get_legend_handles_labels()
+            _h10b, _l10b = _ax10s1b.get_legend_handles_labels()
+            _ax10s1.legend(_h10a + _h10b, _l10a + _l10b, fontsize=9, loc='lower right')
+            _ax10s1.grid(True, axis='y', alpha=0.3)
+
+            _bc10 = ['#388E3C' if v >= 0 else '#D32F2F' for v in _sc10]
+            _ax10s2.bar(_xp10, _sc10, _w10, color=_bc10, alpha=0.65)
+            _ax10s2.plot(_xp10, _sc10, color='#1976D2', marker='o', linewidth=2.0, label='Cumulatieve CF')
+            _ax10s2.axhline(0, color='grey', linewidth=1.0, linestyle='--')
+            _be10t = 'Break-even niet bereikt binnen tijdshorizon'
+            for _bi10 in range(1, len(_sc10)):
+                if _sc10[_bi10 - 1] < 0 <= _sc10[_bi10]:
+                    _f10   = -_sc10[_bi10 - 1] / (_sc10[_bi10] - _sc10[_bi10 - 1])
+                    _bex10 = _bi10 - 1 + _f10
+                    _be10t = f'Break-even ≈ jaar {_bex10:.1f}'
+                    _ax10s2.axvline(_bex10, color='#F57C00', linewidth=1.8, linestyle=':', label=_be10t)
+                    break
+            if _sc10[0] >= 0:
+                _be10t = 'Break-even in jaar 0 (direct winstgevend)'
+            _ax10s2.set_xticks(_xp10)
+            _ax10s2.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
+            _ax10s2.set_ylabel('Cumulatieve cashflow (€)', fontsize=11)
+            _ax10s2.set_title(f'Cumulatieve cashflow top 10 — {_be10t}', fontsize=12)
+            _ax10s2.yaxis.set_major_formatter(_fmt10)
+            _ax10s2.legend(fontsize=9)
+            _ax10s2.grid(True, axis='y', alpha=0.3)
+            _fig10s.tight_layout(h_pad=3)
+            st.pyplot(_fig10s)
+            _plt_mt10.close(_fig10s)
+
+            # ── Cumulatieve cashflow per component ──────────────────────────
+            st.subheader("Cumulatieve cashflow per component (top 10)")
+            st.caption("Elke lijn toont de cumulatieve netto cashflow van één component afzonderlijk.")
+
+            _comp_cf10 = _mt10d['comp']
+            _cmap10mt  = _mt10_cm.get_cmap('tab10')
+
+            _fig10c, _ax10c = _plt_mt10.subplots(figsize=(12, 5))
+            for _ci10, (_code10, _cdata10) in enumerate(_comp_cf10.items()):
+                _cum10c = _np_mt10.array(_cdata10['cum'])
+                _lbl10c = f"{_code10} – {_cdata10['descr'][:25]}"
+                _ax10c.plot(_xp10, _cum10c, color=_cmap10mt(_ci10 / 10),
+                            marker='o', linewidth=1.8, markersize=5, label=_lbl10c)
+            _ax10c.axhline(0, color='grey', linewidth=1.0, linestyle='--')
+            _ax10c.set_xticks(_xp10)
+            _ax10c.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
+            _ax10c.set_ylabel('Cumulatieve cashflow (€)', fontsize=11)
+            _ax10c.set_title(
+                f'Cumulatieve cashflow per component — top 10  (SL={_mt10p["sl"]:.1%})',
+                fontsize=12,
+            )
+            _ax10c.yaxis.set_major_formatter(_fmt10)
+            _ax10c.legend(fontsize=8, loc='lower right', ncol=2)
+            _ax10c.grid(True, alpha=0.3)
+            _fig10c.tight_layout()
+            st.pyplot(_fig10c)
+            _plt_mt10.close(_fig10c)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
