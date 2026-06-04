@@ -298,6 +298,10 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         else:
             lt_d    = int(row['LT_days'])
             lt_bron = _cls_items.get(str(code), {}).get('lt_bron', 'onbekend')
+        # LT=0 → vul aan met 30 dagen en markeer met aparte bron (blauwe cel in UI)
+        if lt_d == 0 and lt_bron != 'override':
+            lt_d = 30
+            lt_bron = 'nul→30'
         lam   = _lambda_voor_rij(row, n)
         lt_jr = lt_d / 365
         mu    = lam * lt_jr
@@ -347,9 +351,9 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
                 lt_bron = 'override'
             else:
                 lt_raw  = cls_meta.get('lt_dagen')
-                if lt_raw is None:
+                if lt_raw is None or int(lt_raw) == 0:
                     lt_d    = 30
-                    lt_bron = cls_meta.get('lt_bron', 'ontbreekt')
+                    lt_bron = 'nul→30'
                 else:
                     lt_d    = int(lt_raw)
                     lt_bron = cls_meta.get('lt_bron', 'onbekend')
