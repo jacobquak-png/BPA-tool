@@ -24,10 +24,12 @@ from bpa_beheer import (
     bereken_overzicht,
     bouw_model_kosten,
     laad_excel_onderdelen,
+    laad_classificatie_selectie,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
     SCRIPT_DIR,
+    SELECTIE_PATH,
 )
 from model import BPAOptimizationModel
 
@@ -104,6 +106,24 @@ with tab_overzicht:
         f"Excel gewijzigd: **{_excel_mtime}**"
     )
 
+    # ── Classificatie-koppeling status ────────────────────────────────────
+    _cls_info = laad_classificatie_selectie()
+    if _cls_info:
+        _lt_ov = _cls_info.get('lt_overzicht', {})
+        _n_cls = len(_cls_info.get('items', {}))
+        st.success(
+            f"🔗 Classificatie-koppeling actief — **{_n_cls}** componenten geselecteerd "
+            f"(gegenereerd {_cls_info.get('gegenereerd', '?')}). "
+            f"LT-bron: ✅ geupdate **{_lt_ov.get('geupdate', 0)}**  ·  "
+            f"⚠️ ERP-default **{_lt_ov.get('default', 0)}**  ·  "
+            f"❌ ontbreekt **{_lt_ov.get('ontbreekt', 0)}**"
+        )
+    else:
+        st.info(
+            f"ℹ️  Geen classificatie-selectie gevonden ({SELECTIE_PATH}). "
+            f"Draai `classificatie_scoring.py` om de koppeling te activeren."
+        )
+
     if st.button("🔄 Herbereken (laadt Excel opnieuw)"):
         with st.spinner("Berekenen…"):
             df = bereken_overzicht(cfg, _excel_file)
@@ -121,6 +141,7 @@ with tab_overzicht:
         totals = {c: int(df[c].sum()) for c in sl_cols}
         st.write("**Totale basisvoorraad:**  " +
                  "  |  ".join(f"`{c}` = **{totals[c]}**" for c in sl_cols))
+
         # Aandeel S* > 1 — extra voorraadkosten bovenop S*=1
         if sl_cols and 'IP' in df.columns:
             _parts = []
@@ -138,6 +159,7 @@ with tab_overzicht:
                 )
             if _parts:
                 st.caption("Extra inv. bovenop S\u002a=1:  \n" + "  \n".join(_parts))
+
         # Laad vorige snapshot voor Δ-kolommen
         _prev_comp = {}
         _prev_datum = None
@@ -227,6 +249,37 @@ with tab_overzicht:
             intensity = min(int(v / 100 * 255), 255)
             return f'background-color: rgba(25, 118, 210, {v/100:.2f}); color: {"white" if v > 50 else "black"}'
 
+        # ── LT-status kolom (vanuit classificatie-koppeling) ──────────────
+        _LT_ICOON = {
+            'geupdate':  '✅ geupdate',
+            'override':  '✏️ override',
+            'default':   '⚠️ ERP-default',
+            'ontbreekt': '❌ ontbreekt',
+            'handmatig': '🛠 handmatig',
+            'onbekend':  '❔ onbekend',
+        }
+        if 'LT_bron' in _df_disp.columns:
+            _df_disp['LT-status'] = (
+                _df_disp['LT_bron'].astype(str).map(_LT_ICOON).fillna(_LT_ICOON['onbekend'])
+            )
+
+            def _kleur_lt(v):
+                s = str(v)
+                if '✅' in s or '✏️' in s: return 'background-color: #e8f5e9'
+                if '⚠️' in s:              return 'background-color: #fff8e1'
+                if '❌' in s:              return 'background-color: #ffebee'
+                if '🛠' in s:              return 'background-color: #e3f2fd'
+                return ''
+
+            _n_bevest = _df_disp['LT_bron'].isin(['geupdate', 'override', 'handmatig']).sum()
+            _n_warn   = len(_df_disp) - _n_bevest
+            if _n_warn > 0:
+                st.warning(
+                    f"⚠️ {_n_warn}/{len(_df_disp)} componenten hebben een niet-bevestigde "
+                    f"levertijd (ERP-default of ontbrekend). Corrigeer via tab "
+                    f"**✏️ Subscripties aanpassen** — een ingevulde LT-override telt als bevestigd."
+                )
+
         styled = (
             _df_disp.style
                 .format({
@@ -238,6 +291,8 @@ with tab_overzicht:
                 })
                 .map(_style_delta, subset=_delta_cols)
         )
+        if 'LT-status' in _df_disp.columns:
+            styled = styled.map(_kleur_lt, subset=['LT-status'])
         if _inv_cols and 'Inv. %' in _df_disp.columns:
             styled = styled.map(_style_inv_share, subset=['Inv. %'])
 
@@ -845,7 +900,7 @@ with tab_historie:
             "α wordt overgenomen uit tabblad 💰 Kostenanalyse; κ_BPA en κ_c idem."
         )
 
-        _N_NSL_VALS = [1, 2, 3, 5, 7, 10, 15, 20]
+        _N_NSL_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
 
         if st.button("📊 Bereken haalbaarheid (N × SL)"):
             _kp_nsl = st.session_state.get('kosten_params', {})
@@ -1694,7 +1749,7 @@ with tab_historie:
                 return sum(
                     BPAOptimizationModel.inverse_service_level(
                         _sl_mt, _c['lam_per_sub'] * n, _c['lt_jr']
-                    ) * _c['ip']
+                    ) * _c['ip'] 
                     for _c in comps
                 )
 
