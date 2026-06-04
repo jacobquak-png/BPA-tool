@@ -40,6 +40,26 @@ LT_COL_CANDIDATES = [
     "Levertijd",
     "LT_dagen",
 ]
+DESCR_COL_CANDIDATES = [
+    "Omschrijving_standaard_artikelen",
+    "Omschrijving",
+    "Descr",
+]
+IP_COL_CANDIDATES = [
+    "Inkoopprijs (standaard)",
+    "Inkoopprijs",
+]
+MTBF_COL_CANDIDATES = [
+    "MTBF(years)",
+    "MTBF",
+]
+TOTAAL_ORDERS_COL_CANDIDATES = [
+    "Totaal_orders_5jr",
+]
+N_CUST_COL_CANDIDATES = [
+    "Aantal_klantlocaties_5jr",
+    "Aantal_klantlocaties_met_orders_5jr",
+]
 
 VERPLICHTE_KOLOMMEN = [COL_PRICE, COL_LOCATIONS, COL_ORDERS, COL_ARTICLE_TYPE]
 
@@ -181,14 +201,28 @@ def bouw_selectie_payload(
     bron_excel: str | None = None,
 ) -> dict:
     """Bouw het JSON-payload dat naar bpa_selectie.json wordt geschreven."""
-    code_col = _find_col(df_scored_filtered, CODE_COL_CANDIDATES)
-    lt_col   = _find_col(df_scored_filtered, LT_COL_CANDIDATES)
+    code_col  = _find_col(df_scored_filtered, CODE_COL_CANDIDATES)
+    lt_col    = _find_col(df_scored_filtered, LT_COL_CANDIDATES)
+    descr_col = _find_col(df_scored_filtered, DESCR_COL_CANDIDATES)
+    ip_col    = _find_col(df_scored_filtered, IP_COL_CANDIDATES)
+    vp_col    = COL_PRICE if COL_PRICE in df_scored_filtered.columns else None
+    mtbf_col  = _find_col(df_scored_filtered, MTBF_COL_CANDIDATES)
+    orders_col = _find_col(df_scored_filtered, TOTAAL_ORDERS_COL_CANDIDATES)
+    ncust_col = _find_col(df_scored_filtered, N_CUST_COL_CANDIDATES)
     if code_col is None:
         raise ValueError(
             f"Geen artikelcode-kolom gevonden ({CODE_COL_CANDIDATES})."
         )
 
     sel = df_scored_filtered[df_scored_filtered["Classificatie_Beslissing"] == "Opnemen in lijst"].copy()
+
+    def _num(v):
+        try:
+            if v is None or pd.isna(v):
+                return None
+            return float(v)
+        except (TypeError, ValueError):
+            return None
 
     items = []
     n_g = n_d = n_o = 0
@@ -204,6 +238,14 @@ def bouw_selectie_payload(
             "lt_dagen": _parse_lt_dagen(lt_raw) if lt_col else None,
             "lt_bron":  bron,
             "abc":      str(row.get(COL_ABC, "")),
+            # Metadata waarmee bpa_beheer een rij kan bouwen voor codes
+            # die NIET in de BPA-Excel (`Filtered `-sheet) staan.
+            "descr":             (str(row[descr_col])[:80] if descr_col and pd.notna(row.get(descr_col)) else ""),
+            "ip":                _num(row.get(ip_col)) if ip_col else None,
+            "vp":                _num(row.get(vp_col)) if vp_col else None,
+            "mtbf":              _num(row.get(mtbf_col)) if mtbf_col else None,
+            "totaal_orders_5jr": _num(row.get(orders_col)) if orders_col else None,
+            "n_cust":            _num(row.get(ncust_col)) if ncust_col else None,
         })
 
     return {
