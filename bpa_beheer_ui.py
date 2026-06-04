@@ -15,8 +15,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 import streamlit as st
 from datetime import date
 import pandas as pd
-import json
 import numpy as np
+import json
+
 # Hergebruik alle logica uit bpa_beheer.py
 from bpa_beheer import (
     laad_config,
@@ -2603,14 +2604,37 @@ with tab_budget:
                     _df_sorted.at[_idx, "In_selectie"] = True
                     _resterend -= _kost
 
+            # ── Winst & marge per component ──
+            _df_sorted["Marge_stuk"] = _df_sorted["VP"] - _df_sorted["IP"]
+            _df_sorted["Marge_pct"]  = np.where(
+                _df_sorted["VP"] > 0,
+                (_df_sorted["VP"] - _df_sorted["IP"]) / _df_sorted["VP"] * 100,
+                0.0,
+            )
+            # Jaarlijkse winst = marge per stuk × verwachte afname per jaar (λ × N klanten)
+            _df_sorted["Winst_jr"] = (
+                _df_sorted["Marge_stuk"] * _df_sorted["lambda_jr"] * _df_sorted["n_klanten"]
+            )
+            # ROI per jaar = jaarlijkse winst / investering
+            _df_sorted["ROI_jr"] = np.where(
+                _df_sorted["Inv"] > 0,
+                _df_sorted["Winst_jr"] / _df_sorted["Inv"] * 100,
+                np.inf,
+            )
+
             _in  = _df_sorted[_df_sorted["In_selectie"]]
             _uit = _df_sorted[~_df_sorted["In_selectie"]]
 
             _inv_gekozen  = float(_in["Inv"].sum())
             _waarde_geko  = float(_in["Waarde"].sum())
             _waarde_tot   = float(_df_sorted["Waarde"].sum())
+            _winst_geko   = float(_in["Winst_jr"].sum())
+            _winst_tot    = float(_df_sorted["Winst_jr"].sum())
+            _omzet_geko   = float((_in["VP"] * _in["lambda_jr"] * _in["n_klanten"]).sum())
+            _marge_gem    = (_winst_geko / _omzet_geko * 100) if _omzet_geko > 0 else 0.0
+            _roi_port     = (_winst_geko / _inv_gekozen * 100) if _inv_gekozen > 0 else 0.0
 
-            # ── Metrics ──
+            # ── Metrics rij 1 ──
             _m1, _m2, _m3, _m4 = st.columns(4)
             _m1.metric("Geselecteerd", f"{len(_in)} / {len(_df_sorted)}")
             _m2.metric("Investering", f"€ {_inv_gekozen:,.0f}",
@@ -2620,12 +2644,23 @@ with tab_budget:
             _m4.metric("Budget-benutting",
                        f"{_inv_gekozen/_budget*100:.1f}%" if _budget > 0 else "—")
 
+            # ── Metrics rij 2: winst & marge ──
+            _w1, _w2, _w3, _w4 = st.columns(4)
+            _w1.metric("Winst / jaar", f"€ {_winst_geko:,.0f}",
+                       delta=f"{_winst_geko/_winst_tot*100:.1f}% v/h totaal"
+                             if _winst_tot > 0 else None)
+            _w2.metric("Omzet / jaar", f"€ {_omzet_geko:,.0f}")
+            _w3.metric("Gem. marge", f"{_marge_gem:.1f}%")
+            _w4.metric("ROI / jaar (portfolio)", f"{_roi_port:.1f}%")
+
             # ── Tabel ──
             _show = _df_sorted[
                 ["Descr", "n_klanten", "lambda_jr", "LT_dagen", "VP", "IP",
+                 "Marge_stuk", "Marge_pct", "Winst_jr", "ROI_jr",
                  _sl_keuze, "Inv", "Waarde", "Ratio", "Cls_score", "In_selectie"]
             ].copy()
             _show.columns = ["Omschrijving", "N", "λ/jr", "LT(d)", "VP", "IP",
+                             "Marge/stuk", "Marge %", "Winst/jr", "ROI/jr %",
                              f"S* @ {_sl_keuze}", "Inv. (€)", "Waarde", "Waarde/€",
                              "Cls_score", "In selectie"]
 
@@ -2639,6 +2674,10 @@ with tab_budget:
                         "λ/jr": "{:.4f}",
                         "VP": "€ {:,.0f}",
                         "IP": "€ {:,.0f}",
+                        "Marge/stuk": "€ {:,.2f}",
+                        "Marge %": "{:.1f}%",
+                        "Winst/jr": "€ {:,.0f}",
+                        "ROI/jr %": "{:.1f}%",
                         "Inv. (€)": "€ {:,.0f}",
                         "Waarde": "{:,.1f}",
                         "Waarde/€": "{:.4f}",
@@ -2699,8 +2738,6 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
-
-
 
 
 
