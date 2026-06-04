@@ -167,12 +167,13 @@ def _parse_dutch_price(val):
         return 0.0
 
 
-def laad_excel_onderdelen(excel_file=None, *, skip_hard_filter: bool = False) -> pd.DataFrame:
-    """Laad gefilterde onderdelen uit de Excel-spreadsheet.
+def laad_excel_onderdelen(excel_file=None, *, skip_hard_filter: bool = True) -> pd.DataFrame:
+    """Laad onderdelen uit de Excel-spreadsheet.
     excel_file: bestandspad (str) of file-like object (BytesIO / UploadedFile).
     Valt terug op EXCEL_PATH als niet opgegeven.
-    skip_hard_filter: als True, sla de BPA-hardfilter (ABC/VP/n_cust/...) over —
-    nuttig wanneer een classificatie-whitelist al de selectie bepaalt."""
+    skip_hard_filter: standaard True — alle BPA-hardfilters (ABC/VP/n_cust/...)
+    worden overgeslagen. De selectie wordt volledig bepaald door de
+    classificatie-tool. Zet expliciet op False om de oude hardfilter toe te passen."""
     bron = excel_file if excel_file is not None else EXCEL_PATH
     df = pd.read_excel(bron, sheet_name=SHEET_NAME)
     df = df.rename(columns={
@@ -274,11 +275,9 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         print(f"  ✓ Classificatie-selectie actief: {len(_cls_items)} codes "
               f"(gegenereerd {_cls.get('gegenereerd')})")
 
-    # 1. Excel-onderdelen
+    # 1. Excel-onderdelen — hardfilter is altijd uit; selectie loopt via classificatie.
     try:
-        excel_parts = laad_excel_onderdelen(
-            excel_file, skip_hard_filter=_gebruik_cls_whitelist
-        )
+        excel_parts = laad_excel_onderdelen(excel_file, skip_hard_filter=True)
     except Exception as e:
         print(f"  ⚠  Excel niet geladen: {e}")
         excel_parts = pd.DataFrame()
@@ -324,12 +323,70 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         rijen.append(rij)
 
     # ── Diagnostiek: classificatie-codes die niet in de BPA-Excel staan ──
-    if _gebruik_cls_whitelist and not excel_parts.empty:
-        _excel_codes = {str(c) for c in excel_parts.index}
-        _missing = [c for c in _cls_items.keys() if c not in _excel_codes]
+    if _gebruik_cls_whitelist:
+        _excel_codes = {str(c) for c in excel_parts.index} if not excel_parts.empty else set()
+        _missing = [c for c in _cls_items.keys() if c not in _excel_codes and c not in uitgesloten]
         if _missing:
             print(f"  ⚠  {len(_missing)} classificatie-codes ontbreken in de BPA-Excel "
-                  f"(eerste 5: {_missing[:5]})")
+                  f"(eerste 5: {_missing[:5]}) — toegevoegd vanuit classificatie-metadata")
+
+        # Bouw synthetische rijen vanuit de classificatie-payload (descr, ip, vp,
+        # mtbf, totaal_orders_5jr, n_cust, lt_dagen). Zo verschijnen ALLE
+        # "Opnemen in lijst"-codes in het overzicht.
+        for code in _missing:
+            cls_meta = _cls_items.get(code, {})
+            n   = cfg['n_klanten_overrides'].get(code, standaard_n)
+            ip_meta = cls_meta.get('ip')
+            vp_meta = cls_meta.get('vp')
+            ip  = ip_ov.get(code, ip_meta if ip_meta is not None else 0.0)
+            vp  = vp_meta if vp_meta is not None else ip * 2
+
+            # LT: override > classificatie > default 30
+            if code in lt_ov:
+                lt_d    = int(lt_ov[code])
+                lt_bron = 'override'
+            else:
+                lt_raw  = cls_meta.get('lt_dagen')
+                if lt_raw is None:
+                    lt_d    = 30
+                    lt_bron = cls_meta.get('lt_bron', 'ontbreekt')
+                else:
+                    lt_d    = int(lt_raw)
+                    lt_bron = cls_meta.get('lt_bron', 'onbekend')
+
+            # Lambda: MTBF heeft voorrang, anders Totaal_orders_5jr / 5,
+            # anders 0 (uitsluiten zou verwarrend zijn).
+            mtbf   = cls_meta.get('mtbf')
+            orders = cls_meta.get('totaal_orders_5jr')
+            if mtbf is not None and mtbf > 0:
+                lam = n / mtbf
+            elif orders is not None:
+                lam = orders / 5
+            else:
+                lam = 0.0
+
+            lt_jr = lt_d / 365
+            mu    = lam * lt_jr
+            stocks = {
+                sl: BPAOptimizationModel.inverse_service_level(sl, lam, lt_jr)
+                for sl in SERVICE_LEVELS
+            }
+            rij = {
+                'Code':      code,
+                'Descr':     str(cls_meta.get('descr', ''))[:40],
+                'n_klanten': n,
+                'lambda_jr': round(lam, 4),
+                'LT_dagen':  lt_d,
+                'LT_bron':   lt_bron,
+                'Cls_score': cls_meta.get('score'),
+                'IP':        round(ip, 2),
+                'VP':        round(vp, 2),
+                'mu':        round(mu, 4),
+                'bron':      'classificatie',
+            }
+            for sl in SERVICE_LEVELS:
+                rij[f's@{sl:.1%}'] = stocks[sl]
+            rijen.append(rij)
 
     # 2. Handmatige componenten
     for code, hcomp in cfg['handmatige_componenten'].items():
@@ -693,5 +750,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
