@@ -266,6 +266,7 @@ with tab_overzicht:
             'ontbreekt': '❌ ontbreekt',
             'handmatig': '🛠 handmatig',
             'onbekend':  '❔ onbekend',
+            'nul→30':   '🔵 0→30 dagen',
         }
         if 'LT_bron' in _df_disp.columns:
             _df_disp['LT-status'] = (
@@ -274,13 +275,14 @@ with tab_overzicht:
 
             def _kleur_lt(v):
                 s = str(v)
+                if '🔵' in s:             return 'background-color: #bbdefb'  # blauw: LT was 0 → 30
                 if '✅' in s or '✏️' in s: return 'background-color: #e8f5e9'
                 if '⚠️' in s:              return 'background-color: #fff8e1'
                 if '❌' in s:              return 'background-color: #ffebee'
                 if '🛠' in s:              return 'background-color: #e3f2fd'
                 return ''
 
-            _n_bevest = _df_disp['LT_bron'].isin(['geupdate', 'override', 'handmatig']).sum()
+            _n_bevest = _df_disp['LT_bron'].isin(['geupdate', 'override', 'handmatig', 'nul→30']).sum()
             _n_warn   = len(_df_disp) - _n_bevest
             if _n_warn > 0:
                 st.warning(
@@ -2490,6 +2492,8 @@ with tab_classificatie:
                 st.error(f"Kon bestand niet verwijderen: {e}")
     else:
         st.info("Geen actieve classificatie-selectie. De BPA-tool gebruikt momenteel de standaard Excel-filters.")
+
+
 
 
 
