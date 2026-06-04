@@ -2564,26 +2564,37 @@ with tab_budget:
                 f"({_budget/_totale_inv*100:.0f}% van totaal)"
             )
 
-            # ── Waarde-functie ──
-            _waarde_keuze = st.radio(
-                "Waarde-criterium",
-                options=["Classificatie-score", "λ × LT × VP (uitval-impact)", "VP (verkoopprijs)"],
-                horizontal=True,
-                key="bud_waarde",
-            )
+           # ── Waarde-functie ──
+_waarde_keuze = st.radio(
+    "Waarde-criterium",
+    options=[
+        "Winst/jaar (marge × λ × N)",          # ← nieuw, default
+        "Classificatie-score",
+        "λ × LT × VP (uitval-impact)",
+        "VP (verkoopprijs)",
+    ],
+    horizontal=True,
+    key="bud_waarde",
+    help="Greedy sorteert op Waarde/Investering. "
+         "Winst/jaar maximaliseert directe ROI; "
+         "classificatie-score weegt ook strategisch belang mee.",
+)
 
-            _df_b = _ov_df.copy()
-            _df_b["Inv"] = _inv_per_comp
+_df_b = _ov_df.copy()
+_df_b["Inv"] = _inv_per_comp
 
-            if _waarde_keuze == "Classificatie-score":
-                _waarde = pd.to_numeric(_df_b.get("Cls_score"), errors="coerce")
-                # Fallback voor rijen zonder cls_score: λ × LT × VP
-                _fallback = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
-                _df_b["Waarde"] = _waarde.fillna(_fallback)
-            elif _waarde_keuze == "λ × LT × VP (uitval-impact)":
-                _df_b["Waarde"] = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
-            else:
-                _df_b["Waarde"] = _df_b["VP"]
+if _waarde_keuze == "Winst/jaar (marge × λ × N)":
+    _marge = _df_b["VP"] - _df_b["IP"]
+    _df_b["Waarde"] = _marge * _df_b["lambda_jr"] * _df_b["n_klanten"]
+elif _waarde_keuze == "Classificatie-score":
+    _waarde = pd.to_numeric(_df_b.get("Cls_score"), errors="coerce")
+    # Fallback voor rijen zonder cls_score: jaarlijkse winst
+    _fallback = (_df_b["VP"] - _df_b["IP"]) * _df_b["lambda_jr"] * _df_b["n_klanten"]
+    _df_b["Waarde"] = _waarde.fillna(_fallback)
+elif _waarde_keuze == "λ × LT × VP (uitval-impact)":
+    _df_b["Waarde"] = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
+else:
+    _df_b["Waarde"] = _df_b["VP"]
 
             # Ratio waarde/€ — bescherming tegen IP=0
             _df_b["Ratio"] = np.where(
