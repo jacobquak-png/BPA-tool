@@ -40,6 +40,10 @@ EXCEL_PATH  = os.path.join(SCRIPT_DIR,
                            'annual_use_abc_met_artikeldata_complete_europa.xlsx')
 SHEET_NAME  = 'Filtered '
 
+# Selectiebestand geproduceerd door classificatie_scoring.py.
+# Aanwezigheid activeert de classificatie-koppeling (whitelist + LT-bron).
+SELECTIE_PATH = os.path.join(SCRIPT_DIR, 'bpa_selectie.json')
+
 # ── Filters (zelfde als base_stock_overview.py) ───────────────────────────────
 FILTER_ARTICLE_TYPES = ['Critical', 'Onbekend']
 FILTER_ABC           = ['A']
@@ -48,7 +52,7 @@ FILTER_MIN_VP        = 1000
 FILTER_MIN_KLANTEN   = 5
 
 # Standaard serviceniveaus voor het overzicht
-SERVICE_LEVELS = [0.98, 0.990, 0.995, 0.999]
+SERVICE_LEVELS = [0.980, 0.990, 0.995, 0.999]
 
 # Standaard aantal subscripties (globale fallback)
 DEFAULT_N_KLANTEN = 20
@@ -91,11 +95,19 @@ def laad_config() -> dict:
 
 
 def sla_config_op(cfg: dict) -> None:
+    # Sla eerst een snapshot van de HUIDIGE (old) staat op vóór de nieuwe
+    # config wordt weggeschreven, zodat de Δ-kolommen in het overzicht de
+    # werkelijke wijziging tonen en niet altijd 0 zijn.
+    try:
+        oude_cfg = laad_config()
+        _sla_history_snapshot(oude_cfg)
+    except Exception:
+        pass
+
     cfg['aangepast'] = str(date.today())
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     print(f"  ✓ Configuratie opgeslagen in {CONFIG_PATH}")
-    _sla_history_snapshot(cfg)
 
 
 def _sla_history_snapshot(cfg: dict) -> None:
@@ -197,6 +209,37 @@ def _lambda_voor_rij(row, n_klanten: int) -> float:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  CLASSIFICATIE-KOPPELING
+# ══════════════════════════════════════════════════════════════════════════════
+
+def laad_classificatie_selectie() -> dict:
+    """
+    Lees bpa_selectie.json (geproduceerd door classificatie_scoring.py).
+
+    Returns:
+        dict met:
+          'items'       : {code(str) → {'score','lt_dagen','lt_bron','abc'}}
+          'gegenereerd' : timestamp-string of None
+          'lt_overzicht': samenvatting of {}
+        Lege dict als het bestand niet bestaat of corrupt is.
+    """
+    if not os.path.exists(SELECTIE_PATH):
+        return {}
+    try:
+        with open(SELECTIE_PATH, encoding='utf-8') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  ⚠  bpa_selectie.json niet leesbaar: {e}")
+        return {}
+    return {
+        'items':        {str(it['code']): it for it in data.get('items', [])},
+        'gegenereerd':  data.get('gegenereerd'),
+        'lt_overzicht': data.get('lt_overzicht', {}),
+        'threshold':    data.get('threshold'),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  BEREKEN OVERZICHT
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -223,12 +266,32 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
     ip_ov = cfg.get('ip_overrides', {})
     lt_ov = cfg.get('lt_overrides', {})
 
+    # ── Classificatie-koppeling ───────────────────────────────────────────
+    # Als bpa_selectie.json bestaat: gebruik als whitelist (alleen die codes
+    # uit de Excel) en haal LT-bron + classificatie-score op.
+    _cls = laad_classificatie_selectie()
+    _cls_items = _cls.get('items', {})
+    _gebruik_cls_whitelist = bool(_cls_items)
+    if _gebruik_cls_whitelist:
+        print(f"  ✓ Classificatie-selectie actief: {len(_cls_items)} codes "
+              f"(gegenereerd {_cls.get('gegenereerd')})")
+
     for code, row in excel_parts.iterrows():
         if str(code) in uitgesloten:
             continue
+        # Whitelist: sla over als niet in classificatie-selectie
+        if _gebruik_cls_whitelist and str(code) not in _cls_items:
+            continue
         n     = cfg['n_klanten_overrides'].get(str(code), standaard_n)
         ip    = ip_ov.get(str(code), row['IP'])
-        lt_d  = lt_ov.get(str(code), int(row['LT_days']))
+        # LT: configuratie-override telt als 'bevestigd' (gebruiker heeft 'm
+        # zelf gezet); anders: bron volgens classificatie; anders Excel-waarde.
+        if str(code) in lt_ov:
+            lt_d    = lt_ov[str(code)]
+            lt_bron = 'override'
+        else:
+            lt_d    = int(row['LT_days'])
+            lt_bron = _cls_items.get(str(code), {}).get('lt_bron', 'onbekend')
         lam   = _lambda_voor_rij(row, n)
         lt_jr = lt_d / 365
         mu    = lam * lt_jr
@@ -242,6 +305,8 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
             'n_klanten': n,
             'lambda_jr': round(lam, 4),
             'LT_dagen':  lt_d,
+            'LT_bron':   lt_bron,
+            'Cls_score': _cls_items.get(str(code), {}).get('score'),
             'IP':        round(ip, 2),
             'VP':        round(ip * 2, 2),
             'mu':        round(mu, 4),
@@ -271,6 +336,8 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
             'n_klanten': n,
             'lambda_jr': round(lam, 4),
             'LT_dagen':  lt_d,
+            'LT_bron':   'handmatig',
+            'Cls_score': None,
             'IP':        round(ip, 2),
             'VP':        round(ip * 2, 2),
             'mu':        round(mu, 4),
