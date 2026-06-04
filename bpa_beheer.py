@@ -167,10 +167,12 @@ def _parse_dutch_price(val):
         return 0.0
 
 
-def laad_excel_onderdelen(excel_file=None) -> pd.DataFrame:
+def laad_excel_onderdelen(excel_file=None, *, skip_hard_filter: bool = False) -> pd.DataFrame:
     """Laad gefilterde onderdelen uit de Excel-spreadsheet.
     excel_file: bestandspad (str) of file-like object (BytesIO / UploadedFile).
-    Valt terug op EXCEL_PATH als niet opgegeven."""
+    Valt terug op EXCEL_PATH als niet opgegeven.
+    skip_hard_filter: als True, sla de BPA-hardfilter (ABC/VP/n_cust/...) over —
+    nuttig wanneer een classificatie-whitelist al de selectie bepaalt."""
     bron = excel_file if excel_file is not None else EXCEL_PATH
     df = pd.read_excel(bron, sheet_name=SHEET_NAME)
     df = df.rename(columns={
@@ -190,13 +192,16 @@ def laad_excel_onderdelen(excel_file=None) -> pd.DataFrame:
     df['MTBF'] = pd.to_numeric(
         df.get('MTBF', pd.Series(np.nan, index=df.index)), errors='coerce'
     )
-    mask = (
-        df['ArticleType'].isin(FILTER_ARTICLE_TYPES) &
-        df['ABC_categorie'].isin(FILTER_ABC) &
-        df['Incourant'].isin(FILTER_INCOURANT) &
-        (df['VP'] >= FILTER_MIN_VP) &
-        (df['n_cust'] >= FILTER_MIN_KLANTEN)
-    )
+    if skip_hard_filter:
+        mask = pd.Series(True, index=df.index)
+    else:
+        mask = (
+            df['ArticleType'].isin(FILTER_ARTICLE_TYPES) &
+            df['ABC_categorie'].isin(FILTER_ABC) &
+            df['Incourant'].isin(FILTER_INCOURANT) &
+            (df['VP'] >= FILTER_MIN_VP) &
+            (df['n_cust'] >= FILTER_MIN_KLANTEN)
+        )
     return df[mask].set_index('Code')[['Descr', 'VP', 'IP', 'Totaal_orders_5jr', 'n_cust', 'LT_days', 'MTBF']]
 
 
@@ -252,29 +257,31 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
     """
     rijen = []
 
-    # 1. Excel-onderdelen
-    try:
-        excel_parts = laad_excel_onderdelen(excel_file)
-    except Exception as e:
-        print(f"  ⚠  Excel niet geladen: {e}")
-        excel_parts = pd.DataFrame()
-
     standaard_n = cfg['standaard_n_klanten']
-
     uitgesloten = set(cfg.get('uitgesloten_componenten', []))
-
     ip_ov = cfg.get('ip_overrides', {})
     lt_ov = cfg.get('lt_overrides', {})
 
     # ── Classificatie-koppeling ───────────────────────────────────────────
     # Als bpa_selectie.json bestaat: gebruik als whitelist (alleen die codes
-    # uit de Excel) en haal LT-bron + classificatie-score op.
+    # uit de Excel) en haal LT-bron + classificatie-score op. Bij actieve
+    # whitelist slaan we de BPA-hardfilter over zodat ALLE "Opnemen"-codes
+    # zichtbaar worden (ook B/C-categorieën of items met lage VP).
     _cls = laad_classificatie_selectie()
     _cls_items = _cls.get('items', {})
     _gebruik_cls_whitelist = bool(_cls_items)
     if _gebruik_cls_whitelist:
         print(f"  ✓ Classificatie-selectie actief: {len(_cls_items)} codes "
               f"(gegenereerd {_cls.get('gegenereerd')})")
+
+    # 1. Excel-onderdelen
+    try:
+        excel_parts = laad_excel_onderdelen(
+            excel_file, skip_hard_filter=_gebruik_cls_whitelist
+        )
+    except Exception as e:
+        print(f"  ⚠  Excel niet geladen: {e}")
+        excel_parts = pd.DataFrame()
 
     for code, row in excel_parts.iterrows():
         if str(code) in uitgesloten:
@@ -315,6 +322,14 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         for sl in SERVICE_LEVELS:
             rij[f's@{sl:.1%}'] = stocks[sl]
         rijen.append(rij)
+
+    # ── Diagnostiek: classificatie-codes die niet in de BPA-Excel staan ──
+    if _gebruik_cls_whitelist and not excel_parts.empty:
+        _excel_codes = {str(c) for c in excel_parts.index}
+        _missing = [c for c in _cls_items.keys() if c not in _excel_codes]
+        if _missing:
+            print(f"  ⚠  {len(_missing)} classificatie-codes ontbreken in de BPA-Excel "
+                  f"(eerste 5: {_missing[:5]})")
 
     # 2. Handmatige componenten
     for code, hcomp in cfg['handmatige_componenten'].items():
@@ -678,3 +693,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
