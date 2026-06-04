@@ -83,7 +83,7 @@ if "overzicht_df" not in st.session_state:
 #  TABS
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie = st.tabs([
+tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget = st.tabs([
     "📊 Overzicht",
     "✏️ Subscripties aanpassen",
     "➕ Component toevoegen",
@@ -93,6 +93,7 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
     "💰 Kostenanalyse",
     "🔢 Subscriptiedrempel",
     "🏷️ Classificatie",
+    "💼 Budget-scenario",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2505,11 +2506,199 @@ with tab_classificatie:
         st.info("Geen actieve classificatie-selectie. De BPA-tool gebruikt momenteel de standaard Excel-filters.")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  TAB 10 – BUDGET-SCENARIO (greedy knapsack)
+# ─────────────────────────────────────────────────────────────────────────────
 
+with tab_budget:
+    st.subheader("Budget-scenario — greedy selectie")
+    st.caption(
+        "Stel een maximaal investeringsbudget in en selecteer greedy de componenten "
+        "met de hoogste **waarde per euro**. Investering per component = `S* × IP` "
+        "bij het gekozen service level. Waarde = classificatie-score (fallback: "
+        "`λ × LT-jaar × VP` — verwachte uitval-impact)."
+    )
 
+    _ov_df = st.session_state.get("overzicht_df")
+    if _ov_df is None or _ov_df.empty:
+        try:
+            _ov_df = bereken_overzicht(cfg, _excel_file)
+            st.session_state["overzicht_df"] = _ov_df
+        except Exception as e:
+            st.error(f"Kon overzicht niet laden: {e}")
+            _ov_df = pd.DataFrame()
 
+    if _ov_df is None or _ov_df.empty:
+        st.warning("Geen componenten beschikbaar. Voer eerst classificatie uit of laad de Excel.")
+    else:
+        _sl_cols_b = [c for c in _ov_df.columns if c.startswith("s@")]
+        if not _sl_cols_b:
+            st.error("Geen service-level kolommen gevonden in het overzicht.")
+        else:
+            # ── Parameters ──
+            _c1, _c2 = st.columns([1, 1])
+            with _c1:
+                _sl_keuze = st.selectbox(
+                    "Service level voor S*",
+                    options=_sl_cols_b,
+                    index=len(_sl_cols_b) // 2,
+                    key="bud_sl",
+                )
+            _inv_per_comp = (_ov_df[_sl_keuze] * _ov_df["IP"]).round(2)
+            _totale_inv   = float(_inv_per_comp.sum())
 
+            with _c2:
+                _budget = st.number_input(
+                    "Maximaal budget (€)",
+                    min_value=0.0,
+                    max_value=max(_totale_inv * 1.2, 1_000_000.0),
+                    value=float(round(_totale_inv * 0.5, 0)),
+                    step=1000.0,
+                    key="bud_max",
+                )
 
+            st.caption(
+                f"Volledige voorraadwaarde bij {_sl_keuze}: **€ {_totale_inv:,.0f}** · "
+                f"Budget = **€ {_budget:,.0f}** "
+                f"({_budget/_totale_inv*100:.0f}% van totaal)"
+            )
+
+            # ── Waarde-functie ──
+            _waarde_keuze = st.radio(
+                "Waarde-criterium",
+                options=["Classificatie-score", "λ × LT × VP (uitval-impact)", "VP (verkoopprijs)"],
+                horizontal=True,
+                key="bud_waarde",
+            )
+
+            _df_b = _ov_df.copy()
+            _df_b["Inv"] = _inv_per_comp
+
+            if _waarde_keuze == "Classificatie-score":
+                _waarde = pd.to_numeric(_df_b.get("Cls_score"), errors="coerce")
+                # Fallback voor rijen zonder cls_score: λ × LT × VP
+                _fallback = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
+                _df_b["Waarde"] = _waarde.fillna(_fallback)
+            elif _waarde_keuze == "λ × LT × VP (uitval-impact)":
+                _df_b["Waarde"] = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
+            else:
+                _df_b["Waarde"] = _df_b["VP"]
+
+            # Ratio waarde/€ — bescherming tegen IP=0
+            _df_b["Ratio"] = np.where(
+                _df_b["Inv"] > 0, _df_b["Waarde"] / _df_b["Inv"], np.inf
+            )
+
+            # ── Greedy ──
+            _df_sorted = _df_b.sort_values("Ratio", ascending=False).copy()
+            _cum = _df_sorted["Inv"].cumsum()
+            _df_sorted["In_selectie"] = _cum <= _budget
+
+            # Probeer optioneel nog kleinere items toe te voegen die nog wel passen
+            # (na de eerste die niet meer past — kan totale waarde verhogen).
+            _resterend = _budget - _df_sorted.loc[_df_sorted["In_selectie"], "Inv"].sum()
+            for _idx in _df_sorted.index[~_df_sorted["In_selectie"]]:
+                _kost = _df_sorted.at[_idx, "Inv"]
+                if _kost <= _resterend:
+                    _df_sorted.at[_idx, "In_selectie"] = True
+                    _resterend -= _kost
+
+            _in  = _df_sorted[_df_sorted["In_selectie"]]
+            _uit = _df_sorted[~_df_sorted["In_selectie"]]
+
+            _inv_gekozen  = float(_in["Inv"].sum())
+            _waarde_geko  = float(_in["Waarde"].sum())
+            _waarde_tot   = float(_df_sorted["Waarde"].sum())
+
+            # ── Metrics ──
+            _m1, _m2, _m3, _m4 = st.columns(4)
+            _m1.metric("Geselecteerd", f"{len(_in)} / {len(_df_sorted)}")
+            _m2.metric("Investering", f"€ {_inv_gekozen:,.0f}",
+                       delta=f"-€ {(_totale_inv - _inv_gekozen):,.0f}")
+            _m3.metric("Waarde behouden",
+                       f"{_waarde_geko/_waarde_tot*100:.1f}%" if _waarde_tot > 0 else "—")
+            _m4.metric("Budget-benutting",
+                       f"{_inv_gekozen/_budget*100:.1f}%" if _budget > 0 else "—")
+
+            # ── Tabel ──
+            _show = _df_sorted[
+                ["Descr", "n_klanten", "lambda_jr", "LT_dagen", "VP", "IP",
+                 _sl_keuze, "Inv", "Waarde", "Ratio", "Cls_score", "In_selectie"]
+            ].copy()
+            _show.columns = ["Omschrijving", "N", "λ/jr", "LT(d)", "VP", "IP",
+                             f"S* @ {_sl_keuze}", "Inv. (€)", "Waarde", "Waarde/€",
+                             "Cls_score", "In selectie"]
+
+            def _kleur_sel(v):
+                return ("background-color: #c8e6c9" if v
+                        else "background-color: #ffcdd2")
+
+            st.dataframe(
+                _show.style
+                    .format({
+                        "λ/jr": "{:.4f}",
+                        "VP": "€ {:,.0f}",
+                        "IP": "€ {:,.0f}",
+                        "Inv. (€)": "€ {:,.0f}",
+                        "Waarde": "{:,.1f}",
+                        "Waarde/€": "{:.4f}",
+                        "Cls_score": "{:.1f}",
+                    })
+                    .map(_kleur_sel, subset=["In selectie"]),
+                use_container_width=True,
+                height=520,
+            )
+
+            # ── Curve: cumulatieve waarde vs budget ──
+            with st.expander("📈 Cumulatieve waarde vs. cumulatieve investering"):
+                import matplotlib.pyplot as _plt_bud
+                _cum_inv  = _df_sorted["Inv"].cumsum().values
+                _cum_wrd  = _df_sorted["Waarde"].cumsum().values
+                _fig_b, _ax_b = _plt_bud.subplots(figsize=(9, 4.5))
+                _ax_b.plot(_cum_inv, _cum_wrd, color="#1976D2", lw=2)
+                _ax_b.axvline(_budget, color="#c62828", ls="--",
+                              label=f"Budget € {_budget:,.0f}")
+                _ax_b.fill_between(_cum_inv, _cum_wrd, where=(_cum_inv <= _budget),
+                                   color="#c8e6c9", alpha=0.4, label="In selectie")
+                _ax_b.set_xlabel("Cumulatieve investering (€)")
+                _ax_b.set_ylabel("Cumulatieve waarde")
+                _ax_b.set_title("Greedy selectie — waarde-opbouw bij toenemende investering")
+                _ax_b.grid(True, alpha=0.3)
+                _ax_b.legend()
+                _fig_b.tight_layout()
+                st.pyplot(_fig_b)
+                _plt_bud.close(_fig_b)
+
+            # ── Toepassen als uitsluitingen ──
+            st.divider()
+            st.markdown("**Selectie toepassen op model**")
+            st.caption(
+                "De níét-geselecteerde componenten worden als uitgesloten toegevoegd "
+                "aan de configuratie. Handmatige componenten blijven onaangetast."
+            )
+            if st.button("✅ Pas budget-selectie toe (sluit overige uit)", type="primary"):
+                _uit_codes = [str(c) for c in _uit.index
+                              if str(c) not in cfg.get("handmatige_componenten", {})]
+                cfg.setdefault("uitgesloten_componenten", [])
+                for c in _uit_codes:
+                    if c not in cfg["uitgesloten_componenten"]:
+                        cfg["uitgesloten_componenten"].append(c)
+                sla_config_op(cfg)
+                st.session_state.pop("overzicht_df", None)
+                st.success(
+                    f"{len(_uit_codes)} componenten toegevoegd aan uitsluitingen. "
+                    f"Tab 📊 Overzicht toont nu de budget-conforme selectie."
+                )
+                st.rerun()
+
+            # ── Download ──
+            _csv_b = _show.to_csv(sep=";", decimal=",").encode("utf-8")
+            st.download_button(
+                "⬇️ Download greedy-selectie (CSV)",
+                data=_csv_b,
+                file_name=f"budget_scenario_{date.today()}.csv",
+                mime="text/csv",
+            )
 
 
 
