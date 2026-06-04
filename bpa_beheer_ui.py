@@ -30,6 +30,14 @@ from bpa_beheer import (
     HISTORY_PATH,
     SCRIPT_DIR,
     SELECTIE_PATH,
+    EXCEL_PATH,
+)
+from classificatie import (
+    ClassificatieParams,
+    voer_classificatie_uit,
+    schrijf_selectie_json,
+    controleer_kolommen,
+    laad_ruwe_dataset,
 )
 from model import BPAOptimizationModel
 
@@ -75,7 +83,7 @@ if "overzicht_df" not in st.session_state:
 #  TABS
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel = st.tabs([
+tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie = st.tabs([
     "📊 Overzicht",
     "✏️ Subscripties aanpassen",
     "➕ Component toevoegen",
@@ -84,6 +92,7 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
     "📈 Historiek",
     "💰 Kostenanalyse",
     "🔢 Subscriptiedrempel",
+    "🏷️ Classificatie",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2309,6 +2318,180 @@ with tab_drempel:
             _fig_d.tight_layout()
             st.pyplot(_fig_d)
             _plt_d.close(_fig_d)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  TAB 9 – CLASSIFICATIE
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_classificatie:
+    st.subheader("Classificatie — selectie voor BPA-beheer")
+    st.caption(
+        "Score alle artikelen uit de bron-Excel op prijs, klantlocaties en order-frequentie. "
+        "Pas de gewichten en drempel aan; de selectie wordt — na 'Toepassen' — als whitelist "
+        "doorgezet naar het tabblad 📊 Overzicht."
+    )
+
+    # ── Bron-Excel (optioneel uploaden, anders EXCEL_PATH uit repo) ──
+    _cls_upload = st.file_uploader(
+        "Optioneel: upload een andere bron-Excel (anders wordt de repo-Excel gebruikt)",
+        type=["xlsx"],
+        key="cls_upload",
+    )
+    _cls_bron = _cls_upload if _cls_upload is not None else EXCEL_PATH
+    _cls_sheet = st.text_input(
+        "Sheet-naam (leeg = eerste sheet)",
+        value="",
+        key="cls_sheet",
+        help="Classificatie gebruikt typisch een ander tabblad dan BPA's 'Filtered '. "
+             "Laat leeg om de eerste sheet te pakken.",
+    ).strip() or None
+
+    st.divider()
+
+    # ── Parameters ──
+    st.markdown("**Gewichten** _(worden automatisch genormaliseerd)_")
+    _c1, _c2, _c3 = st.columns(3)
+    with _c1:
+        _w_prijs = st.slider("Gewicht prijs",    0.0, 1.0, 1/3, 0.05, key="cls_w_prijs")
+    with _c2:
+        _w_loc   = st.slider("Gewicht locaties", 0.0, 1.0, 1/3, 0.05, key="cls_w_loc")
+    with _c3:
+        _w_ord   = st.slider("Gewicht orders",   0.0, 1.0, 1/3, 0.05, key="cls_w_ord")
+
+    st.markdown("**Drempel & niet-lineariteiten**")
+    _c4, _c5, _c6, _c7 = st.columns(4)
+    with _c4:
+        _thr = st.number_input("Drempel (≥ opnemen)", 0.0, 100.0, 55.0, 1.0, key="cls_thr")
+    with _c5:
+        _pen_thr = st.number_input("Prijs-penalty <  €", 0.0, 1e6, 1000.0, 100.0, key="cls_pen_thr")
+    with _c6:
+        _pen_fac = st.slider("Prijs-penalty factor", 0.0, 1.0, 0.4, 0.05, key="cls_pen_fac")
+    with _c7:
+        _ord_pow = st.slider("Orders-power",    1.0, 4.0, 2.0, 0.1, key="cls_ord_pow")
+
+    st.markdown("**Harde filters**")
+    _c8, _c9 = st.columns(2)
+    with _c8:
+        _min_loc = st.number_input("Min. klantlocaties", 0, 100, 5, 1, key="cls_min_loc")
+    with _c9:
+        _art_types_raw = st.text_input(
+            "ArticleType-filter (komma-gescheiden, case-insensitief)",
+            value="critical, onbekend",
+            key="cls_art_types",
+        )
+    _art_types = tuple(s.strip().lower() for s in _art_types_raw.split(",") if s.strip())
+
+    _params = ClassificatieParams(
+        threshold=float(_thr),
+        weight_prijs=float(_w_prijs),
+        weight_locaties=float(_w_loc),
+        weight_orders=float(_w_ord),
+        price_penalty_threshold=float(_pen_thr),
+        price_penalty_factor=float(_pen_fac),
+        orders_power=float(_ord_pow),
+        min_klantlocaties=int(_min_loc),
+        article_type_filter=_art_types,
+    )
+
+    st.divider()
+
+    # ── Run-knop ──
+    _col_run, _col_apply = st.columns([1, 1])
+    with _col_run:
+        _run_cls = st.button("🔄 Bereken classificatie", type="primary", key="cls_run")
+    with _col_apply:
+        _apply_cls = st.button("✅ Toepassen op BPA-overzicht", key="cls_apply",
+                               disabled=("cls_result" not in st.session_state))
+
+    if _run_cls:
+        try:
+            with st.spinner("Classificatie berekenen…"):
+                _df_filtered, _payload = voer_classificatie_uit(
+                    _cls_bron, _params, sheet_name=_cls_sheet
+                )
+            st.session_state.cls_result   = _df_filtered
+            st.session_state.cls_payload  = _payload
+            st.session_state.cls_params   = _params
+            st.toast(f"{_payload['n_items']} componenten geselecteerd "
+                     f"(drempel ≥ {_params.threshold})", icon="✅")
+        except Exception as e:
+            st.error(f"Fout tijdens classificatie: {e}")
+
+    # ── Resultaten ──
+    if "cls_result" in st.session_state:
+        _res = st.session_state.cls_result
+        _pl  = st.session_state.cls_payload
+
+        _n_tot     = len(_res)
+        _n_opnemen = (_res["Classificatie_Beslissing"] == "Opnemen in lijst").sum()
+
+        _m1, _m2, _m3, _m4 = st.columns(4)
+        _m1.metric("Na harde filters", _n_tot)
+        _m2.metric("Opnemen in lijst", int(_n_opnemen),
+                   delta=f"{_n_opnemen/_n_tot*100:.0f}%" if _n_tot else "—")
+        _m3.metric("LT geupdate",  _pl["lt_overzicht"]["geupdate"])
+        _m4.metric("LT default / ontbreekt",
+                   _pl["lt_overzicht"]["default"] + _pl["lt_overzicht"]["ontbreekt"])
+
+        # Tabel — sorteer op score, kleurcodering op beslissing
+        _show_cols = [c for c in [
+            "Verkooporderregel artikel.Artikel.Artikelcode", "Artikelcode", "Code",
+            "ABC_categorie", "ArticleType",
+            "Standaard verkoopprijs",
+            "Aantal_klantlocaties_met_orders_5jr",
+            "Gem_orders_per_klantlocatie_5jr",
+            "Score_Prijs", "Score_Locaties", "Score_Orders",
+            "Gewogen_Score", "Classificatie_Beslissing",
+            "Hoofdleverancier.Levertijd",
+        ] if c in _res.columns]
+        _df_show = _res[_show_cols].sort_values("Gewogen_Score", ascending=False)
+
+        def _kleur_beslissing(v):
+            return ("background-color: #c8e6c9" if v == "Opnemen in lijst"
+                    else "background-color: #ffcdd2")
+
+        st.dataframe(
+            _df_show.style.map(_kleur_beslissing, subset=["Classificatie_Beslissing"]),
+            use_container_width=True, height=500,
+        )
+
+        # Download
+        _csv = _df_show.to_csv(sep=";", decimal=",", index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Download gescoorde tabel (CSV)",
+            data=_csv, file_name=f"classificatie_{date.today()}.csv",
+            mime="text/csv",
+        )
+
+    # ── Apply: schrijf bpa_selectie.json + invalideer overzicht ──
+    if _apply_cls and "cls_payload" in st.session_state:
+        try:
+            schrijf_selectie_json(st.session_state.cls_payload, SELECTIE_PATH)
+            st.session_state.pop("overzicht_df", None)
+            st.success(
+                f"✅ Selectie opgeslagen in {SELECTIE_PATH}. "
+                f"Open tab 📊 Overzicht — de basisvoorraden worden opnieuw berekend "
+                f"met **{st.session_state.cls_payload['n_items']}** componenten als whitelist."
+            )
+        except Exception as e:
+            st.error(f"Kon bpa_selectie.json niet schrijven: {e}")
+
+    # ── Verwijder bestaande selectie (alle artikelen weer actief) ──
+    st.divider()
+    if os.path.exists(SELECTIE_PATH):
+        if st.button("🗑️ Verwijder huidige classificatie-selectie (BPA gebruikt weer alle Excel-codes)"):
+            try:
+                os.remove(SELECTIE_PATH)
+                st.session_state.pop("overzicht_df", None)
+                st.toast("Selectie verwijderd — BPA gebruikt weer de standaard Excel-filters.", icon="🗑️")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Kon bestand niet verwijderen: {e}")
+    else:
+        st.info("Geen actieve classificatie-selectie. De BPA-tool gebruikt momenteel de standaard Excel-filters.")
+
+
 
 
 
