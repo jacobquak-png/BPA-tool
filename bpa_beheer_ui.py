@@ -16,7 +16,7 @@ import streamlit as st
 from datetime import date
 import pandas as pd
 import json
-
+import numpy as np
 # Hergebruik alle logica uit bpa_beheer.py
 from bpa_beheer import (
     laad_config,
