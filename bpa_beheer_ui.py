@@ -472,9 +472,20 @@ with tab_verwijderen:
     handmatig   = cfg["handmatige_componenten"]
     uitgesloten = cfg.setdefault("uitgesloten_componenten", [])
 
-    try:
-        excel_codes = list(laad_excel_onderdelen(_excel_file).index)
-    except Exception:
+    # Gebruik dezelfde codes als in het Overzicht-tab (= classificatie-whitelist
+    # toegepast, inclusief synthetische classificatie-rijen).
+    _ov_df = st.session_state.get("overzicht_df")
+    if _ov_df is None or _ov_df.empty:
+        try:
+            _ov_df = bereken_overzicht(cfg, _excel_file)
+            st.session_state["overzicht_df"] = _ov_df
+        except Exception:
+            _ov_df = pd.DataFrame()
+
+    if _ov_df is not None and not _ov_df.empty and "bron" in _ov_df.columns:
+        excel_codes = [str(c) for c, b in zip(_ov_df.index, _ov_df["bron"])
+                       if b in ("excel", "classificatie")]
+    else:
         excel_codes = []
 
     # Alle actieve codes met bron
@@ -2492,6 +2503,8 @@ with tab_classificatie:
                 st.error(f"Kon bestand niet verwijderen: {e}")
     else:
         st.info("Geen actieve classificatie-selectie. De BPA-tool gebruikt momenteel de standaard Excel-filters.")
+
+
 
 
 
