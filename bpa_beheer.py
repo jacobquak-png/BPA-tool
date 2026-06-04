@@ -289,7 +289,9 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         if _gebruik_cls_whitelist and str(code) not in _cls_items:
             continue
         n     = cfg['n_klanten_overrides'].get(str(code), standaard_n)
-        ip    = ip_ov.get(str(code), row['IP'])
+        # VP komt uit Excel (standaard verkoopprijs); IP = VP / 2 tenzij override.
+        vp    = float(row.get('VP', 0.0) or 0.0)
+        ip    = ip_ov.get(str(code), vp / 2)
         # LT: configuratie-override telt als 'bevestigd' (gebruiker heeft 'm
         # zelf gezet); anders: bron volgens classificatie; anders Excel-waarde.
         if str(code) in lt_ov:
@@ -318,7 +320,7 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
             'LT_bron':   lt_bron,
             'Cls_score': _cls_items.get(str(code), {}).get('score'),
             'IP':        round(ip, 2),
-            'VP':        round(ip * 2, 2),
+            'VP':        round(vp, 2),
             'mu':        round(mu, 4),
             'bron':      'excel',
         }
@@ -340,10 +342,10 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         for code in _missing:
             cls_meta = _cls_items.get(code, {})
             n   = cfg['n_klanten_overrides'].get(code, standaard_n)
-            ip_meta = cls_meta.get('ip')
+            # VP komt uit classificatie-metadata; IP = VP/2 (of override).
             vp_meta = cls_meta.get('vp')
-            ip  = ip_ov.get(code, ip_meta if ip_meta is not None else 0.0)
-            vp  = vp_meta if vp_meta is not None else ip * 2
+            vp  = float(vp_meta) if vp_meta is not None else 0.0
+            ip  = ip_ov.get(code, vp / 2)
 
             # LT: override > classificatie > default 30
             if code in lt_ov:
@@ -754,6 +756,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
