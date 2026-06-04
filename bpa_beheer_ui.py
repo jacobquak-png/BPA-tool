@@ -2653,40 +2653,91 @@ with tab_budget:
             _w3.metric("Gem. marge", f"{_marge_gem:.1f}%")
             _w4.metric("ROI / jaar (portfolio)", f"{_roi_port:.1f}%")
 
-            # ── Tabel ──
-            _show = _df_sorted[
-                ["Descr", "n_klanten", "lambda_jr", "LT_dagen", "VP", "IP",
-                 "Marge_stuk", "Marge_pct", "Winst_jr", "ROI_jr",
-                 _sl_keuze, "Inv", "Waarde", "Ratio", "Cls_score", "In_selectie"]
-            ].copy()
-            _show.columns = ["Omschrijving", "N", "λ/jr", "LT(d)", "VP", "IP",
-                             "Marge/stuk", "Marge %", "Winst/jr", "ROI/jr %",
-                             f"S* @ {_sl_keuze}", "Inv. (€)", "Waarde", "Waarde/€",
-                             "Cls_score", "In selectie"]
+            # ── Per-component tabel (kosten-analyse stijl) ──
+            st.subheader("Winst & marge per component")
+            _rows_b = []
+            for _code, _r in _df_sorted.iterrows():
+                _rows_b.append({
+                    'Code':          str(_code),
+                    'Omschrijving':  str(_r.get('Descr', ''))[:35],
+                    'N':             int(_r['n_klanten']),
+                    'S*':            int(_r[_sl_keuze]),
+                    'IP (€)':        round(float(_r['IP']), 2),
+                    'VP (€)':        round(float(_r['VP']), 2),
+                    'Marge/stuk':    round(float(_r['Marge_stuk']), 2),
+                    'Marge %':       round(float(_r['Marge_pct']), 1),
+                    'λ/jr':          round(float(_r['lambda_jr']), 4),
+                    'Omzet/jr (€)':  round(float(_r['VP'] * _r['lambda_jr'] * _r['n_klanten']), 2),
+                    'Winst/jr (€)':  round(float(_r['Winst_jr']), 2),
+                    'Inv. (€)':      round(float(_r['Inv']), 2),
+                    'ROI/jr %':      round(float(_r['ROI_jr']), 1) if np.isfinite(_r['ROI_jr']) else None,
+                    'Cls_score':     round(float(_r['Cls_score']), 1) if pd.notna(_r.get('Cls_score')) else None,
+                    'In selectie':   '✓' if _r['In_selectie'] else '✗',
+                })
+            _tbl_b = pd.DataFrame(_rows_b).set_index('Code')
 
-            def _kleur_sel(v):
-                return ("background-color: #c8e6c9" if v
+            def _kleur_sel2(v):
+                return ("background-color: #c8e6c9" if v == '✓'
                         else "background-color: #ffcdd2")
 
             st.dataframe(
-                _show.style
-                    .format({
-                        "λ/jr": "{:.4f}",
-                        "VP": "€ {:,.0f}",
-                        "IP": "€ {:,.0f}",
-                        "Marge/stuk": "€ {:,.2f}",
-                        "Marge %": "{:.1f}%",
-                        "Winst/jr": "€ {:,.0f}",
-                        "ROI/jr %": "{:.1f}%",
-                        "Inv. (€)": "€ {:,.0f}",
-                        "Waarde": "{:,.1f}",
-                        "Waarde/€": "{:.4f}",
-                        "Cls_score": "{:.1f}",
-                    })
-                    .map(_kleur_sel, subset=["In selectie"]),
+                _tbl_b.style.format({
+                    'IP (€)':       '€ {:,.2f}',
+                    'VP (€)':       '€ {:,.2f}',
+                    'Marge/stuk':   '€ {:,.2f}',
+                    'Marge %':      '{:.1f}%',
+                    'λ/jr':         '{:.4f}',
+                    'Omzet/jr (€)': '€ {:,.0f}',
+                    'Winst/jr (€)': '€ {:+,.0f}',
+                    'Inv. (€)':     '€ {:,.0f}',
+                    'ROI/jr %':     '{:.1f}%',
+                    'Cls_score':    '{:.1f}',
+                }).map(_kleur_sel2, subset=['In selectie']),
                 use_container_width=True,
-                height=520,
+                height=420,
             )
+
+            # ── Totaalregels (kosten-stijl) ──
+            _in_tbl  = _tbl_b[_tbl_b['In selectie'] == '✓']
+            st.markdown(
+                f"**Totaal selectie:** S\\* = {int(_in_tbl['S*'].sum())}  |  "
+                f"Investering = € {_in_tbl['Inv. (€)'].sum():,.0f}  |  "
+                f"Omzet/jr = € {_in_tbl['Omzet/jr (€)'].sum():,.0f}  |  "
+                f"Winst/jr = € {_in_tbl['Winst/jr (€)'].sum():+,.0f}  |  "
+                f"Gem. marge = {_marge_gem:.1f}%  |  "
+                f"ROI/jr = {_roi_port:.1f}%"
+            )
+            st.markdown(
+                f"**Totaal portfolio:** S\\* = {int(_tbl_b['S*'].sum())}  |  "
+                f"Investering = € {_tbl_b['Inv. (€)'].sum():,.0f}  |  "
+                f"Omzet/jr = € {_tbl_b['Omzet/jr (€)'].sum():,.0f}  |  "
+                f"Winst/jr = € {_tbl_b['Winst/jr (€)'].sum():+,.0f}"
+            )
+
+            # ── Greedy-rangschikking (waarde-criterium) ──
+            with st.expander("📋 Greedy-rangschikking (waarde-criterium)"):
+                _show = _df_sorted[
+                    ['Descr', 'LT_dagen', _sl_keuze, 'Inv', 'Waarde',
+                     'Ratio', 'Cls_score', 'In_selectie']
+                ].copy()
+                _show.columns = ['Omschrijving', 'LT(d)', f'S* @ {_sl_keuze}',
+                                 'Inv. (€)', 'Waarde', 'Waarde/€',
+                                 'Cls_score', 'In selectie']
+
+                def _kleur_sel(v):
+                    return ("background-color: #c8e6c9" if v
+                            else "background-color: #ffcdd2")
+
+                st.dataframe(
+                    _show.style.format({
+                        'Inv. (€)':  '€ {:,.0f}',
+                        'Waarde':    '{:,.1f}',
+                        'Waarde/€':  '{:.4f}',
+                        'Cls_score': '{:.1f}',
+                    }).map(_kleur_sel, subset=['In selectie']),
+                    use_container_width=True,
+                    height=420,
+                )
 
             # ── Curve: cumulatieve waarde vs budget ──
             with st.expander("📈 Cumulatieve waarde vs. cumulatieve investering"):
@@ -2731,13 +2782,16 @@ with tab_budget:
                 st.rerun()
 
             # ── Download ──
-            _csv_b = _show.to_csv(sep=";", decimal=",").encode("utf-8")
+            _csv_b = _tbl_b.to_csv(sep=";", decimal=",").encode("utf-8")
             st.download_button(
                 "⬇️ Download greedy-selectie (CSV)",
                 data=_csv_b,
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
+
+
 
 
 
