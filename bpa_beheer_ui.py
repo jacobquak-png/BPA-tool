@@ -2378,9 +2378,25 @@ with tab_drempel:
         _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra N nodig"].notna()].copy()
         if not _plot_d.empty:
             import matplotlib.pyplot as _plt_d
-            _fig_d, _ax_d = _plt_d.subplots(
-                figsize=(max(8, len(_plot_d) * 0.55), 5)
-            )
+
+            # Cap het aantal balken: bij honderden componenten wordt de grafiek
+            # onleesbaar én PIL gooit een DecompressionBombError zodra het
+            # gerenderde PNG > ~179 megapixels wordt. Toon de top-N met
+            # de hoogste drempel (relevante "rode" gevallen eerst).
+            _MAX_BARS = 60
+            _n_total  = len(_plot_d)
+            if _n_total > _MAX_BARS:
+                _plot_d = _plot_d.nsmallest(_MAX_BARS, "Extra N nodig")
+                st.caption(
+                    f"📊 Grafiek toont de **{_MAX_BARS}** componenten met de "
+                    f"laagste drempel (van {_n_total} totaal). Volledige lijst "
+                    f"staat in de tabel hierboven."
+                )
+
+            # Begrens figuur-breedte (max 32 inch) en zet expliciet dpi=100
+            # om gegarandeerd onder de PIL-pixellimiet te blijven.
+            _fig_w = min(max(8, len(_plot_d) * 0.55), 32)
+            _fig_d, _ax_d = _plt_d.subplots(figsize=(_fig_w, 5), dpi=100)
             _ax_d.bar(
                 range(len(_plot_d)),
                 _plot_d["Extra N nodig"].astype(int),
@@ -2855,7 +2871,6 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
-
 
 
 
