@@ -57,6 +57,10 @@ SERVICE_LEVELS = [0.980, 0.990, 0.995, 0.999]
 # Standaard aantal subscripties (globale fallback)
 DEFAULT_N_KLANTEN = 20
 
+# Default MTBF (jaren) wanneer MTBF onbekend is in zowel Excel als classificatie.
+# λ valt dan terug op n_klanten / DEFAULT_MTBF_JR i.p.v. historische orders.
+DEFAULT_MTBF_JR = 10.0
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONFIG – laden / opslaan
@@ -207,11 +211,16 @@ def laad_excel_onderdelen(excel_file=None, *, skip_hard_filter: bool = True) -> 
 
 
 def _lambda_voor_rij(row, n_klanten: int) -> float:
-    """λ = n_klanten / MTBF(jaar); fallback op historisch gebruik."""
+    """λ = n_klanten / MTBF(jaar).
+
+    Fallback: als MTBF ontbreekt of ≤ 0, gebruik DEFAULT_MTBF_JR (= 10 jr)
+    in plaats van de historische orders-berekening. Dit geeft een
+    voorspelbare λ ook voor componenten zonder MTBF-data.
+    """
     mtbf = row['MTBF']
     if pd.notna(mtbf) and mtbf > 0:
         return n_klanten / mtbf
-    return row['Totaal_orders_5jr'] / 5
+    return n_klanten / DEFAULT_MTBF_JR
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -360,16 +369,14 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
                     lt_d    = int(lt_raw)
                     lt_bron = cls_meta.get('lt_bron', 'onbekend')
 
-            # Lambda: MTBF heeft voorrang, anders Totaal_orders_5jr / 5,
-            # anders 0 (uitsluiten zou verwarrend zijn).
-            mtbf   = cls_meta.get('mtbf')
-            orders = cls_meta.get('totaal_orders_5jr')
+            # Lambda: MTBF heeft voorrang; bij ontbreken valt λ terug op
+            # n / DEFAULT_MTBF_JR (= 10 jr). Geen fallback meer op historische
+            # orders, zodat het gedrag consistent is met _lambda_voor_rij().
+            mtbf = cls_meta.get('mtbf')
             if mtbf is not None and mtbf > 0:
                 lam = n / mtbf
-            elif orders is not None:
-                lam = orders / 5
             else:
-                lam = 0.0
+                lam = n / DEFAULT_MTBF_JR
 
             lt_jr = lt_d / 365
             mu    = lam * lt_jr
@@ -756,7 +763,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-
