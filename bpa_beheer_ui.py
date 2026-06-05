@@ -2308,7 +2308,33 @@ with tab_drempel:
             height=500,
         )
 
-    
+        # ── Bar chart: Extra N nodig per component ─────────────────────────
+        _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra N nodig"].notna()].copy()
+        if not _plot_d.empty:
+            import matplotlib.pyplot as _plt_d
+            _fig_d, _ax_d = _plt_d.subplots(
+                figsize=(max(8, len(_plot_d) * 0.55), 5)
+            )
+            _ax_d.bar(
+                range(len(_plot_d)),
+                _plot_d["Extra N nodig"].astype(int),
+                color="#1976D2",
+            )
+            _ax_d.set_xticks(range(len(_plot_d)))
+            _ax_d.set_xticklabels(
+                _plot_d.index, rotation=45, ha="right", fontsize=9
+            )
+            _ax_d.set_ylabel("Extra subscripties voor S*+1", fontsize=11)
+            _ax_d.set_title(
+                f"Subscriptiedrempel per component  (SL = {_sl_d:.1%})",
+                fontsize=12,
+            )
+            _ax_d.grid(True, axis="y", alpha=0.3)
+            _fig_d.tight_layout()
+            st.pyplot(_fig_d)
+            _plt_d.close(_fig_d)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 9 – CLASSIFICATIE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2538,32 +2564,21 @@ with tab_budget:
                 f"({_budget/_totale_inv*100:.0f}% van totaal)"
             )
 
-           # ── Waarde-functie ──
+            # ── Waarde-functie ──
             _waarde_keuze = st.radio(
                 "Waarde-criterium",
-                options=[
-                    "Winst/jaar (marge × λ × N)",          # ← nieuw, default
-                    "Classificatie-score",
-                    "λ × LT × VP (uitval-impact)",
-                    "VP (verkoopprijs)",
-                ],
+                options=["Classificatie-score", "λ × LT × VP (uitval-impact)", "VP (verkoopprijs)"],
                 horizontal=True,
                 key="bud_waarde",
-                help="Greedy sorteert op Waarde/Investering. "
-                     "Winst/jaar maximaliseert directe ROI; "
-                     "classificatie-score weegt ook strategisch belang mee.",
             )
-            
+
             _df_b = _ov_df.copy()
             _df_b["Inv"] = _inv_per_comp
-            
-            if _waarde_keuze == "Winst/jaar (marge × λ × N)":
-                _marge = _df_b["VP"] - _df_b["IP"]
-                _df_b["Waarde"] = _marge * _df_b["lambda_jr"] * _df_b["n_klanten"]
-            elif _waarde_keuze == "Classificatie-score":
+
+            if _waarde_keuze == "Classificatie-score":
                 _waarde = pd.to_numeric(_df_b.get("Cls_score"), errors="coerce")
-                # Fallback voor rijen zonder cls_score: jaarlijkse winst
-                _fallback = (_df_b["VP"] - _df_b["IP"]) * _df_b["lambda_jr"] * _df_b["n_klanten"]
+                # Fallback voor rijen zonder cls_score: λ × LT × VP
+                _fallback = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
                 _df_b["Waarde"] = _waarde.fillna(_fallback)
             elif _waarde_keuze == "λ × LT × VP (uitval-impact)":
                 _df_b["Waarde"] = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
@@ -2655,8 +2670,8 @@ with tab_budget:
                     'Omzet/jr (€)':  round(float(_r['VP'] * _r['lambda_jr'] * _r['n_klanten']), 2),
                     'Winst/jr (€)':  round(float(_r['Winst_jr']), 2),
                     'Inv. (€)':      round(float(_r['Inv']), 2),
-                    'ROI/jr %':      round(float(_r['ROI_jr']), 1) if np.isfinite(_r['ROI_jr']) else None,
-                    'Cls_score':     round(float(_r['Cls_score']), 1) if pd.notna(_r.get('Cls_score')) else None,
+                    'ROI/jr %':      round(float(_r['ROI_jr']), 1) if np.isfinite(_r['ROI_jr']) else np.nan,
+                    'Cls_score':     round(float(_r['Cls_score']), 1) if pd.notna(_r.get('Cls_score')) else np.nan,
                     'In selectie':   '✓' if _r['In_selectie'] else '✗',
                 })
             _tbl_b = pd.DataFrame(_rows_b).set_index('Code')
@@ -2677,7 +2692,7 @@ with tab_budget:
                     'Inv. (€)':     '€ {:,.0f}',
                     'ROI/jr %':     '{:.1f}%',
                     'Cls_score':    '{:.1f}',
-                }).map(_kleur_sel2, subset=['In selectie']),
+                }, na_rep="—").map(_kleur_sel2, subset=['In selectie']),
                 use_container_width=True,
                 height=420,
             )
@@ -2719,7 +2734,7 @@ with tab_budget:
                         'Waarde':    '{:,.1f}',
                         'Waarde/€':  '{:.4f}',
                         'Cls_score': '{:.1f}',
-                    }).map(_kleur_sel, subset=['In selectie']),
+                    }, na_rep="—").map(_kleur_sel, subset=['In selectie']),
                     use_container_width=True,
                     height=420,
                 )
@@ -2774,6 +2789,9 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
+
+
 
 
 
