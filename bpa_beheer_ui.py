@@ -43,6 +43,58 @@ from classificatie import (
 from model import BPAOptimizationModel
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  CACHE-WRAPPERS  (sterk versnellen Streamlit-reruns)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Streamlit voert dit script opnieuw uit bij élke widget-interactie. Zonder
+# caching wordt de (grote) Excel telkens opnieuw geparsed en doorloopt
+# `bereken_overzicht` weer alle componenten. De wrappers hieronder zorgen dat
+# we alleen herrekenen als (a) een bron-bestand op disk gewijzigd is óf
+# (b) de gebruiker de config heeft aangepast. Cache wordt automatisch
+# ongeldig zodra een van die inputs verandert.
+
+def _file_mtime(path: str) -> float:
+    """Return mtime in seconds; 0.0 als bestand ontbreekt."""
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_laad_classificatie_selectie(_mtime: float) -> dict:
+    """Cached versie van laad_classificatie_selectie — keyed op bestand-mtime."""
+    return laad_classificatie_selectie()
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_bereken_overzicht(cfg_json: str, _excel_mtime: float, _selectie_mtime: float) -> pd.DataFrame:
+    """Cached versie van bereken_overzicht — keyed op JSON-config + bestand-mtimes."""
+    return bereken_overzicht(json.loads(cfg_json))
+
+
+def get_classificatie_info() -> dict:
+    """Lees bpa_selectie.json (cached). Auto-invalideert bij file-update."""
+    return _cached_laad_classificatie_selectie(_file_mtime(SELECTIE_PATH))
+
+
+def get_overzicht_df(cfg: dict) -> pd.DataFrame:
+    """Bereken het overzicht (cached). Auto-invalideert bij config- of bestand-wijziging."""
+    cfg_json = json.dumps(cfg, sort_keys=True, default=str)
+    return _cached_bereken_overzicht(
+        cfg_json,
+        _file_mtime(EXCEL_PATH),
+        _file_mtime(SELECTIE_PATH),
+    )
+
+
+def invalidate_caches() -> None:
+    """Forceer een verse Excel/JSON-read bij volgende aanroep."""
+    _cached_bereken_overzicht.clear()
+    _cached_laad_classificatie_selectie.clear()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  PAGINA-INSTELLINGEN
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -76,7 +128,7 @@ _excel_file = None  # gebruik altijd EXCEL_PATH uit de repo
 # Overzicht altijd vers berekenen bij opstarten van de sessie
 if "overzicht_df" not in st.session_state:
     with st.spinner("Excel laden en basisvoorraden berekenen…"):
-        _df = bereken_overzicht(cfg, _excel_file)
+        _df = get_overzicht_df(cfg)
     if not _df.empty:
         st.session_state.overzicht_df = _df
 
@@ -118,7 +170,7 @@ with tab_overzicht:
     )
 
     # ── Classificatie-koppeling status ────────────────────────────────────
-    _cls_info = laad_classificatie_selectie()
+    _cls_info = get_classificatie_info()
     if _cls_info:
         _lt_ov = _cls_info.get('lt_overzicht', {})
         _n_cls = len(_cls_info.get('items', {}))
@@ -136,8 +188,9 @@ with tab_overzicht:
         )
 
     if st.button("🔄 Herbereken (laadt Excel opnieuw)"):
+        invalidate_caches()
         with st.spinner("Berekenen…"):
-            df = bereken_overzicht(cfg, _excel_file)
+            df = get_overzicht_df(cfg)
         if df.empty:
             st.warning("Geen onderdelen gevonden.")
         else:
@@ -199,16 +252,29 @@ with tab_overzicht:
         # Bouw weergave-df met Δ-kolommen
         _df_disp = df.reset_index().copy()
         _delta_cols = []
-        for _sc in sl_cols:
-            _dc = f"\u0394{_sc}"
-            _delta_cols.append(_dc)
-            def _calc_delta(row, _sc=_sc):
-                _code = str(row.get('Code', ''))
-                _prev = _prev_comp.get(_code, {})
-                if _sc in _prev:
-                    return int(row[_sc]) - int(_prev[_sc])
-                return float('nan')
-            _df_disp[_dc] = _df_disp.apply(_calc_delta, axis=1)
+        # Vectoriseer: bouw één lookup-DataFrame van vorige S*-waarden per Code,
+        # zodat we per SL-kolom alleen een Series-aftrekking nodig hebben
+        # (i.p.v. .apply(axis=1) — orde van grootte sneller bij veel rijen).
+        if _prev_comp and sl_cols:
+            _prev_df_lookup = (
+                pd.DataFrame.from_dict(_prev_comp, orient="index")
+                  .reindex(columns=sl_cols)
+                  .apply(pd.to_numeric, errors="coerce")
+            )
+            _codes_str = _df_disp["Code"].astype(str)
+            for _sc in sl_cols:
+                _dc = f"\u0394{_sc}"
+                _delta_cols.append(_dc)
+                _prev_series = _codes_str.map(_prev_df_lookup[_sc])
+                _df_disp[_dc] = (
+                    pd.to_numeric(_df_disp[_sc], errors="coerce") - _prev_series
+                )
+        else:
+            # Geen vorige snapshot beschikbaar — vul Δ-kolommen met NaN
+            for _sc in sl_cols:
+                _dc = f"\u0394{_sc}"
+                _delta_cols.append(_dc)
+                _df_disp[_dc] = float("nan")
 
         def _fmt_delta(v):
             if pd.isna(v): return '\u2014'
@@ -479,7 +545,7 @@ with tab_verwijderen:
     _ov_df = st.session_state.get("overzicht_df")
     if _ov_df is None or _ov_df.empty:
         try:
-            _ov_df = bereken_overzicht(cfg, _excel_file)
+            _ov_df = get_overzicht_df(cfg)
             st.session_state["overzicht_df"] = _ov_df
         except Exception:
             _ov_df = pd.DataFrame()
@@ -2523,7 +2589,7 @@ with tab_budget:
     _ov_df = st.session_state.get("overzicht_df")
     if _ov_df is None or _ov_df.empty:
         try:
-            _ov_df = bereken_overzicht(cfg, _excel_file)
+            _ov_df = get_overzicht_df(cfg)
             st.session_state["overzicht_df"] = _ov_df
         except Exception as e:
             st.error(f"Kon overzicht niet laden: {e}")
@@ -2789,9 +2855,6 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
-
-
-
 
 
 
