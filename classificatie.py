@@ -219,17 +219,34 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     p = params.normaliseer_weights()
     df = df.copy()
 
-    # Score_Prijs: percentielrang + penalty onder threshold
-    df["Score_Prijs"] = df[COL_PRICE].rank(pct=True, na_option="bottom") * 100
+    # Score_Prijs: min-max schaling (geen rank-ties) + penalty onder threshold
+    _price_min = df[COL_PRICE].min()
+    _price_max = df[COL_PRICE].max()
+    if _price_max > _price_min:
+        df["Score_Prijs"] = ((df[COL_PRICE].fillna(_price_min) - _price_min) / (_price_max - _price_min)) * 100
+    else:
+        df["Score_Prijs"] = 100.0
     below = df[COL_PRICE].fillna(0) < p.price_penalty_threshold
     df.loc[below, "Score_Prijs"] *= p.price_penalty_factor
 
-    # Score_Locaties: meer = beter
-    df["Score_Locaties"] = df[COL_LOCATIONS].rank(pct=True, na_option="bottom") * 100
+    # Score_Locaties: min-max schaling, meer = beter
+    _loc_min = df[COL_LOCATIONS].min()
+    _loc_max = df[COL_LOCATIONS].max()
+    if _loc_max > _loc_min:
+        df["Score_Locaties"] = ((df[COL_LOCATIONS] - _loc_min) / (_loc_max - _loc_min)) * 100
+    else:
+        df["Score_Locaties"] = 100.0
 
-    # Score_Orders: minder = beter, niet-lineair
-    rank_pct_orders = df[COL_ORDERS].rank(pct=True, ascending=False, na_option="bottom")
-    df["Score_Orders"] = (rank_pct_orders ** p.orders_power) * 100
+    # Score_Orders: min-max schaling met vaste floor=1.0, minder = beter, niet-lineair
+    # Alle items met orders <= 1 krijgen altijd score 100 (echte slow movers).
+    _orders_floor = 1.0
+    _orders_clipped = df[COL_ORDERS].clip(lower=_orders_floor)
+    _orders_max = _orders_clipped.max()
+    if _orders_max > _orders_floor:
+        _scaled_orders = ((_orders_max - _orders_clipped) / (_orders_max - _orders_floor)).fillna(0.0)
+    else:
+        _scaled_orders = pd.Series(1.0, index=df.index)
+    df["Score_Orders"] = (_scaled_orders ** p.orders_power) * 100
 
     df["Gewogen_Score"] = (
         df["Score_Prijs"]    * p.weight_prijs
