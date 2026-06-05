@@ -219,31 +219,33 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     p = params.normaliseer_weights()
     df = df.copy()
 
-    # Score_Prijs: min-max schaling (geen rank-ties) + penalty onder threshold
-    _price_min = df[COL_PRICE].min()
-    _price_max = df[COL_PRICE].max()
-    if _price_max > _price_min:
-        df["Score_Prijs"] = ((df[COL_PRICE].fillna(_price_min) - _price_min) / (_price_max - _price_min)) * 100
+    # Score_Prijs: log + min-max (outlier-robust) + penalty onder threshold
+    _price_log = np.log1p(df[COL_PRICE].clip(lower=0).fillna(0))
+    _p_min, _p_max = _price_log.min(), _price_log.max()
+    if _p_max > _p_min:
+        df["Score_Prijs"] = ((_price_log - _p_min) / (_p_max - _p_min)) * 100
     else:
         df["Score_Prijs"] = 100.0
     below = df[COL_PRICE].fillna(0) < p.price_penalty_threshold
     df.loc[below, "Score_Prijs"] *= p.price_penalty_factor
 
-    # Score_Locaties: min-max schaling, meer = beter
-    _loc_min = df[COL_LOCATIONS].min()
-    _loc_max = df[COL_LOCATIONS].max()
-    if _loc_max > _loc_min:
-        df["Score_Locaties"] = ((df[COL_LOCATIONS] - _loc_min) / (_loc_max - _loc_min)) * 100
+    # Score_Locaties: log + min-max (outlier-robust), meer = beter
+    _loc_log = np.log1p(df[COL_LOCATIONS].clip(lower=0).fillna(0))
+    _l_min, _l_max = _loc_log.min(), _loc_log.max()
+    if _l_max > _l_min:
+        df["Score_Locaties"] = ((_loc_log - _l_min) / (_l_max - _l_min)) * 100
     else:
         df["Score_Locaties"] = 100.0
 
-    # Score_Orders: min-max schaling met vaste floor=1.0, minder = beter, niet-lineair
-    # Alle items met orders <= 1 krijgen altijd score 100 (echte slow movers).
+    # Score_Orders: log + inverse min-max met vaste floor=1.0, niet-lineair
+    # Alle items met orders <= 1 krijgen score 100 (echte slow movers).
     _orders_floor = 1.0
     _orders_clipped = df[COL_ORDERS].clip(lower=_orders_floor)
-    _orders_max = _orders_clipped.max()
-    if _orders_max > _orders_floor:
-        _scaled_orders = ((_orders_max - _orders_clipped) / (_orders_max - _orders_floor)).fillna(0.0)
+    _orders_log = np.log1p(_orders_clipped)
+    _of_log = np.log1p(_orders_floor)
+    _om_log = _orders_log.max()
+    if _om_log > _of_log:
+        _scaled_orders = ((_om_log - _orders_log) / (_om_log - _of_log)).fillna(0.0)
     else:
         _scaled_orders = pd.Series(1.0, index=df.index)
     df["Score_Orders"] = (_scaled_orders ** p.orders_power) * 100
