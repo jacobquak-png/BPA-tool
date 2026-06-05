@@ -135,13 +135,15 @@ if missing:
 
 # ── 2. Standaard verkoopprijs score ──────────────────────────
 # Hoge prijs = significant onderdeel → hogere score
-# Min-max schaling: duurste onderdeel krijgt altijd 100, goedkoopste altijd 0,
-# ongeacht hoeveel items dezelfde prijs hebben (geen rank-ties probleem).
+# LOG + min-max schaling: log comprimeert outliers, zodat één component
+# van €100k niet alle andere naar score ~0 drukt. Resultaat: een
+# uniformere verdeling waarin €5k een redelijke score krijgt.
 # Penalty: componenten onder PRICE_PENALTY_THRESHOLD krijgen score × PRICE_PENALTY_FACTOR
-_price_min = df[COL_PRICE].min()
-_price_max = df[COL_PRICE].max()
-if _price_max > _price_min:
-    df["Score_Prijs"] = ((df[COL_PRICE].fillna(_price_min) - _price_min) / (_price_max - _price_min)) * 100
+_price_log = np.log1p(df[COL_PRICE].clip(lower=0).fillna(0))
+_price_log_min = _price_log.min()
+_price_log_max = _price_log.max()
+if _price_log_max > _price_log_min:
+    df["Score_Prijs"] = ((_price_log - _price_log_min) / (_price_log_max - _price_log_min)) * 100
 else:
     df["Score_Prijs"] = 100.0
 below_threshold = df[COL_PRICE].fillna(0) < PRICE_PENALTY_THRESHOLD
@@ -150,26 +152,29 @@ print(f"  Prijs-penalty toegepast op {below_threshold.sum()} componenten (prijs 
 
 # ── 3. Aantal klantlocaties score (commonality) ───────────────
 # Meer locaties = betere commonality → hogere score
-# Min-max schaling: meeste locaties krijgt 100, minste locaties 0.
-_loc_min = df[COL_LOCATIONS].min()
-_loc_max = df[COL_LOCATIONS].max()
-if _loc_max > _loc_min:
-    df["Score_Locaties"] = ((df[COL_LOCATIONS] - _loc_min) / (_loc_max - _loc_min)) * 100
+# LOG + min-max schaling: voorkomt dat één component met 200 locaties
+# alle anderen wegdrukt. 5 → 25 locaties wordt nu fair beloond.
+_loc_log = np.log1p(df[COL_LOCATIONS].clip(lower=0).fillna(0))
+_loc_log_min = _loc_log.min()
+_loc_log_max = _loc_log.max()
+if _loc_log_max > _loc_log_min:
+    df["Score_Locaties"] = ((_loc_log - _loc_log_min) / (_loc_log_max - _loc_log_min)) * 100
 else:
     df["Score_Locaties"] = 100.0
 
-# ── 4. Orders per klantlocatie score (INVERSE — slow-moving, niet-lineair) ──
+# ── 4. Orders per klantlocatie score (INVERSE — slow-moving) ──
 # Minder orders = slow-moving = spare part gedrag → hogere score
-# Min-max schaling met VASTE floor op 1.0: alle onderdelen met
-# gem_orders_per_klantlocatie ≤ 1 krijgen altijd score 100 (echte slow movers).
-# Dit voorkomt dat een enkel outlier-item met orders < 1 ervoor zorgt dat
-# items met orders = 1 onder de 100 zakken.
+# LOG + inverse min-max met VASTE floor op 1.0: alle items met
+# orders ≤ 1 krijgen altijd score 100. Log comprimeert fast-mover outliers,
+# zodat 2-5 orders ook nog redelijk scoort (was bijna 0 bij pure min-max).
 # Machtsverheffing (ORDERS_POWER): fast movers zakken extra weg (niet-lineair).
 ORDERS_FLOOR = 1.0
 _orders_clipped = df[COL_ORDERS].clip(lower=ORDERS_FLOOR)
-_orders_max = _orders_clipped.max()
-if _orders_max > ORDERS_FLOOR:
-    _scaled_orders = ((_orders_max - _orders_clipped) / (_orders_max - ORDERS_FLOOR)).fillna(0.0)
+_orders_log = np.log1p(_orders_clipped)
+_orders_log_floor = np.log1p(ORDERS_FLOOR)
+_orders_log_max = _orders_log.max()
+if _orders_log_max > _orders_log_floor:
+    _scaled_orders = ((_orders_log_max - _orders_log) / (_orders_log_max - _orders_log_floor)).fillna(0.0)
 else:
     _scaled_orders = pd.Series(1.0, index=df.index)
 df["Score_Orders"] = (_scaled_orders ** ORDERS_POWER) * 100
