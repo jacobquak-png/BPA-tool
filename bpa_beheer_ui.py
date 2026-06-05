@@ -1,4 +1,3 @@
-"""
 BPA Jaarlijks Beheer Tool – Streamlit UI
 =========================================
 Start met:
@@ -2653,9 +2652,10 @@ with tab_budget:
             _df_b = _ov_df.copy()
             _df_b["Inv"]        = _inv_per_comp
             _df_b["Marge_stuk"] = _df_b["VP"] - _df_b["IP"]
-            _df_b["Winst_jr"]   = (
-                _df_b["Marge_stuk"] * _df_b["lambda_jr"] * _df_b["n_klanten"]
-            )
+            # λ in `lambda_jr` is al gedefinieerd als totale jaarvraag over
+            # alle N subscripties (zie bpa_beheer._lambda_voor_rij), dus
+            # NIET nogmaals × n_klanten.
+            _df_b["Winst_jr"]   = _df_b["Marge_stuk"] * _df_b["lambda_jr"]
 
             _waarde_keuze = st.radio(
                 "Waarde-criterium",
@@ -2713,9 +2713,10 @@ with tab_budget:
                 (_df_sorted["VP"] - _df_sorted["IP"]) / _df_sorted["VP"] * 100,
                 0.0,
             )
-            # Jaarlijkse winst = marge per stuk × verwachte afname per jaar (λ × N klanten)
+            # Jaarlijkse winst = marge per stuk × totale jaarvraag (λ bevat
+            # al alle N subscripties; niet nogmaals vermenigvuldigen met N).
             _df_sorted["Winst_jr"] = (
-                _df_sorted["Marge_stuk"] * _df_sorted["lambda_jr"] * _df_sorted["n_klanten"]
+                _df_sorted["Marge_stuk"] * _df_sorted["lambda_jr"]
             )
             # ROI per jaar = jaarlijkse winst / investering
             _df_sorted["ROI_jr"] = np.where(
@@ -2732,7 +2733,7 @@ with tab_budget:
             _waarde_tot   = float(_df_sorted["Waarde"].sum())
             _winst_geko   = float(_in["Winst_jr"].sum())
             _winst_tot    = float(_df_sorted["Winst_jr"].sum())
-            _omzet_geko   = float((_in["VP"] * _in["lambda_jr"] * _in["n_klanten"]).sum())
+            _omzet_geko   = float((_in["VP"] * _in["lambda_jr"]).sum())
             _marge_gem    = (_winst_geko / _omzet_geko * 100) if _omzet_geko > 0 else 0.0
             _roi_port     = (_winst_geko / _inv_gekozen * 100) if _inv_gekozen > 0 else 0.0
 
@@ -2769,7 +2770,7 @@ with tab_budget:
                     'Marge/stuk':    round(float(_r['Marge_stuk']), 2),
                     'Marge %':       round(float(_r['Marge_pct']), 1),
                     'λ/jr':          round(float(_r['lambda_jr']), 4),
-                    'Omzet/jr (€)':  round(float(_r['VP'] * _r['lambda_jr'] * _r['n_klanten']), 2),
+                    'Omzet/jr (€)':  round(float(_r['VP'] * _r['lambda_jr']), 2),
                     'Winst/jr (€)':  round(float(_r['Winst_jr']), 2),
                     'Inv. (€)':      round(float(_r['Inv']), 2),
                     'ROI/jr %':      round(float(_r['ROI_jr']), 1) if np.isfinite(_r['ROI_jr']) else np.nan,
@@ -2891,6 +2892,7 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
 
 
 
