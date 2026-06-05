@@ -2438,10 +2438,14 @@ with tab_classificatie:
     _cls_bron = _cls_upload if _cls_upload is not None else EXCEL_PATH
     _cls_sheet = st.text_input(
         "Sheet-naam (leeg = eerste sheet)",
-        value="",
+        value="Filtered ",
         key="cls_sheet",
-        help="Classificatie gebruikt typisch een ander tabblad dan BPA's 'Filtered '. "
-             "Laat leeg om de eerste sheet te pakken.",
+        help=("Tabblad in de Excel waar de classificatie op draait. "
+              "Standaard 'Filtered ' (= zelfde sheet als BPA-overzicht) zodat "
+              "MTBF(years) en de andere metadata correct meegenomen worden. "
+              "De eerste sheet 'Final_data' bevat slechts een placeholder-MTBF "
+              "in dagen en geeft daardoor te hoge λ-waarden voor "
+              "classificatie-only componenten."),
     ).strip() or None
 
     st.divider()
@@ -3035,6 +3039,9 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
+
+
 
 
 
