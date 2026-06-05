@@ -160,13 +160,16 @@ else:
 
 # ── 4. Orders per klantlocatie score (INVERSE — slow-moving, niet-lineair) ──
 # Minder orders = slow-moving = spare part gedrag → hogere score
-# Min-max schaling (ipv rank): alle onderdelen met orders = minimum krijgen
-# altijd score 100, ongeacht hoeveel anderen dezelfde waarde hebben.
+# Min-max schaling met VASTE floor op 1.0: alle onderdelen met
+# gem_orders_per_klantlocatie ≤ 1 krijgen altijd score 100 (echte slow movers).
+# Dit voorkomt dat een enkel outlier-item met orders < 1 ervoor zorgt dat
+# items met orders = 1 onder de 100 zakken.
 # Machtsverheffing (ORDERS_POWER): fast movers zakken extra weg (niet-lineair).
-_orders_min = df[COL_ORDERS].min()
-_orders_max = df[COL_ORDERS].max()
-if _orders_max > _orders_min:
-    _scaled_orders = ((_orders_max - df[COL_ORDERS]) / (_orders_max - _orders_min)).fillna(0.0)
+ORDERS_FLOOR = 1.0
+_orders_clipped = df[COL_ORDERS].clip(lower=ORDERS_FLOOR)
+_orders_max = _orders_clipped.max()
+if _orders_max > ORDERS_FLOOR:
+    _scaled_orders = ((_orders_max - _orders_clipped) / (_orders_max - ORDERS_FLOOR)).fillna(0.0)
 else:
     _scaled_orders = pd.Series(1.0, index=df.index)
 df["Score_Orders"] = (_scaled_orders ** ORDERS_POWER) * 100
