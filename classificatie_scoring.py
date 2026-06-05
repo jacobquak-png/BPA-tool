@@ -53,6 +53,41 @@ LT_COL_CANDIDATES = [
     "Levertijd",
     "LT_dagen",
 ]
+# Extra metadata-kolommen voor codes die NIET in de BPA-Excel (`Filtered`-sheet)
+# staan: bpa_beheer.py gebruikt deze om een synthetische rij te bouwen met
+# de juiste MTBF (→ λ = N / MTBF), VP, IP, omschrijving en historische orders.
+MTBF_COL_CANDIDATES = [
+    "MTBF(years)",
+    "MTBF (years)",
+    "MTBF_years",
+    "MTBF(jaren)",
+    "MTBF (jaren)",
+    "MTBF (dagen)",
+    "MTBF(dagen)",
+    "MTBF (days)",
+    "MTBF(days)",
+    "MTBF_days",
+    "MTBF",
+]
+IP_COL_CANDIDATES = [
+    "Inkoopprijs (standaard)",
+    "Inkoopprijs",
+    "IP",
+]
+DESCR_COL_CANDIDATES = [
+    "Omschrijving_standaard_artikelen",
+    "Omschrijving",
+    "Descr",
+]
+TOTAAL_ORDERS_COL_CANDIDATES = [
+    "Totaal_orders_5jr",
+    "Totaal orders 5jr",
+]
+N_CUST_COL_CANDIDATES = [
+    "Aantal_klantlocaties_5jr",
+    "Aantal_klantlocaties_met_orders_5jr",
+    "n_cust",
+]
 # Levertijd-waarden die als 'niet-bevestigde ERP-default' worden gezien
 LT_DEFAULT_WAARDEN = {"30", "30 dagen", "30,0", "30.0"}
 
@@ -135,6 +170,69 @@ df["Classificatie_Beslissing"] = np.where(
     "Niet opnemen"
 )
 
+# ── 7. λ_i = 1 / MTBF(jaren) ───────────────────────────────
+# Failure rate per individueel component per jaar.
+# Robuuste parser (_mtbf_naar_jaren_inline) accepteert tekst/int/float
+# en converteert 'dagen'/'days' automatisch naar jaren.
+def _find_col_inline(df_, candidates):
+    for c in candidates:
+        if c in df_.columns:
+            return c
+    return None
+
+def _mtbf_naar_jaren_inline(raw, col_name):
+    """Inline kopie van _mtbf_naar_jaren — robuust voor str/int/float."""
+    if col_name is None:
+        return None
+    try:
+        if raw is None or pd.isna(raw):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        val = float(raw)
+        unit_van_value = None
+    else:
+        s = str(raw).strip().lstrip('\x80€ ').strip()
+        if not s:
+            return None
+        s_low = s.lower()
+        unit_van_value = None
+        if "dag" in s_low or "day" in s_low:
+            unit_van_value = "dagen"
+        elif "jaar" in s_low or "jaren" in s_low or "year" in s_low:
+            unit_van_value = "jaren"
+        cleaned = "".join(ch for ch in s if ch.isdigit() or ch in ",.-")
+        if not cleaned or cleaned in ("-", ".", ","):
+            return None
+        if "," in cleaned:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        try:
+            val = float(cleaned)
+        except ValueError:
+            return None
+    if val <= 0:
+        return None
+    if unit_van_value == "dagen":
+        return val / 365.0
+    if unit_van_value == "jaren":
+        return val
+    naam = col_name.lower()
+    if "dagen" in naam or "days" in naam:
+        return val / 365.0
+    return val
+
+_mtbf_col_pre = _find_col_inline(df, MTBF_COL_CANDIDATES)
+if _mtbf_col_pre is not None:
+    _mtbf_jr_series = df[_mtbf_col_pre].apply(
+        lambda v: _mtbf_naar_jaren_inline(v, _mtbf_col_pre)
+    )
+    df["MTBF_jaren"] = _mtbf_jr_series.round(4)
+    df["Lambda_jr"]  = (1.0 / _mtbf_jr_series).round(4)
+else:
+    df["MTBF_jaren"] = np.nan
+    df["Lambda_jr"]  = np.nan
+
 # ── Harde filters (ná scoring, zodat percentielrangs op volledige dataset blijven) ──
 before = len(df)
 df = df[df[COL_ARTICLE_TYPE].astype(str).str.strip().str.lower().isin(ARTICLE_TYPE_FILTER)]
@@ -192,6 +290,26 @@ def _parse_lt_dagen(v):
     except ValueError:
         return None
 
+def _num(v):
+    """Parse numeriek (ook NL-format '€ 1.234,56'). Geeft None bij leeg/onparseerbaar."""
+    try:
+        if v is None or pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().lstrip('\x80€ ').strip()
+    if not s:
+        return None
+    if ',' in s:
+        # Dutch: punt = duizendteken, komma = decimaalteken
+        s = s.replace('.', '').replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
 def _lt_bron(v):
     """'geupdate' | 'default' | 'ontbreekt' — heuristiek o.b.v. ERP-default."""
     if pd.isna(v) or str(v).strip() == "":
@@ -200,14 +318,81 @@ def _lt_bron(v):
         return "default"
     return "geupdate"
 
-_code_col = _find_col(df, CODE_COL_CANDIDATES)
-_lt_col   = _find_col(df, LT_COL_CANDIDATES)
+def _mtbf_naar_jaren(raw, col_name):
+    """Converteer MTBF naar jaren, robuust voor diverse input-types.
+
+    Detecteert eenheid in volgorde: (1) unit-substring in de waarde
+    (``"30 dagen"``/``"5 years"``), (2) kolomnaam met ``dagen``/``days``,
+    (3) anders jaren. Accepteert int, float en strings (incl. NL-format
+    ``"10,5"``).
+    """
+    if col_name is None:
+        return None
+    try:
+        if raw is None or pd.isna(raw):
+            return None
+    except (TypeError, ValueError):
+        pass
+
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        val = float(raw)
+        unit_van_value = None
+    else:
+        s = str(raw).strip().lstrip('\x80€ ').strip()
+        if not s:
+            return None
+        s_low = s.lower()
+        unit_van_value = None
+        if "dag" in s_low or "day" in s_low:
+            unit_van_value = "dagen"
+        elif "jaar" in s_low or "jaren" in s_low or "year" in s_low:
+            unit_van_value = "jaren"
+        cleaned = "".join(ch for ch in s if ch.isdigit() or ch in ",.-")
+        if not cleaned or cleaned in ("-", ".", ","):
+            return None
+        if "," in cleaned:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        try:
+            val = float(cleaned)
+        except ValueError:
+            return None
+
+    if val <= 0:
+        return None
+
+    if unit_van_value == "dagen":
+        return val / 365.0
+    if unit_van_value == "jaren":
+        return val
+    naam = col_name.lower()
+    if "dagen" in naam or "days" in naam:
+        return val / 365.0
+    return val
+
+_code_col  = _find_col(df, CODE_COL_CANDIDATES)
+_lt_col    = _find_col(df, LT_COL_CANDIDATES)
+_mtbf_col  = _find_col(df, MTBF_COL_CANDIDATES)
+_ip_col    = _find_col(df, IP_COL_CANDIDATES)
+_vp_col    = COL_PRICE if COL_PRICE in df.columns else None
+_descr_col = _find_col(df, DESCR_COL_CANDIDATES)
+_orders_col = _find_col(df, TOTAAL_ORDERS_COL_CANDIDATES)
+_ncust_col = _find_col(df, N_CUST_COL_CANDIDATES)
 
 if _code_col is None:
     print(f"\n⚠  Geen artikelcode-kolom gevonden ({CODE_COL_CANDIDATES}). "
           f"bpa_selectie.json wordt NIET geschreven.")
 else:
     selectie_df = df[df["Classificatie_Beslissing"] == "Opnemen in lijst"].copy()
+
+    print("  Metadata-kolommen in payload:")
+    print(f"    code   = {_code_col}")
+    print(f"    LT     = {_lt_col!r}")
+    print(f"    MTBF   = {_mtbf_col!r}")
+    print(f"    VP     = {_vp_col!r}")
+    print(f"    IP     = {_ip_col!r}")
+    print(f"    descr  = {_descr_col!r}")
+    print(f"    orders = {_orders_col!r}")
+    print(f"    n_cust = {_ncust_col!r}")
 
     items = []
     n_geupdate = n_default = n_ontbreekt = 0
@@ -223,6 +408,23 @@ else:
             "lt_dagen":  _parse_lt_dagen(lt_raw) if _lt_col else None,
             "lt_bron":   bron,
             "abc":       str(row.get(COL_ABC, "")),
+            # Metadata waarmee bpa_beheer een synthetische rij kan bouwen
+            # voor codes die NIET in de BPA-Excel (`Filtered`-sheet) staan.
+            # Zo krijgen die ook λ = N / MTBF in plaats van de fallback N/10.
+            "descr":             (str(row[_descr_col])[:80]
+                                   if _descr_col and pd.notna(row.get(_descr_col)) else ""),
+            "ip":                _num(row.get(_ip_col)) if _ip_col else None,
+            "vp":                _num(row.get(_vp_col)) if _vp_col else None,
+            # MTBF altijd in JAREN opgeslagen; bron-kolom 'MTBF (dagen)'
+            # wordt automatisch door 365 gedeeld door _mtbf_naar_jaren.
+            "mtbf":              _mtbf_naar_jaren(row.get(_mtbf_col), _mtbf_col),
+            "totaal_orders_5jr": _num(row.get(_orders_col)) if _orders_col else None,
+            "n_cust":            _num(row.get(_ncust_col)) if _ncust_col else None,
+            # λ_jr = N_locaties / MTBF(jaren); float of None
+            "lambda_jr":         (float(row["Lambda_jr"])
+                                   if "Lambda_jr" in row.index
+                                      and pd.notna(row["Lambda_jr"])
+                                   else None),
         })
 
     payload = {
