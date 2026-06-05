@@ -1,3 +1,4 @@
+"""
 BPA Jaarlijks Beheer Tool – Streamlit UI
 =========================================
 Start met:
