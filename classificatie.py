@@ -151,12 +151,11 @@ def _lt_bron(v, defaults: Iterable[str]) -> str:
 
 
 def _mtbf_naar_jaren(raw, col_name: str | None) -> float | None:
-    """Converteer MTBF-waarde naar jaren, robuust voor diverse input-types.
+    """Parseer MTBF-waarde als jaren, robuust voor diverse input-types.
 
-    Eenheid-detectie (in volgorde):
-      1. Unit in de waarde zelf (bv. ``"30 dagen"`` / ``"5 years"``)
-      2. Unit in de kolomnaam (``...(dagen)`` / ``...(days)``)
-      3. Anders: jaren (geen conversie)
+    MTBF is altijd in jaren. Een kolomnaam of waarde die 'dagen'/'days'
+    bevat wijst op een fout in de brondata — de numerieke waarde wordt
+    ongewijzigd als jaren teruggegeven.
 
     Accepteert int, float, en strings (incl. NL-format ``"10,5"`` of
     ``"€ 1.234,56"``-achtige notatie). Geeft ``None`` bij leeg/onparseerbaar.
@@ -202,14 +201,8 @@ def _mtbf_naar_jaren(raw, col_name: str | None) -> float | None:
     if val <= 0:
         return None
 
-    # 4) Bepaal eenheid — waarde wint van kolomnaam
-    if unit_van_value == "dagen":
-        return val / 365.0
-    if unit_van_value == "jaren":
-        return val
-    naam = col_name.lower()
-    if "dagen" in naam or "days" in naam:
-        return val / 365.0
+    # MTBF is altijd in jaren; dag-indicaties in waarde of kolomnaam zijn
+    # brondata-fouten — de waarde wordt ongewijzigd als jaren teruggegeven.
     return val
 
 
