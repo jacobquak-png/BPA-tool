@@ -135,15 +135,28 @@ if missing:
 
 # ── 2. Standaard verkoopprijs score ──────────────────────────
 # Hoge prijs = significant onderdeel → hogere score
+# Min-max schaling: duurste onderdeel krijgt altijd 100, goedkoopste altijd 0,
+# ongeacht hoeveel items dezelfde prijs hebben (geen rank-ties probleem).
 # Penalty: componenten onder PRICE_PENALTY_THRESHOLD krijgen score × PRICE_PENALTY_FACTOR
-df["Score_Prijs"] = df[COL_PRICE].rank(pct=True, na_option="bottom") * 100
+_price_min = df[COL_PRICE].min()
+_price_max = df[COL_PRICE].max()
+if _price_max > _price_min:
+    df["Score_Prijs"] = ((df[COL_PRICE].fillna(_price_min) - _price_min) / (_price_max - _price_min)) * 100
+else:
+    df["Score_Prijs"] = 100.0
 below_threshold = df[COL_PRICE].fillna(0) < PRICE_PENALTY_THRESHOLD
 df.loc[below_threshold, "Score_Prijs"] *= PRICE_PENALTY_FACTOR
 print(f"  Prijs-penalty toegepast op {below_threshold.sum()} componenten (prijs < €{PRICE_PENALTY_THRESHOLD:,})")
 
 # ── 3. Aantal klantlocaties score (commonality) ───────────────
 # Meer locaties = betere commonality → hogere score
-df["Score_Locaties"] = df[COL_LOCATIONS].rank(pct=True, na_option="bottom") * 100
+# Min-max schaling: meeste locaties krijgt 100, minste locaties 0.
+_loc_min = df[COL_LOCATIONS].min()
+_loc_max = df[COL_LOCATIONS].max()
+if _loc_max > _loc_min:
+    df["Score_Locaties"] = ((df[COL_LOCATIONS] - _loc_min) / (_loc_max - _loc_min)) * 100
+else:
+    df["Score_Locaties"] = 100.0
 
 # ── 4. Orders per klantlocatie score (INVERSE — slow-moving, niet-lineair) ──
 # Minder orders = slow-moving = spare part gedrag → hogere score
