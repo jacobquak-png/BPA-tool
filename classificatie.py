@@ -51,6 +51,15 @@ IP_COL_CANDIDATES = [
 ]
 MTBF_COL_CANDIDATES = [
     "MTBF(years)",
+    "MTBF (years)",
+    "MTBF_years",
+    "MTBF(jaren)",
+    "MTBF (jaren)",
+    "MTBF (dagen)",
+    "MTBF(dagen)",
+    "MTBF (days)",
+    "MTBF(days)",
+    "MTBF_days",
     "MTBF",
 ]
 TOTAAL_ORDERS_COL_CANDIDATES = [
@@ -141,6 +150,69 @@ def _lt_bron(v, defaults: Iterable[str]) -> str:
     return "geupdate"
 
 
+def _mtbf_naar_jaren(raw, col_name: str | None) -> float | None:
+    """Converteer MTBF-waarde naar jaren, robuust voor diverse input-types.
+
+    Eenheid-detectie (in volgorde):
+      1. Unit in de waarde zelf (bv. ``"30 dagen"`` / ``"5 years"``)
+      2. Unit in de kolomnaam (``...(dagen)`` / ``...(days)``)
+      3. Anders: jaren (geen conversie)
+
+    Accepteert int, float, en strings (incl. NL-format ``"10,5"`` of
+    ``"€ 1.234,56"``-achtige notatie). Geeft ``None`` bij leeg/onparseerbaar.
+    """
+    if col_name is None:
+        return None
+    # 1) None / NaN check (pd.isna faalt op str-arrays bij list-achtige input,
+    #    daarom in try/except)
+    try:
+        if raw is None or pd.isna(raw):
+            return None
+    except (TypeError, ValueError):
+        pass
+
+    # 2) Numeriek (int/float/bool/Decimal) — direct casten
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        val = float(raw)
+        unit_van_value = None
+    else:
+        # 3) String-pad: strip whitespace, currency-prefix, parse NL-format,
+        #    detecteer unit in de string zelf.
+        s = str(raw).strip().lstrip('\x80€ ').strip()
+        if not s:
+            return None
+        s_low = s.lower()
+        unit_van_value = None
+        if "dag" in s_low or "day" in s_low:
+            unit_van_value = "dagen"
+        elif "jaar" in s_low or "jaren" in s_low or "year" in s_low:
+            unit_van_value = "jaren"
+        # Houd alleen cijfers + decimaaltekens over
+        cleaned = "".join(ch for ch in s if ch.isdigit() or ch in ",.-")
+        if not cleaned or cleaned in ("-", ".", ","):
+            return None
+        if "," in cleaned:
+            # NL: punt = duizendteken, komma = decimaal
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        try:
+            val = float(cleaned)
+        except ValueError:
+            return None
+
+    if val <= 0:
+        return None
+
+    # 4) Bepaal eenheid — waarde wint van kolomnaam
+    if unit_van_value == "dagen":
+        return val / 365.0
+    if unit_van_value == "jaren":
+        return val
+    naam = col_name.lower()
+    if "dagen" in naam or "days" in naam:
+        return val / 365.0
+    return val
+
+
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
@@ -180,6 +252,19 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
         "Opnemen in lijst",
         "Niet opnemen",
     )
+
+    # λ_i = 1 / MTBF(jaren) — failure rate per individueel component per jaar.
+    # MTBF wordt robuust geconverteerd via _mtbf_naar_jaren (tekst/int/float
+    # én eenheid-detectie 'dagen'/'days' worden afgevangen).
+    _mtbf_col = _find_col(df, MTBF_COL_CANDIDATES)
+    if _mtbf_col is not None:
+        _mtbf_jr = df[_mtbf_col].apply(lambda v: _mtbf_naar_jaren(v, _mtbf_col))
+        df["MTBF_jaren"] = _mtbf_jr.round(4)
+        df["Lambda_jr"]  = (1.0 / _mtbf_jr).round(4)
+    else:
+        df["MTBF_jaren"] = np.nan
+        df["Lambda_jr"]  = np.nan
+
     return df
 
 
@@ -217,11 +302,23 @@ def bouw_selectie_payload(
     sel = df_scored_filtered[df_scored_filtered["Classificatie_Beslissing"] == "Opnemen in lijst"].copy()
 
     def _num(v):
+        """Parse numeric value, ook NL-format ('€ 1.234,56') of '1.234,56'."""
         try:
             if v is None or pd.isna(v):
                 return None
-            return float(v)
         except (TypeError, ValueError):
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        s = str(v).strip().lstrip('\x80€ ').strip()
+        if not s:
+            return None
+        if ',' in s:
+            # Dutch: punt = duizendteken, komma = decimaalteken
+            s = s.replace('.', '').replace(',', '.')
+        try:
+            return float(s)
+        except ValueError:
             return None
 
     items = []
@@ -243,9 +340,16 @@ def bouw_selectie_payload(
             "descr":             (str(row[descr_col])[:80] if descr_col and pd.notna(row.get(descr_col)) else ""),
             "ip":                _num(row.get(ip_col)) if ip_col else None,
             "vp":                _num(row.get(vp_col)) if vp_col else None,
-            "mtbf":              _num(row.get(mtbf_col)) if mtbf_col else None,
+            # MTBF altijd in JAREN opgeslagen. Bij bron-kolom in dagen
+            # ("MTBF (dagen)") wordt automatisch door 365 gedeeld.
+            "mtbf":              _mtbf_naar_jaren(row.get(mtbf_col), mtbf_col),
             "totaal_orders_5jr": _num(row.get(orders_col)) if orders_col else None,
             "n_cust":            _num(row.get(ncust_col)) if ncust_col else None,
+            # λ_jr = N_locaties / MTBF(jaren); float of None
+            "lambda_jr":         (float(row["Lambda_jr"])
+                                   if "Lambda_jr" in row.index
+                                      and pd.notna(row["Lambda_jr"])
+                                   else None),
         })
 
     return {
