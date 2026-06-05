@@ -213,13 +213,8 @@ def _mtbf_naar_jaren_inline(raw, col_name):
             return None
     if val <= 0:
         return None
-    if unit_van_value == "dagen":
-        return val / 365.0
-    if unit_van_value == "jaren":
-        return val
-    naam = col_name.lower()
-    if "dagen" in naam or "days" in naam:
-        return val / 365.0
+    # MTBF is altijd in jaren; dag-indicaties in waarde of kolomnaam zijn
+    # brondata-fouten — de waarde wordt ongewijzigd als jaren teruggegeven.
     return val
 
 _mtbf_col_pre = _find_col_inline(df, MTBF_COL_CANDIDATES)
@@ -227,7 +222,7 @@ if _mtbf_col_pre is not None:
     _mtbf_jr_series = df[_mtbf_col_pre].apply(
         lambda v: _mtbf_naar_jaren_inline(v, _mtbf_col_pre)
     )
-    df["MTBF_jaren"] = _mtbf_jr_series.round(4)
+    df["MTBF_jaren"] = _mtbf_jr_series.round(4) 
     df["Lambda_jr"]  = (1.0 / _mtbf_jr_series).round(4)
 else:
     df["MTBF_jaren"] = np.nan
@@ -319,12 +314,12 @@ def _lt_bron(v):
     return "geupdate"
 
 def _mtbf_naar_jaren(raw, col_name):
-    """Converteer MTBF naar jaren, robuust voor diverse input-types.
+    """Parseer MTBF-waarde als jaren, robuust voor diverse input-types.
 
-    Detecteert eenheid in volgorde: (1) unit-substring in de waarde
-    (``"30 dagen"``/``"5 years"``), (2) kolomnaam met ``dagen``/``days``,
-    (3) anders jaren. Accepteert int, float en strings (incl. NL-format
-    ``"10,5"``).
+    MTBF is altijd in jaren. Een kolomnaam of waarde die 'dagen'/'days'
+    bevat wijst op een fout in de brondata — de numerieke waarde wordt
+    ongewijzigd als jaren gebruikt. Accepteert int, float en strings
+    (incl. NL-format ``"10,5"``).
     """
     if col_name is None:
         return None
@@ -360,13 +355,8 @@ def _mtbf_naar_jaren(raw, col_name):
     if val <= 0:
         return None
 
-    if unit_van_value == "dagen":
-        return val / 365.0
-    if unit_van_value == "jaren":
-        return val
-    naam = col_name.lower()
-    if "dagen" in naam or "days" in naam:
-        return val / 365.0
+    # MTBF is altijd in jaren; dag-indicaties in waarde of kolomnaam zijn
+    # brondata-fouten — de waarde wordt ongewijzigd als jaren teruggegeven.
     return val
 
 _code_col  = _find_col(df, CODE_COL_CANDIDATES)
@@ -415,8 +405,8 @@ else:
                                    if _descr_col and pd.notna(row.get(_descr_col)) else ""),
             "ip":                _num(row.get(_ip_col)) if _ip_col else None,
             "vp":                _num(row.get(_vp_col)) if _vp_col else None,
-            # MTBF altijd in JAREN opgeslagen; bron-kolom 'MTBF (dagen)'
-            # wordt automatisch door 365 gedeeld door _mtbf_naar_jaren.
+            # MTBF altijd in JAREN opgeslagen; eventuele 'dagen'-aanduiding
+            # in de brondata is een fout en wordt genegeerd.
             "mtbf":              _mtbf_naar_jaren(row.get(_mtbf_col), _mtbf_col),
             "totaal_orders_5jr": _num(row.get(_orders_col)) if _orders_col else None,
             "n_cust":            _num(row.get(_ncust_col)) if _ncust_col else None,
