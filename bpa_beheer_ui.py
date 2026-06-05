@@ -2308,33 +2308,7 @@ with tab_drempel:
             height=500,
         )
 
-        # ── Bar chart: Extra N nodig per component ─────────────────────────
-        _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra N nodig"].notna()].copy()
-        if not _plot_d.empty:
-            import matplotlib.pyplot as _plt_d
-            _fig_d, _ax_d = _plt_d.subplots(
-                figsize=(max(8, len(_plot_d) * 0.55), 5)
-            )
-            _ax_d.bar(
-                range(len(_plot_d)),
-                _plot_d["Extra N nodig"].astype(int),
-                color="#1976D2",
-            )
-            _ax_d.set_xticks(range(len(_plot_d)))
-            _ax_d.set_xticklabels(
-                _plot_d.index, rotation=45, ha="right", fontsize=9
-            )
-            _ax_d.set_ylabel("Extra subscripties voor S*+1", fontsize=11)
-            _ax_d.set_title(
-                f"Subscriptiedrempel per component  (SL = {_sl_d:.1%})",
-                fontsize=12,
-            )
-            _ax_d.grid(True, axis="y", alpha=0.3)
-            _fig_d.tight_layout()
-            st.pyplot(_fig_d)
-            _plt_d.close(_fig_d)
-
-
+    
 # ─────────────────────────────────────────────────────────────────────────────
 #  TAB 9 – CLASSIFICATIE
 # ─────────────────────────────────────────────────────────────────────────────
