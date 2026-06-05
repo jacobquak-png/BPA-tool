@@ -2599,8 +2599,7 @@ with tab_budget:
         "Stel een maximaal investeringsbudget in en selecteer greedy de componenten "
         "met de hoogste **waarde per euro**. Investering per component = `S* × IP` "
         "bij het gekozen service level. Standaard-criterium = **Winst/jr ÷ investering "
-        "(ROI)**: kies de componenten die per geïnvesteerde euro de meeste marge "
-        "opleveren."
+        "(ROI)**, met `Winst/jr = N·α·VP − κ_BPA·IP·S*` (identiek aan Kostenanalyse-tab)."
     )
 
     _ov_df = st.session_state.get("overzicht_df")
@@ -2641,22 +2640,66 @@ with tab_budget:
                     key="bud_max",
                 )
 
+            # ── Economische parameters (gedeeld met Kostenanalyse-tab) ──
+            # Defaults komen uit st.session_state['kosten_params'] indien de
+            # Kostenanalyse-tab al een berekening heeft gedaan; anders 15% en 20%.
+            _kp = st.session_state.get("kosten_params", {})
+            _p1, _p2 = st.columns(2)
+            with _p1:
+                _alpha_b = st.number_input(
+                    "α (abonnementstarief, %)",
+                    min_value=0.1, max_value=50.0,
+                    value=float(_kp.get("alpha", 0.15)) * 100,
+                    step=0.5, format="%.1f",
+                    key="bud_alpha",
+                    help=("Abonnementsprijs als % van VP. Standaardwaarde komt "
+                          "uit de Kostenanalyse-tab; pas hier aan om scenario's "
+                          "door te rekenen."),
+                ) / 100
+            with _p2:
+                _kappa_b = st.number_input(
+                    "κ_BPA (carrying rate, %)",
+                    min_value=0.1, max_value=100.0,
+                    value=float(_kp.get("kappa_bpa", 0.20)) * 100,
+                    step=0.5, format="%.1f",
+                    key="bud_kappa",
+                    help=("BPA-voorraadkosten per jaar als % van IP "
+                          "(financiering + opslag + obsolescence)."),
+                ) / 100
+
             st.caption(
                 f"Volledige voorraadwaarde bij {_sl_keuze}: **€ {_totale_inv:,.0f}** · "
                 f"Budget = **€ {_budget:,.0f}** "
-                f"({_budget/_totale_inv*100:.0f}% van totaal)"
+                f"({_budget/_totale_inv*100:.0f}% van totaal) · "
+                f"α = **{_alpha_b:.1%}** · κ_BPA = **{_kappa_b:.1%}**"
             )
 
-            # ── Waarde-criterium ──
-            # Bereken winst/marge eerst zodat ROI (winst ÷ investering) als
-            # standaard-criterium kan dienen.
+            # ── Economisch model (identiek aan Kostenanalyse-tab) ─────────
+            #   Omzet_jr_i = N_i · α · VP_i              (abonnementsstroom)
+            #   C_BPA_i    = κ_BPA · IP_i · S*_i         (carrying cost basisvoorraad)
+            #   Winst_jr_i = Omzet_jr_i − C_BPA_i
+            # Dit is dezelfde formule als calculate_detailed_bpa_costs() en
+            # revenue_by_part gebruikt in bouw_model_kosten(). λ speelt hier
+            # geen directe rol meer — λ zit impliciet in S* via Poisson.
             _df_b = _ov_df.copy()
+            _df_b["S_star"]     = _ov_df[_sl_keuze].astype(float)
             _df_b["Inv"]        = _inv_per_comp
             _df_b["Marge_stuk"] = _df_b["VP"] - _df_b["IP"]
-            # λ in `lambda_jr` is al gedefinieerd als totale jaarvraag over
-            # alle N subscripties (zie bpa_beheer._lambda_voor_rij), dus
-            # NIET nogmaals × n_klanten.
-            _df_b["Winst_jr"]   = _df_b["Marge_stuk"] * _df_b["lambda_jr"]
+            _df_b["Omzet_jr"]   = _df_b["n_klanten"] * _alpha_b * _df_b["VP"]
+            _df_b["C_BPA"]      = _kappa_b * _df_b["IP"] * _df_b["S_star"]
+            _df_b["Winst_jr"]   = _df_b["Omzet_jr"] - _df_b["C_BPA"]
+
+            # Waarschuwing voor structureel verliesgevende componenten
+            _n_loss = int((_df_b["Winst_jr"] < 0).sum())
+            if _n_loss > 0:
+                st.warning(
+                    f"⚠ {_n_loss} van {len(_df_b)} componenten zijn structureel "
+                    f"verliesgevend bij α = {_alpha_b:.1%} en κ_BPA = {_kappa_b:.1%} "
+                    f"(C_BPA > abonnementsomzet). Ze blijven zichtbaar in de tabel "
+                    f"maar krijgen een negatieve ROI; greedy plaatst ze onderaan en "
+                    f"selecteert ze in de regel niet — verhoog eventueel α of "
+                    f"verlaag κ_BPA om ze rendabel te maken."
+                )
 
             _waarde_keuze = st.radio(
                 "Waarde-criterium",
@@ -2707,19 +2750,14 @@ with tab_budget:
                     _df_sorted.at[_idx, "In_selectie"] = True
                     _resterend -= _kost
 
-            # ── Winst & marge per component ──
-            _df_sorted["Marge_stuk"] = _df_sorted["VP"] - _df_sorted["IP"]
-            _df_sorted["Marge_pct"]  = np.where(
-                _df_sorted["VP"] > 0,
-                (_df_sorted["VP"] - _df_sorted["IP"]) / _df_sorted["VP"] * 100,
-                0.0,
+            # ── Afgeleide marge- en ROI-kolommen ──
+            # Marge_stuk, Omzet_jr, C_BPA en Winst_jr zijn al in _df_b berekend
+            # en blijven geldig na sortering. Hier alleen de afgeleide ratio's.
+            _df_sorted["Marge_pct"] = np.where(
+                _df_sorted["Omzet_jr"] > 0,
+                _df_sorted["Winst_jr"] / _df_sorted["Omzet_jr"] * 100,
+                np.nan,
             )
-            # Jaarlijkse winst = marge per stuk × totale jaarvraag (λ bevat
-            # al alle N subscripties; niet nogmaals vermenigvuldigen met N).
-            _df_sorted["Winst_jr"] = (
-                _df_sorted["Marge_stuk"] * _df_sorted["lambda_jr"]
-            )
-            # ROI per jaar = jaarlijkse winst / investering
             _df_sorted["ROI_jr"] = np.where(
                 _df_sorted["Inv"] > 0,
                 _df_sorted["Winst_jr"] / _df_sorted["Inv"] * 100,
@@ -2734,7 +2772,8 @@ with tab_budget:
             _waarde_tot   = float(_df_sorted["Waarde"].sum())
             _winst_geko   = float(_in["Winst_jr"].sum())
             _winst_tot    = float(_df_sorted["Winst_jr"].sum())
-            _omzet_geko   = float((_in["VP"] * _in["lambda_jr"]).sum())
+            _omzet_geko   = float(_in["Omzet_jr"].sum())
+            _cbpa_geko    = float(_in["C_BPA"].sum())
             _marge_gem    = (_winst_geko / _omzet_geko * 100) if _omzet_geko > 0 else 0.0
             _roi_port     = (_winst_geko / _inv_gekozen * 100) if _inv_gekozen > 0 else 0.0
 
@@ -2748,14 +2787,17 @@ with tab_budget:
             _m4.metric("Budget-benutting",
                        f"{_inv_gekozen/_budget*100:.1f}%" if _budget > 0 else "—")
 
-            # ── Metrics rij 2: winst & marge ──
+            # ── Metrics rij 2: economie (BPA-formule) ──
             _w1, _w2, _w3, _w4 = st.columns(4)
-            _w1.metric("Winst / jaar", f"€ {_winst_geko:,.0f}",
-                       delta=f"{_winst_geko/_winst_tot*100:.1f}% v/h totaal"
-                             if _winst_tot > 0 else None)
-            _w2.metric("Omzet / jaar", f"€ {_omzet_geko:,.0f}")
-            _w3.metric("Gem. marge", f"{_marge_gem:.1f}%")
-            _w4.metric("ROI / jaar (portfolio)", f"{_roi_port:.1f}%")
+            _w1.metric("Omzet / jaar", f"€ {_omzet_geko:,.0f}",
+                       help="Σ N·α·VP over geselecteerde componenten")
+            _w2.metric("C_BPA / jaar", f"€ {_cbpa_geko:,.0f}",
+                       help="Σ κ_BPA·IP·S* over geselecteerde componenten")
+            _w3.metric("Winst / jaar", f"€ {_winst_geko:+,.0f}",
+                       delta=(f"{_winst_geko/_winst_tot*100:.1f}% v/h totaal"
+                              if _winst_tot != 0 else None))
+            _w4.metric("ROI / jaar (portfolio)", f"{_roi_port:+.1f}%",
+                       help="Winst/jaar ÷ totale investering")
 
             # ── Per-component tabel (kosten-analyse stijl) ──
             st.subheader("Winst & marge per component")
@@ -2768,14 +2810,17 @@ with tab_budget:
                     'S*':            int(_r[_sl_keuze]),
                     'IP (€)':        round(float(_r['IP']), 2),
                     'VP (€)':        round(float(_r['VP']), 2),
-                    'Marge/stuk':    round(float(_r['Marge_stuk']), 2),
-                    'Marge %':       round(float(_r['Marge_pct']), 1),
                     'λ/jr':          round(float(_r['lambda_jr']), 4),
-                    'Omzet/jr (€)':  round(float(_r['VP'] * _r['lambda_jr']), 2),
+                    'Omzet/jr (€)':  round(float(_r['Omzet_jr']), 2),
+                    'C_BPA/jr (€)':  round(float(_r['C_BPA']), 2),
                     'Winst/jr (€)':  round(float(_r['Winst_jr']), 2),
+                    'Marge %':       (round(float(_r['Marge_pct']), 1)
+                                      if pd.notna(_r['Marge_pct']) else np.nan),
                     'Inv. (€)':      round(float(_r['Inv']), 2),
-                    'ROI/jr %':      round(float(_r['ROI_jr']), 1) if np.isfinite(_r['ROI_jr']) else np.nan,
-                    'Cls_score':     round(float(_r['Cls_score']), 1) if pd.notna(_r.get('Cls_score')) else np.nan,
+                    'ROI/jr %':      (round(float(_r['ROI_jr']), 1)
+                                      if np.isfinite(_r['ROI_jr']) else np.nan),
+                    'Cls_score':     (round(float(_r['Cls_score']), 1)
+                                      if pd.notna(_r.get('Cls_score')) else np.nan),
                     'In selectie':   '✓' if _r['In_selectie'] else '✗',
                 })
             _tbl_b = pd.DataFrame(_rows_b).set_index('Code')
@@ -2786,16 +2831,16 @@ with tab_budget:
 
             st.dataframe(
                 _tbl_b.style.format({
-                    'IP (€)':       '€ {:,.2f}',
-                    'VP (€)':       '€ {:,.2f}',
-                    'Marge/stuk':   '€ {:,.2f}',
-                    'Marge %':      '{:.1f}%',
-                    'λ/jr':         '{:.4f}',
-                    'Omzet/jr (€)': '€ {:,.0f}',
-                    'Winst/jr (€)': '€ {:+,.0f}',
-                    'Inv. (€)':     '€ {:,.0f}',
-                    'ROI/jr %':     '{:.1f}%',
-                    'Cls_score':    '{:.1f}',
+                    'IP (€)':         '€ {:,.2f}',
+                    'VP (€)':         '€ {:,.2f}',
+                    'λ/jr':           '{:.4f}',
+                    'Omzet/jr (€)':   '€ {:,.0f}',
+                    'C_BPA/jr (€)':   '€ {:,.0f}',
+                    'Winst/jr (€)':   '€ {:+,.0f}',
+                    'Marge %':        '{:+.1f}%',
+                    'Inv. (€)':       '€ {:,.0f}',
+                    'ROI/jr %':       '{:+.1f}%',
+                    'Cls_score':      '{:.1f}',
                 }, na_rep="—").map(_kleur_sel2, subset=['In selectie']),
                 use_container_width=True,
                 height=420,
@@ -2807,14 +2852,15 @@ with tab_budget:
                 f"**Totaal selectie:** S\\* = {int(_in_tbl['S*'].sum())}  |  "
                 f"Investering = € {_in_tbl['Inv. (€)'].sum():,.0f}  |  "
                 f"Omzet/jr = € {_in_tbl['Omzet/jr (€)'].sum():,.0f}  |  "
+                f"C_BPA/jr = € {_in_tbl['C_BPA/jr (€)'].sum():,.0f}  |  "
                 f"Winst/jr = € {_in_tbl['Winst/jr (€)'].sum():+,.0f}  |  "
-                f"Gem. marge = {_marge_gem:.1f}%  |  "
-                f"ROI/jr = {_roi_port:.1f}%"
+                f"ROI/jr = {_roi_port:+.1f}%"
             )
             st.markdown(
                 f"**Totaal portfolio:** S\\* = {int(_tbl_b['S*'].sum())}  |  "
                 f"Investering = € {_tbl_b['Inv. (€)'].sum():,.0f}  |  "
                 f"Omzet/jr = € {_tbl_b['Omzet/jr (€)'].sum():,.0f}  |  "
+                f"C_BPA/jr = € {_tbl_b['C_BPA/jr (€)'].sum():,.0f}  |  "
                 f"Winst/jr = € {_tbl_b['Winst/jr (€)'].sum():+,.0f}"
             )
 
@@ -2989,6 +3035,9 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
+
+
 
 
 
