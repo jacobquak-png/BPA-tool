@@ -147,10 +147,16 @@ df["Score_Locaties"] = df[COL_LOCATIONS].rank(pct=True, na_option="bottom") * 10
 
 # ── 4. Orders per klantlocatie score (INVERSE — slow-moving, niet-lineair) ──
 # Minder orders = slow-moving = spare part gedrag → hogere score
-# Machtsverheffing (ORDERS_POWER): echte slow movers worden extra beloond,
-# fast movers zakken sterk weg (rank_pct=0.5 → score 25 i.p.v. 50 bij power=2)
-rank_pct_orders = df[COL_ORDERS].rank(pct=True, ascending=False, na_option="bottom")
-df["Score_Orders"] = (rank_pct_orders ** ORDERS_POWER) * 100
+# Min-max schaling (ipv rank): alle onderdelen met orders = minimum krijgen
+# altijd score 100, ongeacht hoeveel anderen dezelfde waarde hebben.
+# Machtsverheffing (ORDERS_POWER): fast movers zakken extra weg (niet-lineair).
+_orders_min = df[COL_ORDERS].min()
+_orders_max = df[COL_ORDERS].max()
+if _orders_max > _orders_min:
+    _scaled_orders = ((_orders_max - df[COL_ORDERS]) / (_orders_max - _orders_min)).fillna(0.0)
+else:
+    _scaled_orders = pd.Series(1.0, index=df.index)
+df["Score_Orders"] = (_scaled_orders ** ORDERS_POWER) * 100
 
 # ── 5. Gewogen eindscore (0–100) ──────────────────────────────
 df["Gewogen_Score"] = (
