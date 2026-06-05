@@ -2542,6 +2542,13 @@ with tab_classificatie:
             "Standaard verkoopprijs",
             "Aantal_klantlocaties_met_orders_5jr",
             "Gem_orders_per_klantlocatie_5jr",
+            # MTBF: bron-kolom (originele waarde + eenheid) + genormaliseerd in jaren
+            "MTBF(years)", "MTBF (years)", "MTBF_years",
+            "MTBF(jaren)", "MTBF (jaren)",
+            "MTBF (dagen)", "MTBF(dagen)",
+            "MTBF (days)", "MTBF(days)", "MTBF_days",
+            "MTBF",
+            "MTBF_jaren",
             "Lambda_jr",
             "Score_Prijs", "Score_Locaties", "Score_Orders",
             "Gewogen_Score", "Classificatie_Beslissing",
