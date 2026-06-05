@@ -2598,8 +2598,9 @@ with tab_budget:
     st.caption(
         "Stel een maximaal investeringsbudget in en selecteer greedy de componenten "
         "met de hoogste **waarde per euro**. Investering per component = `S* × IP` "
-        "bij het gekozen service level. Waarde = classificatie-score (fallback: "
-        "`λ × LT-jaar × VP` — verwachte uitval-impact)."
+        "bij het gekozen service level. Standaard-criterium = **Winst/jr ÷ investering "
+        "(ROI)**: kies de componenten die per geïnvesteerde euro de meeste marge "
+        "opleveren."
     )
 
     _ov_df = st.session_state.get("overzicht_df")
@@ -2646,18 +2647,37 @@ with tab_budget:
                 f"({_budget/_totale_inv*100:.0f}% van totaal)"
             )
 
-            # ── Waarde-functie ──
-            _waarde_keuze = st.radio(
-                "Waarde-criterium",
-                options=["Classificatie-score", "λ × LT × VP (uitval-impact)", "VP (verkoopprijs)"],
-                horizontal=True,
-                key="bud_waarde",
+            # ── Waarde-criterium ──
+            # Bereken winst/marge eerst zodat ROI (winst ÷ investering) als
+            # standaard-criterium kan dienen.
+            _df_b = _ov_df.copy()
+            _df_b["Inv"]        = _inv_per_comp
+            _df_b["Marge_stuk"] = _df_b["VP"] - _df_b["IP"]
+            _df_b["Winst_jr"]   = (
+                _df_b["Marge_stuk"] * _df_b["lambda_jr"] * _df_b["n_klanten"]
             )
 
-            _df_b = _ov_df.copy()
-            _df_b["Inv"] = _inv_per_comp
+            _waarde_keuze = st.radio(
+                "Waarde-criterium",
+                options=[
+                    "Winst / investering (ROI)",
+                    "Classificatie-score",
+                    "λ × LT × VP (uitval-impact)",
+                    "VP (verkoopprijs)",
+                ],
+                index=0,
+                horizontal=True,
+                key="bud_waarde",
+                help="Standaard: ROI = jaarlijkse winst per geïnvesteerde euro. "
+                     "Greedy selecteert dan de componenten die het hoogste rendement "
+                     "op het werkkapitaal opleveren.",
+            )
 
-            if _waarde_keuze == "Classificatie-score":
+            if _waarde_keuze == "Winst / investering (ROI)":
+                # Voor dit criterium is Waarde = jaarwinst, zodat
+                # Ratio = Waarde/Inv = Winst_jr/Inv = ROI/jaar.
+                _df_b["Waarde"] = _df_b["Winst_jr"]
+            elif _waarde_keuze == "Classificatie-score":
                 _waarde = pd.to_numeric(_df_b.get("Cls_score"), errors="coerce")
                 # Fallback voor rijen zonder cls_score: λ × LT × VP
                 _fallback = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
@@ -2871,6 +2891,9 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
+
+
 
 
 
