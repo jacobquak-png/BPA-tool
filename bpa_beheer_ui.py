@@ -2867,10 +2867,28 @@ with tab_budget:
             st.divider()
             st.markdown("**Selectie toepassen op model**")
             st.caption(
-                "De níét-geselecteerde componenten worden als uitgesloten toegevoegd "
-                "aan de configuratie. Handmatige componenten blijven onaangetast."
+                "**Optie 1** — voeg de niet-geselecteerde componenten toe aan de "
+                "uitsluitingslijst (handmatige componenten blijven onaangetast). "
+                "**Optie 2** — herschrijf `bpa_selectie.json` zodat de BPA-overzicht-"
+                "whitelist alleen de budget-geselecteerde componenten bevat. "
+                "Optie 2 werkt hetzelfde als de knop in de Classificatie-tab."
             )
-            if st.button("✅ Pas budget-selectie toe (sluit overige uit)", type="primary"):
+            _ba_col1, _ba_col2 = st.columns(2)
+            with _ba_col1:
+                _btn_excl = st.button(
+                    "🚫 Pas toe via uitsluitingen",
+                    key="bud_apply_excl",
+                    help="Voeg niet-geselecteerde codes toe aan uitgesloten_componenten in de config.",
+                )
+            with _ba_col2:
+                _btn_sel = st.button(
+                    "✅ Toepassen op BPA-overzicht",
+                    type="primary",
+                    key="bud_apply_selectie",
+                    help="Herschrijft bpa_selectie.json met alleen de budget-geselecteerde codes.",
+                )
+
+            if _btn_excl:
                 _uit_codes = [str(c) for c in _uit.index
                               if str(c) not in cfg.get("handmatige_componenten", {})]
                 cfg.setdefault("uitgesloten_componenten", [])
@@ -2884,6 +2902,84 @@ with tab_budget:
                     f"Tab 📊 Overzicht toont nu de budget-conforme selectie."
                 )
                 st.rerun()
+
+            if _btn_sel:
+                try:
+                    _selected_codes = {str(c) for c in _in.index}
+                    if not _selected_codes:
+                        st.warning("Geen componenten geselecteerd — selectie niet weggeschreven.")
+                    else:
+                        # 1) Probeer bestaande selectie te filteren (behoudt
+                        #    threshold/parameters/metadata van de classificatie).
+                        _existing_raw = None
+                        if os.path.exists(SELECTIE_PATH):
+                            try:
+                                with open(SELECTIE_PATH, encoding="utf-8") as _f:
+                                    _existing_raw = json.load(_f)
+                            except (json.JSONDecodeError, OSError):
+                                _existing_raw = None
+
+                        if _existing_raw and _existing_raw.get("items"):
+                            _orig_items = _existing_raw.get("items", [])
+                            _new_items = [
+                                it for it in _orig_items
+                                if str(it.get("code")) in _selected_codes
+                            ]
+                            _payload_new = dict(_existing_raw)
+                        else:
+                            # 2) Bouw minimaal payload uit het overzicht
+                            #    (geen classificatie aanwezig).
+                            _new_items = []
+                            for _code in _selected_codes:
+                                if _code not in _ov_df.index.astype(str).tolist():
+                                    continue
+                                _row = _ov_df.loc[_code] if _code in _ov_df.index else None
+                                if _row is None:
+                                    continue
+                                _new_items.append({
+                                    "code":              _code,
+                                    "score":             float(_row["Cls_score"]) if pd.notna(_row.get("Cls_score")) else 0.0,
+                                    "lt_dagen":          int(_row.get("LT_dagen", 30)),
+                                    "lt_bron":           str(_row.get("LT_bron", "onbekend")),
+                                    "abc":               "",
+                                    "descr":             str(_row.get("Descr", ""))[:80],
+                                    "ip":                float(_row.get("IP", 0.0)),
+                                    "vp":                float(_row.get("VP", 0.0)),
+                                    "mtbf":              None,
+                                    "totaal_orders_5jr": None,
+                                    "n_cust":            int(_row.get("n_klanten", 0)),
+                                })
+                            _payload_new = {
+                                "bron_excel": None,
+                                "threshold":  None,
+                                "parameters": {},
+                            }
+
+                        # Hertel lt_overzicht voor de nieuwe set
+                        _lt_ov_new = {"geupdate": 0, "default": 0, "ontbreekt": 0}
+                        for _it in _new_items:
+                            _b = _it.get("lt_bron", "onbekend")
+                            if _b in _lt_ov_new:
+                                _lt_ov_new[_b] += 1
+
+                        _payload_new["items"]        = _new_items
+                        _payload_new["n_items"]      = len(_new_items)
+                        _payload_new["lt_overzicht"] = _lt_ov_new
+                        _payload_new["gegenereerd"]  = (
+                            f"{pd.Timestamp.today()} (budget-filter)"
+                        )
+
+                        schrijf_selectie_json(_payload_new, SELECTIE_PATH)
+                        invalidate_caches()
+                        st.session_state.pop("overzicht_df", None)
+                        st.success(
+                            f"✅ {len(_new_items)} componenten opgeslagen in "
+                            f"`{SELECTIE_PATH}`. Tab 📊 Overzicht laadt nu alleen "
+                            f"de budget-geselecteerde componenten."
+                        )
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Kon selectie niet schrijven: {e}")
 
             # ── Download ──
             _csv_b = _tbl_b.to_csv(sep=";", decimal=",").encode("utf-8")
