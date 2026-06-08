@@ -2573,6 +2573,116 @@ with tab_classificatie:
             mime="text/csv",
         )
 
+        # ── Score-verdeling: 3D-visualisatie + bar charts per criterium ──
+        _score_cols = ["Score_Prijs", "Score_Locaties", "Score_Orders"]
+        if all(c in _res.columns for c in _score_cols):
+            st.divider()
+            st.markdown("### 📐 Score-verdeling per criterium")
+            st.caption(
+                "Visualiseer hoe de componenten scoren op de drie criteria. "
+                "De 3D-scatter toont de spreiding over álle criteria tegelijk; "
+                "de histogrammen tonen per criterium hoe scheef (skewed) de verdeling is."
+            )
+
+            import matplotlib.pyplot as _plt_cls
+            from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registreert 3d-projectie)
+
+            _crit_labels = {
+                "Score_Prijs":    "Prijs",
+                "Score_Locaties": "Locaties",
+                "Score_Orders":   "Orders",
+            }
+            _crit_colors = {
+                "Score_Prijs":    "#1976D2",
+                "Score_Locaties": "#388E3C",
+                "Score_Orders":   "#F57C00",
+            }
+
+            _plot_df = _res.dropna(subset=_score_cols).copy()
+            if _plot_df.empty:
+                st.info("Geen geldige scores beschikbaar voor visualisatie.")
+            else:
+                _opnemen_mask = (
+                    _plot_df["Classificatie_Beslissing"] == "Opnemen in lijst"
+                    if "Classificatie_Beslissing" in _plot_df.columns
+                    else pd.Series(True, index=_plot_df.index)
+                )
+
+                # ── 3D-scatter: alle drie de criteria tegelijk ──
+                _fig3d = _plt_cls.figure(figsize=(9, 7))
+                _ax3d = _fig3d.add_subplot(111, projection="3d")
+
+                for _mask, _kleur, _lbl in [
+                    (_opnemen_mask,  "#2E7D32", "Opnemen in lijst"),
+                    (~_opnemen_mask, "#C62828", "Niet opnemen"),
+                ]:
+                    _sub = _plot_df[_mask]
+                    if not _sub.empty:
+                        _ax3d.scatter(
+                            _sub["Score_Prijs"],
+                            _sub["Score_Locaties"],
+                            _sub["Score_Orders"],
+                            c=_kleur, label=_lbl, s=22, alpha=0.6,
+                            edgecolors="none", depthshade=True,
+                        )
+
+                _ax3d.set_xlabel("Score Prijs", fontsize=10, labelpad=8)
+                _ax3d.set_ylabel("Score Locaties", fontsize=10, labelpad=8)
+                _ax3d.set_zlabel("Score Orders", fontsize=10, labelpad=8)
+                _ax3d.set_title(
+                    f"3D score-verdeling ({len(_plot_df)} componenten)", fontsize=12,
+                )
+                _ax3d.legend(fontsize=9, loc="upper left")
+                _ax3d.view_init(elev=22, azim=-58)
+                _fig3d.tight_layout()
+                st.pyplot(_fig3d)
+                _plt_cls.close(_fig3d)
+
+                # ── Bar charts (histogrammen) per criterium ──
+                st.markdown("**Verdeling per criterium**")
+                _hist_cols = st.columns(3)
+                for _col_name, _slot in zip(_score_cols, _hist_cols):
+                    _vals = _plot_df[_col_name].astype(float)
+                    _figh, _axh = _plt_cls.subplots(figsize=(4.5, 3.2))
+                    _axh.hist(
+                        _vals, bins=20, color=_crit_colors[_col_name],
+                        edgecolor="white", alpha=0.85,
+                    )
+                    _mediaan = float(_vals.median())
+                    _gem = float(_vals.mean())
+                    _axh.axvline(_gem, color="#212121", linestyle="--",
+                                 linewidth=1.2, label=f"Gem. {_gem:.1f}")
+                    _axh.axvline(_mediaan, color="#757575", linestyle=":",
+                                 linewidth=1.2, label=f"Mediaan {_mediaan:.1f}")
+                    _axh.set_title(_crit_labels[_col_name], fontsize=11)
+                    _axh.set_xlabel("Score", fontsize=9)
+                    _axh.set_ylabel("Aantal componenten", fontsize=9)
+                    _axh.legend(fontsize=8)
+                    _axh.grid(True, axis="y", alpha=0.3)
+                    _figh.tight_layout()
+                    with _slot:
+                        st.pyplot(_figh)
+                    _plt_cls.close(_figh)
+
+                # ── Scheefheid (skewness) per criterium ──
+                _skew_data = {
+                    _crit_labels[c]: [
+                        round(float(_plot_df[c].mean()), 1),
+                        round(float(_plot_df[c].median()), 1),
+                        round(float(_plot_df[c].skew()), 2),
+                    ]
+                    for c in _score_cols
+                }
+                _skew_df = pd.DataFrame(
+                    _skew_data, index=["Gemiddelde", "Mediaan", "Scheefheid"]
+                ).T
+                st.markdown("**Scheefheid (skewness) per criterium**")
+                st.caption(
+                    "Scheefheid > 0 = rechts-scheef (veel lage scores, enkele uitschieters); "
+                    "< 0 = links-scheef; ≈ 0 = symmetrisch."
+                )
+                st.dataframe(_skew_df, use_container_width=True)
+
     # ── Apply: schrijf bpa_selectie.json + invalideer overzicht ──
     if _apply_cls and "cls_payload" in st.session_state:
         try:
