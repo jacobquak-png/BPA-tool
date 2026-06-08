@@ -2573,35 +2573,83 @@ with tab_classificatie:
             mime="text/csv",
         )
 
-        # ── Score-verdeling: 3D-visualisatie + bar charts per criterium ──
+        # ── Verdeling: 3D-visualisatie + bar charts per criterium ──
+        # Twee weergaven: (a) genormaliseerde scores (0–100/200) en
+        # (b) de daadwerkelijke ruwe componentdata (€, #locaties, #orders).
         _score_cols = ["Score_Prijs", "Score_Locaties", "Score_Orders"]
-        if all(c in _res.columns for c in _score_cols):
+        _raw_cols   = [
+            "Standaard verkoopprijs",
+            "Aantal_klantlocaties_met_orders_5jr",
+            "Gem_orders_per_klantlocatie_5jr",
+        ]
+        _has_scores = all(c in _res.columns for c in _score_cols)
+        _has_raw    = all(c in _res.columns for c in _raw_cols)
+
+        if _has_scores or _has_raw:
             st.divider()
-            st.markdown("### 📐 Score-verdeling per criterium")
+            st.markdown("### 📐 Verdeling per criterium")
             st.caption(
-                "Visualiseer hoe de componenten scoren op de drie criteria. "
+                "Visualiseer hoe de componenten zich verhouden op de drie criteria. "
                 "De 3D-scatter toont de spreiding over álle criteria tegelijk; "
                 "de histogrammen tonen per criterium hoe scheef (skewed) de verdeling is."
             )
 
             import matplotlib.pyplot as _plt_cls
+            import matplotlib.ticker as _mt_cls
             from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registreert 3d-projectie)
 
-            _crit_labels = {
-                "Score_Prijs":    "Prijs",
-                "Score_Locaties": "Locaties",
-                "Score_Orders":   "Orders",
-            }
-            _crit_colors = {
-                "Score_Prijs":    "#1976D2",
-                "Score_Locaties": "#388E3C",
-                "Score_Orders":   "#F57C00",
-            }
+            # Keuze databron: genormaliseerde scores vs ruwe componentdata.
+            _bron_opties = []
+            if _has_scores:
+                _bron_opties.append("Genormaliseerde scores")
+            if _has_raw:
+                _bron_opties.append("Ruwe componentdata")
+            _viz_bron = st.radio(
+                "Databron voor visualisatie",
+                _bron_opties,
+                horizontal=True,
+                key="cls_viz_bron",
+            )
 
-            _plot_df = _res.dropna(subset=_score_cols).copy()
-            if _plot_df.empty:
-                st.info("Geen geldige scores beschikbaar voor visualisatie.")
+            if _viz_bron == "Ruwe componentdata":
+                _viz_cols  = _raw_cols
+                _crit_meta = {
+                    _raw_cols[0]: ("Prijs (€)",      "#1976D2"),
+                    _raw_cols[1]: ("Klantlocaties",  "#388E3C"),
+                    _raw_cols[2]: ("Orders / locatie", "#F57C00"),
+                }
+                _eenheid_x = "Waarde"
             else:
+                _viz_cols  = _score_cols
+                _crit_meta = {
+                    "Score_Prijs":    ("Prijs",    "#1976D2"),
+                    "Score_Locaties": ("Locaties", "#388E3C"),
+                    "Score_Orders":   ("Orders",   "#F57C00"),
+                }
+                _eenheid_x = "Score"
+
+            # Optionele log-schaal — handig bij sterk scheve ruwe data (prijs).
+            _log_schaal = st.checkbox(
+                "Log-schaal op assen (handig bij scheve ruwe data)",
+                value=(_viz_bron == "Ruwe componentdata"),
+                key="cls_viz_log",
+            )
+
+            _plot_df = _res.copy()
+            for _c in _viz_cols:
+                _plot_df[_c] = pd.to_numeric(_plot_df[_c], errors="coerce")
+            _plot_df = _plot_df.dropna(subset=_viz_cols)
+            if _log_schaal:
+                # Log-schaal vereist strikt positieve waarden.
+                _plot_df = _plot_df[(_plot_df[_viz_cols] > 0).all(axis=1)]
+
+            if _plot_df.empty:
+                st.info("Geen geldige data beschikbaar voor visualisatie "
+                        "(controleer evt. de log-schaal-optie).")
+            else:
+                _cx, _cy, _cz = _viz_cols
+                _lx, _ly, _lz = (_crit_meta[_cx][0], _crit_meta[_cy][0], _crit_meta[_cz][0])
+
                 _opnemen_mask = (
                     _plot_df["Classificatie_Beslissing"] == "Opnemen in lijst"
                     if "Classificatie_Beslissing" in _plot_df.columns
@@ -2619,18 +2667,21 @@ with tab_classificatie:
                     _sub = _plot_df[_mask]
                     if not _sub.empty:
                         _ax3d.scatter(
-                            _sub["Score_Prijs"],
-                            _sub["Score_Locaties"],
-                            _sub["Score_Orders"],
+                            _sub[_cx], _sub[_cy], _sub[_cz],
                             c=_kleur, label=_lbl, s=22, alpha=0.6,
                             edgecolors="none", depthshade=True,
                         )
 
-                _ax3d.set_xlabel("Score Prijs", fontsize=10, labelpad=8)
-                _ax3d.set_ylabel("Score Locaties", fontsize=10, labelpad=8)
-                _ax3d.set_zlabel("Score Orders", fontsize=10, labelpad=8)
+                _ax3d.set_xlabel(_lx, fontsize=10, labelpad=8)
+                _ax3d.set_ylabel(_ly, fontsize=10, labelpad=8)
+                _ax3d.set_zlabel(_lz, fontsize=10, labelpad=8)
+                if _log_schaal:
+                    _ax3d.set_xscale("log")
+                    _ax3d.set_yscale("log")
+                    _ax3d.set_zscale("log")
                 _ax3d.set_title(
-                    f"3D score-verdeling ({len(_plot_df)} componenten)", fontsize=12,
+                    f"3D-verdeling — {_viz_bron.lower()} ({len(_plot_df)} componenten)",
+                    fontsize=12,
                 )
                 _ax3d.legend(fontsize=9, loc="upper left")
                 _ax3d.view_init(elev=22, azim=-58)
@@ -2641,21 +2692,29 @@ with tab_classificatie:
                 # ── Bar charts (histogrammen) per criterium ──
                 st.markdown("**Verdeling per criterium**")
                 _hist_cols = st.columns(3)
-                for _col_name, _slot in zip(_score_cols, _hist_cols):
+                for _col_name, _slot in zip(_viz_cols, _hist_cols):
                     _vals = _plot_df[_col_name].astype(float)
+                    _lbl, _kleur = _crit_meta[_col_name]
                     _figh, _axh = _plt_cls.subplots(figsize=(4.5, 3.2))
+                    if _log_schaal and (_vals > 0).all():
+                        _bins = np.logspace(
+                            np.log10(_vals.min()), np.log10(_vals.max()), 20
+                        )
+                        _axh.set_xscale("log")
+                    else:
+                        _bins = 20
                     _axh.hist(
-                        _vals, bins=20, color=_crit_colors[_col_name],
+                        _vals, bins=_bins, color=_kleur,
                         edgecolor="white", alpha=0.85,
                     )
                     _mediaan = float(_vals.median())
                     _gem = float(_vals.mean())
                     _axh.axvline(_gem, color="#212121", linestyle="--",
-                                 linewidth=1.2, label=f"Gem. {_gem:.1f}")
+                                 linewidth=1.2, label=f"Gem. {_gem:,.1f}")
                     _axh.axvline(_mediaan, color="#757575", linestyle=":",
-                                 linewidth=1.2, label=f"Mediaan {_mediaan:.1f}")
-                    _axh.set_title(_crit_labels[_col_name], fontsize=11)
-                    _axh.set_xlabel("Score", fontsize=9)
+                                 linewidth=1.2, label=f"Mediaan {_mediaan:,.1f}")
+                    _axh.set_title(_lbl, fontsize=11)
+                    _axh.set_xlabel(_eenheid_x, fontsize=9)
                     _axh.set_ylabel("Aantal componenten", fontsize=9)
                     _axh.legend(fontsize=8)
                     _axh.grid(True, axis="y", alpha=0.3)
@@ -2666,19 +2725,19 @@ with tab_classificatie:
 
                 # ── Scheefheid (skewness) per criterium ──
                 _skew_data = {
-                    _crit_labels[c]: [
-                        round(float(_plot_df[c].mean()), 1),
-                        round(float(_plot_df[c].median()), 1),
+                    _crit_meta[c][0]: [
+                        round(float(_plot_df[c].mean()), 2),
+                        round(float(_plot_df[c].median()), 2),
                         round(float(_plot_df[c].skew()), 2),
                     ]
-                    for c in _score_cols
+                    for c in _viz_cols
                 }
                 _skew_df = pd.DataFrame(
                     _skew_data, index=["Gemiddelde", "Mediaan", "Scheefheid"]
                 ).T
                 st.markdown("**Scheefheid (skewness) per criterium**")
                 st.caption(
-                    "Scheefheid > 0 = rechts-scheef (veel lage scores, enkele uitschieters); "
+                    "Scheefheid > 0 = rechts-scheef (veel lage waarden, enkele uitschieters); "
                     "< 0 = links-scheef; ≈ 0 = symmetrisch."
                 )
                 st.dataframe(_skew_df, use_container_width=True)
