@@ -39,6 +39,9 @@ from classificatie import (
     schrijf_selectie_json,
     controleer_kolommen,
     laad_ruwe_dataset,
+    bereken_scores,
+    pas_harde_filters_toe,
+    bouw_selectie_payload,
 )
 from model import BPAOptimizationModel
 
@@ -68,6 +71,19 @@ def _cached_laad_classificatie_selectie(_mtime: float) -> dict:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
+def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, _upload=None) -> pd.DataFrame:
+    """Cache de (trage) Excel-parse voor de classificatie.
+
+    Keyed op bestand-mtime + sheet voor de repo-Excel, of op de geüploade
+    file-inhoud (Streamlit hasht een UploadedFile op inhoud). Hierdoor wordt
+    de Excel maar één keer geparsed; daarna gaan parameter-tweaks razendsnel
+    omdat alleen de gevectoriseerde scoring opnieuw draait.
+    """
+    bron = _upload if _upload is not None else EXCEL_PATH
+    return laad_ruwe_dataset(bron, sheet_name=sheet_name)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
 def _cached_bereken_overzicht(cfg_json: str, _excel_mtime: float, _selectie_mtime: float) -> pd.DataFrame:
     """Cached versie van bereken_overzicht — keyed op JSON-config + bestand-mtimes."""
     return bereken_overzicht(json.loads(cfg_json))
@@ -92,6 +108,7 @@ def invalidate_caches() -> None:
     """Forceer een verse Excel/JSON-read bij volgende aanroep."""
     _cached_bereken_overzicht.clear()
     _cached_laad_classificatie_selectie.clear()
+    _cached_laad_ruwe_dataset.clear()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2508,8 +2525,23 @@ with tab_classificatie:
     if _run_cls:
         try:
             with st.spinner("Classificatie berekenen…"):
-                _df_filtered, _payload = voer_classificatie_uit(
-                    _cls_bron, _params, sheet_name=_cls_sheet
+                # De (trage) Excel-parse wordt gecachet, zodat alleen de
+                # gevectoriseerde scoring opnieuw draait bij parameter-tweaks.
+                if _cls_upload is not None:
+                    _df_raw = _cached_laad_ruwe_dataset(0.0, _cls_sheet, _cls_upload)
+                    _bron_excel = None
+                else:
+                    _df_raw = _cached_laad_ruwe_dataset(
+                        _file_mtime(EXCEL_PATH), _cls_sheet
+                    )
+                    _bron_excel = str(EXCEL_PATH)
+                _miss = controleer_kolommen(_df_raw)
+                if _miss:
+                    raise ValueError(f"Ontbrekende kolommen: {_miss}")
+                _df_scored   = bereken_scores(_df_raw, _params)
+                _df_filtered = pas_harde_filters_toe(_df_scored, _params)
+                _payload     = bouw_selectie_payload(
+                    _df_filtered, _params, bron_excel=_bron_excel
                 )
             st.session_state.cls_result   = _df_filtered
             st.session_state.cls_payload  = _payload
