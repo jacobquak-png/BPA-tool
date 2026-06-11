@@ -103,10 +103,14 @@ class ClassificatieParams:
 
 # ── Laden ─────────────────────────────────────────────────────────────────────
 
-def laad_ruwe_dataset(bron, sheet_name=None) -> pd.DataFrame:
+def laad_ruwe_dataset(bron, sheet_name="Filtered ") -> pd.DataFrame:
     """Lees de volledige (ongefilterde) dataset.
 
-    `bron` mag een pad of file-like object zijn. Sheet=None → eerste sheet.
+    `bron` mag een pad of file-like object zijn. Standaard wordt de
+    'Filtered '-sheet gelezen (gelijk aan bpa_beheer.SHEET_NAME); die bevat de
+    correcte levertijden en MTBF(years). De eerste sheet 'Final_data' bevat
+    placeholder-waarden (levertijd '0 dagen', MTBF in dagen) en mag hier niet
+    gebruikt worden. Geef sheet_name=None om expliciet de eerste sheet te lezen.
     """
     df = pd.read_excel(bron, sheet_name=sheet_name) if sheet_name else pd.read_excel(bron)
     return df
@@ -144,6 +148,11 @@ def _parse_lt_dagen(v):
 
 def _lt_bron(v, defaults: Iterable[str]) -> str:
     if pd.isna(v) or str(v).strip() == "":
+        return "ontbreekt"
+    # Een waarde die naar 0/None parseert (bv. "0 dagen") is geen bevestigde
+    # levertijd maar een leeg/placeholder-veld → behandel als ontbrekend,
+    # consistent met _parse_lt_dagen (die hier None teruggeeft).
+    if _parse_lt_dagen(v) is None:
         return "ontbreekt"
     if str(v).strip() in set(defaults):
         return "default"
@@ -384,7 +393,7 @@ def schrijf_selectie_json(payload: dict, path: str) -> None:
 # ── Convenience: end-to-end run ───────────────────────────────────────────────
 
 def voer_classificatie_uit(
-    bron, params: ClassificatieParams, sheet_name=None
+    bron, params: ClassificatieParams, sheet_name="Filtered "
 ) -> tuple[pd.DataFrame, dict]:
     """End-to-end: laad → score → filter → bouw payload. Schrijft NIETS."""
     df_raw = laad_ruwe_dataset(bron, sheet_name=sheet_name)
