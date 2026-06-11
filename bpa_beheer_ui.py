@@ -71,15 +71,26 @@ def _cached_laad_classificatie_selectie(_mtime: float) -> dict:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, _upload=None) -> pd.DataFrame:
+def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, upload=None) -> pd.DataFrame:
     """Cache de (trage) Excel-parse voor de classificatie.
 
     Keyed op bestand-mtime + sheet voor de repo-Excel, of op de geüploade
-    file-inhoud (Streamlit hasht een UploadedFile op inhoud). Hierdoor wordt
-    de Excel maar één keer geparsed; daarna gaan parameter-tweaks razendsnel
-    omdat alleen de gevectoriseerde scoring opnieuw draait.
+    file-inhoud (Streamlit hasht een UploadedFile op inhoud, dus de parameter
+    krijgt GEEN underscore-prefix — anders zou een tweede upload met dezelfde
+    sheet-naam onterecht de vorige cache-hit teruggeven). Hierdoor wordt de
+    Excel maar één keer geparsed per uniek bestand; daarna gaan parameter-tweaks
+    razendsnel omdat alleen de gevectoriseerde scoring opnieuw draait.
     """
-    bron = _upload if _upload is not None else EXCEL_PATH
+    if upload is not None:
+        # Reset de leespositie: een eerder gelezen/gehashte buffer kan aan het
+        # einde staan, waardoor pd.read_excel niets zou inlezen.
+        try:
+            upload.seek(0)
+        except (AttributeError, ValueError):
+            pass
+        bron = upload
+    else:
+        bron = EXCEL_PATH
     return laad_ruwe_dataset(bron, sheet_name=sheet_name)
 
 
