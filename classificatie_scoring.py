@@ -27,6 +27,11 @@ OUTPUT_FILE = os.environ.get(
     "CLS_OUTPUT_FILE",
     os.path.join(SCRIPT_DIR, "annual_use_abc_met_artikeldata_complete_europa_scored.xlsx"),
 )
+# Sheet waarop de classificatie draait. Standaard 'Filtered ' (let op de spatie),
+# gelijk aan bpa_beheer.SHEET_NAME en de UI-default. De eerste sheet 'Final_data'
+# bevat placeholder-waarden (o.a. levertijd '0 dagen' en MTBF in dagen) en geeft
+# daardoor verkeerde LT/λ. Override via env-var CLS_SHEET.
+INPUT_SHEET = os.environ.get("CLS_SHEET", "Filtered ")
 # Doelbestand voor de BPA-beheertool (whitelist + LT-metadata).
 # Standaard: naast bpa_beheer.py (= deze repo-map).
 SELECTIE_PATH = os.environ.get(
@@ -111,8 +116,8 @@ ORDERS_POWER = 2.0
 # ─────────────────────────────────────────────────────────────
 
 print("Laden van Excel-bestand...")
-df = pd.read_excel(INPUT_FILE)
-print(f"  {len(df)} rijen geladen, {len(df.columns)} kolommen")
+df = pd.read_excel(INPUT_FILE, sheet_name=INPUT_SHEET)
+print(f"  {len(df)} rijen geladen, {len(df.columns)} kolommen (sheet: {INPUT_SHEET!r})")
 
 # ── Controleer of kolommen aanwezig zijn ──────────────────────
 missing = [c for c in [COL_ABC, COL_PRICE, COL_LOCATIONS, COL_ORDERS, COL_ARTICLE_TYPE] if c not in df.columns]
@@ -335,6 +340,11 @@ def _num(v):
 def _lt_bron(v):
     """'geupdate' | 'default' | 'ontbreekt' — heuristiek o.b.v. ERP-default."""
     if pd.isna(v) or str(v).strip() == "":
+        return "ontbreekt"
+    # Een waarde die naar 0/None parseert (bv. "0 dagen") is geen bevestigde
+    # levertijd maar een leeg/placeholder-veld → behandel als ontbrekend,
+    # consistent met _parse_lt_dagen (die hier None teruggeeft).
+    if _parse_lt_dagen(v) is None:
         return "ontbreekt"
     if str(v).strip() in LT_DEFAULT_WAARDEN:
         return "default"
