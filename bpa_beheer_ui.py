@@ -3376,6 +3376,17 @@ with tab_subsim:
             if _ncur is not None:
                 _tbl["Z_huidig"] = _tbl.index.map(_ncur.to_dict())
 
+        # Integer-Z die toegepast wordt op de berekeningen in de andere tabs,
+        # op basis van de gekozen statistiek (zie radioknop hieronder).
+        _stat_kol_tbl = {"Gemiddelde": "gem_subs", "Mediaan (P50)": "p50",
+                         "P95 (conservatief)": "p95"}.get(
+                             st.session_state.get("subsim_stat", "Gemiddelde"),
+                             "gem_subs")
+        if _stat_kol_tbl in _tbl.columns:
+            _tbl["Z (toe te passen)"] = _tbl[_stat_kol_tbl].apply(
+                lambda v: max(1, int(round(float(v)))) if pd.notna(v) else None
+            )
+
         _toon = _tbl.rename(columns={
             "gem_subs":  "Gem. subs",
             "std_subs":  "Std",
@@ -3392,6 +3403,7 @@ with tab_subsim:
             _toon.style.format({
                 "Gem. subs": "{:.1f}", "Std": "{:.1f}", "P05": "{:.0f}",
                 "P50 (mediaan)": "{:.0f}", "P95": "{:.0f}",
+                "Z (toe te passen)": "{:.0f}",
             }, na_rep="—"),
             use_container_width=True,
         )
