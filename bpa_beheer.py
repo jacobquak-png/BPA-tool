@@ -558,31 +558,31 @@ def simuleer_subscripties_per_component(
     n_runs:      int   = 500,
     seed:        int   = 42,
     excel_file         = None,
-    orders_bron: str   = 'totaal',
     codes              = None,
 ) -> pd.DataFrame:
     """
     Monte Carlo simulatie van het aantal subscripties per component.
 
-    Per run en per (component, klant)-combinatie geldt: een klant kan hóógstens
-    één subscriptie voor een component nemen. Elke order van de klant is een
-    afzonderlijke kans (met kans = adoption rate) dat de klant converteert,
-    dus de kans dat een klant minstens één keer een subscriptie neemt is:
+    Per run en per (component, klant) wordt een binomiale trekking gedaan over
+    de orders van de klant voor dat component; de klant neemt een subscriptie
+    als er minstens één "succes" is (binaire uitkomst):
 
-        p_sub = 1 - (1 - adoption_rate) ** aantal_orders_van_de_klant
+        K_klant   ~ Binomiaal(n = orders van de klant voor het component,
+                              p = adoption rate van de klant)
+        X_klant   = 1 als K_klant >= 1, anders 0
 
-    Vervolgens wordt per klant een Bernoulli(p_sub) getrokken (0 of 1). De som
-    over alle klanten = het aantal subscripties voor dat component in die run
-    (maximaal het aantal klanten). Over alle runs wordt de verdeling samengevat.
+    Hierdoor neemt de kans dat een klant een subscriptie neemt toe naarmate de
+    klant meer orders voor het component heeft:
+        P(X_klant = 1) = 1 - (1 - adoption_rate) ** aantal_orders.
+    Het aantal subscripties voor een component in een run is de som van deze
+    binaire beslissingen over alle klanten (maximaal het aantal klanten). Over
+    alle runs wordt de verdeling samengevat.
 
     Parameters
     ----------
     n_runs : aantal Monte Carlo runs (stochastische trekkingen).
     seed   : seed voor reproduceerbaarheid (None = willekeurig).
     excel_file : bestandspad of file-like object; valt terug op EXCEL_PATH.
-    orders_bron : welke 'hoeveelheid orders van de klant' als n wordt gebruikt:
-        'totaal'    → Totaal_bestellingen_klant_5jr (tab bestellingen_per_klant).
-        'component' → Aantal_orders_5jr van de klant voor dit component.
     codes : optionele iterable van artikelcodes om de simulatie te beperken.
             Bij None worden standaard alleen de classificatie-componenten
             (bpa_selectie.json) gesimuleerd.
@@ -594,8 +594,7 @@ def simuleer_subscripties_per_component(
         n_klanten, n_orders, runs
     """
     runs = simuleer_subscripties_runs(
-        n_runs=n_runs, seed=seed, excel_file=excel_file,
-        orders_bron=orders_bron, codes=codes,
+        n_runs=n_runs, seed=seed, excel_file=excel_file, codes=codes,
     )
     if not runs:
         return pd.DataFrame()
@@ -604,10 +603,8 @@ def simuleer_subscripties_per_component(
     codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
     if codes_set:
         adoptie = adoptie[adoptie['Code'].isin(codes_set)]
-    n_kolom = ('Orders_klant_totaal' if orders_bron == 'totaal'
-               else 'Orders_component_klant')
     n_klanten = adoptie.groupby('Code').size()
-    n_orders  = adoptie.groupby('Code')[n_kolom].sum()
+    n_orders  = adoptie.groupby('Code')['Orders_component_klant'].sum()
 
     resultaten: dict = {}
     for code, subs_per_run in runs.items():
@@ -632,15 +629,18 @@ def simuleer_subscripties_runs(
     n_runs:      int   = 500,
     seed:        int   = 42,
     excel_file         = None,
-    orders_bron: str   = 'totaal',
     codes              = None,
 ) -> dict:
     """
     Voer de subscriptie-simulatie uit en geef de ruwe trekkingen terug.
 
-    Een klant kan hóógstens één subscriptie per component nemen. De kans dat een
-    klant converteert is p_sub = 1 - (1 - adoption_rate) ** aantal_orders; per
-    klant wordt een Bernoulli(p_sub) getrokken en gesommeerd over de klanten.
+    Per (component, klant) wordt een binomiale trekking gedaan over de orders
+    van de klant voor dat component; de klant neemt een subscriptie als er
+    minstens één succes is:
+        K_klant ~ Binomiaal(n = orders voor het component, p = adoption rate)
+        X_klant = 1 als K_klant >= 1, anders 0.
+    Het aantal subscripties per component is de som van deze binaire
+    beslissingen over de klanten (maximaal het aantal klanten).
 
     Bij codes=None wordt standaard beperkt tot de classificatie-componenten.
 
@@ -655,23 +655,19 @@ def simuleer_subscripties_runs(
     if adoptie.empty:
         return {}
 
-    if orders_bron not in ('totaal', 'component'):
-        raise ValueError("orders_bron moet 'totaal' of 'component' zijn.")
-    n_kolom = ('Orders_klant_totaal' if orders_bron == 'totaal'
-               else 'Orders_component_klant')
-
     rng = np.random.default_rng(seed)
     runs: dict = {}
     for code, grp in adoptie.groupby('Code', sort=True):
-        n_arr = grp[n_kolom].to_numpy()
+        n_arr = grp['Orders_component_klant'].to_numpy()
         p_arr = grp['Adoption_rate'].to_numpy()
-        # Kans dat een klant minstens één keer converteert over zijn orders.
-        # Elke order is een onafhankelijke kans (p = adoption rate); een klant
-        # kan echter maar één subscriptie per component nemen → binair per klant.
-        p_sub = 1.0 - np.power(1.0 - p_arr, n_arr)
-        # (n_runs, n_klanten) Bernoulli-trekkingen → som over klanten per run.
-        draws = (rng.random(size=(n_runs, p_sub.shape[0])) < p_sub[None, :])
-        runs[code] = draws.sum(axis=1)
+        # Binomiale trekking per klant over zijn orders voor dit component.
+        # Elke order is een trial met succeskans = adoption rate. De klant neemt
+        # een subscriptie (binair) als er minstens één succes is. Zo stijgt de
+        # kans op een subscriptie met het aantal orders van de klant.
+        # (n_runs, n_klanten) binomiale trekkingen → binariseren → som per run.
+        draws = rng.binomial(n_arr[None, :], p_arr[None, :],
+                             size=(n_runs, n_arr.shape[0]))
+        runs[code] = (draws >= 1).sum(axis=1)
     return runs
 
 
