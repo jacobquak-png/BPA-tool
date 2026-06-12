@@ -1708,7 +1708,7 @@ with tab_historie:
 
             # ── Top-10 duurste componenten — gesommeerde lijnen per SL ──────
             if 'sens_inv_top10' in st.session_state:
-                import matplotlib.cm as _cm_inv
+                import matplotlib as _mpl_inv
                 _top10   = st.session_state.sens_inv_top10
                 _comp_d  = st.session_state.sens_inv_comp
 
@@ -1774,7 +1774,7 @@ with tab_historie:
                 _x10_vals = [p['n'] for p in _cd10_sl.get(_top10[0]['code'], [])] if _top10 else []
 
                 if _x10_vals:
-                    _cmap10  = _cm_inv.get_cmap('tab10')
+                    _cmap10  = _mpl_inv.colormaps['tab10']
                     _fig_t10, _ax_t10 = _plt_inv.subplots(figsize=(12, 5))
 
                     for _ci, _c10 in enumerate(_top10):
@@ -2050,7 +2050,7 @@ with tab_historie:
         if 'sens_marge_tijd_top10' in st.session_state:
             import matplotlib.pyplot as _plt_mt10
             import matplotlib.ticker as _mt10_tick
-            import matplotlib.cm as _mt10_cm
+            import matplotlib as _mt10_mpl
             import numpy as _np_mt10
 
             _mt10d  = st.session_state.sens_marge_tijd_top10
@@ -2130,7 +2130,7 @@ with tab_historie:
             st.caption("Elke lijn toont de cumulatieve netto cashflow van één component afzonderlijk.")
 
             _comp_cf10 = _mt10d['comp']
-            _cmap10mt  = _mt10_cm.get_cmap('tab10')
+            _cmap10mt  = _mt10_mpl.colormaps['tab10']
 
             _fig10c, _ax10c = _plt_mt10.subplots(figsize=(12, 5))
             for _ci10, (_code10, _cdata10) in enumerate(_comp_cf10.items()):
@@ -3423,12 +3423,19 @@ with tab_subsim:
             "Kies een component", options=list(_sim_df.index), key="subsim_sel",
         )
         if _sel_code:
-            _runs_arr = simuleer_subscripties_runs(
-                n_runs=int(st.session_state.get("subsim_runs_used", 1000)),
-                seed=int(st.session_state.get("subsim_seed_used", 42)),
-                excel_file=_excel_arg(),
-                codes=[_sel_code],
-            ).get(_sel_code)
+            try:
+                _runs_arr = simuleer_subscripties_runs(
+                    n_runs=int(st.session_state.get("subsim_runs_used", 1000)),
+                    seed=int(st.session_state.get("subsim_seed_used", 42)),
+                    excel_file=_excel_arg(),
+                    codes=[_sel_code],
+                ).get(_sel_code)
+            except ValueError as _hist_err:
+                _runs_arr = None
+                st.warning(
+                    "Histogram kan niet worden gemaakt: de bron-Excel bevat geen "
+                    f"tab 'Adoptie'. Upload hierboven een Excel met die tab. ({_hist_err})"
+                )
             if _runs_arr is not None and len(_runs_arr) > 0:
                 import matplotlib.pyplot as _plt_ss
                 _fig_ss, _ax_ss = _plt_ss.subplots(figsize=(7, 3.2))
