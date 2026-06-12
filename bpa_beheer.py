@@ -518,6 +518,14 @@ def laad_adoptie_data(excel_file=None) -> pd.DataFrame:
         Code, Klant, Orders_component_klant, Orders_klant_totaal, Adoption_rate
     """
     bron = excel_file if excel_file is not None else EXCEL_PATH
+    # Reset de leespositie van een geüploade buffer: deze functie kan meerdere
+    # keren op hetzelfde file-like object worden aangeroepen (bv. runs +
+    # metadata), waardoor een eerder gelezen buffer aan het einde zou staan.
+    if excel_file is not None:
+        try:
+            bron.seek(0)
+        except (AttributeError, ValueError):
+            pass
     df = pd.read_excel(bron, sheet_name=SHEET_ADOPTIE)
     df = df.rename(columns={
         'Verkooporderregel artikel.Artikel.Artikelcode': 'Code',
