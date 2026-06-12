@@ -26,6 +26,8 @@ from bpa_beheer import (
     bouw_model_kosten,
     laad_excel_onderdelen,
     laad_classificatie_selectie,
+    simuleer_subscripties_per_component,
+    simuleer_subscripties_runs,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -164,7 +166,7 @@ if "overzicht_df" not in st.session_state:
 #  TABS
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget = st.tabs([
+tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget, tab_subsim = st.tabs([
     "📊 Overzicht",
     "✏️ Subscripties aanpassen",
     "➕ Component toevoegen",
@@ -175,6 +177,7 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
     "🔢 Subscriptiedrempel",
     "🏷️ Classificatie",
     "💼 Budget-scenario",
+    "🎲 Subscriptie-simulatie",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3259,6 +3262,200 @@ with tab_budget:
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
+
+# ─────────────────────────────────────────────────────────────────────────────────
+#  TAB 11 – SUBSCRIPTIE-SIMULATIE  (binomiale adoptie per component)
+# ─────────────────────────────────────────────────────────────────────────────────
+
+with tab_subsim:
+    st.subheader("Subscriptie-simulatie per component")
+    st.markdown(
+        "Monte Carlo simulatie van het **aantal subscripties per component** op "
+        "basis van de tabs `Adoptie` en `bestellingen_per_klant` in de Excel. "
+        "Alleen de componenten uit de **classificatie-selectie** worden "
+        "gesimuleerd.\n\n"
+        "Een klant kan **hóógstens één** subscriptie per component nemen. Elke "
+        "order van de klant is een afzonderlijke kans (met kans = adoption "
+        "rate) om te converteren, dus de kans dat een klant minstens één keer "
+        "een subscriptie neemt is:\n\n"
+        "$$p_{sub} = 1 - (1 - \\text{adoption rate})^{\\,\\text{aantal orders "
+        "van de klant}}$$\n\n"
+        "Per klant wordt dan $\\text{Bernoulli}(p_{sub})$ getrokken (0 of 1). "
+        "De som over alle klanten is het aantal subscripties voor dat component "
+        "in die run (maximaal het aantal klanten)."
+    )
+
+    _cls_codes = sorted(get_classificatie_info().get("items", {}).keys())
+    if _cls_codes:
+        st.caption(f"Classificatie-selectie actief: **{len(_cls_codes)}** componenten.")
+    else:
+        st.warning(
+            "Geen classificatie-selectie (`bpa_selectie.json`) gevonden. "
+            "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
+        )
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        _sim_runs = st.number_input(
+            "Aantal Monte Carlo runs", min_value=10, max_value=50000,
+            value=1000, step=100, key="subsim_runs",
+        )
+    with col_b:
+        _sim_seed = st.number_input(
+            "Seed (reproduceerbaar)", min_value=0, max_value=10_000_000,
+            value=42, step=1, key="subsim_seed",
+        )
+    with col_c:
+        _sim_bron_label = st.radio(
+            "n = hoeveelheid orders van de klant",
+            options=["Totaal orders van de klant", "Orders voor dit component"],
+            index=0,
+            key="subsim_bron",
+            help="'Totaal' gebruikt Totaal_bestellingen_klant_5jr "
+                 "(tab bestellingen_per_klant). 'Component' gebruikt "
+                 "Aantal_orders_5jr van de klant voor dit specifieke component.",
+        )
+    _sim_bron = "totaal" if _sim_bron_label.startswith("Totaal") else "component"
+
+    if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
+                 disabled=not _cls_codes):
+        _codes = _cls_codes if _cls_codes else None
+        try:
+            with st.spinner("Trekkingen uitvoeren…"):
+                _sim_df = simuleer_subscripties_per_component(
+                    n_runs=int(_sim_runs),
+                    seed=int(_sim_seed),
+                    orders_bron=_sim_bron,
+                    codes=_codes,
+                )
+            if _sim_df.empty:
+                st.warning(
+                    "Geen data gevonden in de Adoptie-tab voor de geselecteerde "
+                    "componenten. Controleer de Excel-tabs."
+                )
+                st.session_state.pop("subsim_df", None)
+            else:
+                st.session_state["subsim_df"]   = _sim_df
+                st.session_state["subsim_bron_used"] = _sim_bron
+                st.session_state["subsim_runs_used"] = int(_sim_runs)
+                st.session_state["subsim_seed_used"] = int(_sim_seed)
+        except Exception as e:
+            st.error(f"Simulatie mislukt: {e}")
+
+    _sim_df = st.session_state.get("subsim_df")
+    if _sim_df is not None and not _sim_df.empty:
+        st.divider()
+        st.markdown(
+            f"**Resultaat** — {len(_sim_df)} componenten · "
+            f"{st.session_state.get('subsim_runs_used')} runs · "
+            f"seed {st.session_state.get('subsim_seed_used')} · "
+            f"n-bron: `{st.session_state.get('subsim_bron_used')}`"
+        )
+
+        # Voeg omschrijving en huidige N toe vanuit het overzicht (indien aanwezig).
+        _tbl = _sim_df.copy()
+        _ov = st.session_state.get("overzicht_df")
+        if _ov is not None and not _ov.empty:
+            _descr = _ov["Descr"].astype(str) if "Descr" in _ov.columns else None
+            _ncur  = _ov["n_klanten"] if "n_klanten" in _ov.columns else None
+            if _descr is not None:
+                _tbl.insert(0, "Descr", _tbl.index.map(_descr.to_dict()).fillna(""))
+            if _ncur is not None:
+                _tbl["N_huidig"] = _tbl.index.map(_ncur.to_dict())
+
+        _toon = _tbl.rename(columns={
+            "gem_subs":  "Gem. subs",
+            "std_subs":  "Std",
+            "p05":       "P05",
+            "p50":       "P50 (mediaan)",
+            "p95":       "P95",
+            "min_subs":  "Min",
+            "max_subs":  "Max",
+            "n_klanten": "Klanten",
+            "n_orders":  "Orders (Σn)",
+            "runs":      "Runs",
+        })
+        st.dataframe(
+            _toon.style.format({
+                "Gem. subs": "{:.1f}", "Std": "{:.1f}", "P05": "{:.0f}",
+                "P50 (mediaan)": "{:.0f}", "P95": "{:.0f}",
+            }, na_rep="—"),
+            use_container_width=True,
+        )
+
+        _csv = _tbl.to_csv(sep=";", decimal=",").encode("utf-8")
+        st.download_button(
+            "⬇️ Download simulatie-resultaat (CSV)",
+            data=_csv,
+            file_name=f"subscriptie_simulatie_{date.today()}.csv",
+            mime="text/csv",
+        )
+
+        # ── Verdeling per component (histogram) ───────────────────────────
+        st.divider()
+        st.subheader("Verdeling per component")
+        _sel_code = st.selectbox(
+            "Kies een component", options=list(_sim_df.index), key="subsim_sel",
+        )
+        if _sel_code:
+            _runs_arr = simuleer_subscripties_runs(
+                n_runs=int(st.session_state.get("subsim_runs_used", 1000)),
+                seed=int(st.session_state.get("subsim_seed_used", 42)),
+                orders_bron=st.session_state.get("subsim_bron_used", "totaal"),
+                codes=[_sel_code],
+            ).get(_sel_code)
+            if _runs_arr is not None and len(_runs_arr) > 0:
+                import matplotlib.pyplot as _plt_ss
+                _fig_ss, _ax_ss = _plt_ss.subplots(figsize=(7, 3.2))
+                _bins = range(int(_runs_arr.min()), int(_runs_arr.max()) + 2)
+                _ax_ss.hist(_runs_arr, bins=_bins, color="#4C78A8",
+                            edgecolor="white", align="left")
+                _ax_ss.axvline(_runs_arr.mean(), color="#E45756", linestyle="--",
+                               label=f"gemiddelde = {_runs_arr.mean():.1f}")
+                _ax_ss.set_xlabel("Aantal subscripties")
+                _ax_ss.set_ylabel("Frequentie (runs)")
+                _ax_ss.set_title(f"Verdeling subscripties — {_sel_code}")
+                _ax_ss.legend()
+                _fig_ss.tight_layout()
+                st.pyplot(_fig_ss)
+
+        # ── Toepassen als N-overrides ─────────────────────────────────────
+        st.divider()
+        st.subheader("Resultaat toepassen op subscripties (N)")
+        st.caption(
+            "Zet het gesimuleerde aantal subscripties per component als "
+            "N-override in de configuratie. Dit vervangt het statische N "
+            "voor de geselecteerde componenten in alle berekeningen."
+        )
+        _stat_keuze = st.radio(
+            "Welke statistiek toepassen als N?",
+            options=["Gemiddelde", "Mediaan (P50)", "P95 (conservatief)"],
+            index=0, horizontal=True, key="subsim_stat",
+        )
+        _stat_kol = {"Gemiddelde": "gem_subs", "Mediaan (P50)": "p50",
+                     "P95 (conservatief)": "p95"}[_stat_keuze]
+
+        if st.button("💾 Toepassen als N-overrides", key="subsim_apply"):
+            _n_ov = dict(cfg.get("n_klanten_overrides", {}))
+            _aantal = 0
+            for _code, _row in _sim_df.iterrows():
+                _n_val = max(1, int(round(float(_row[_stat_kol]))))
+                _n_ov[str(_code)] = _n_val
+                _aantal += 1
+            cfg["n_klanten_overrides"] = _n_ov
+            if "overzicht_df" in st.session_state:
+                st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
+            sla_config_op(cfg)
+            invalidate_caches()
+            st.session_state.pop("overzicht_df", None)
+            st.success(
+                f"✅ {_aantal} N-overrides bijgewerkt op basis van "
+                f"'{_stat_keuze}'. Tab 📊 Overzicht en de kostenmodellen "
+                f"gebruiken nu de gesimuleerde subscripties."
+            )
+            st.rerun()
+    else:
+        st.info("Stel de parameters in en klik op **🎲 Simulatie draaien**.")
 
 
 
