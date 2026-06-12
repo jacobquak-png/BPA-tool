@@ -195,7 +195,7 @@ with tab_overzicht:
         _excel_mtime = "onbekend"
 
     st.write(
-        f"Standaard N: **{cfg['standaard_n_klanten']}** · "
+        f"Standaard Z: **{cfg['standaard_n_klanten']}** · "
         f"Configuratie bijgewerkt: **{cfg['aangepast']}** · "
         f"Excel gewijzigd: **{_excel_mtime}**"
     )
@@ -425,7 +425,7 @@ with tab_subscripties:
     st.subheader("Standaard aantal subscripties")
 
     nieuw_standaard = st.number_input(
-        "Standaard N (geldt voor alle componenten zonder override)",
+        "Standaard Z (geldt voor alle componenten zonder override)",
         min_value=1,
         value=cfg["standaard_n_klanten"],
         step=1,
@@ -442,7 +442,7 @@ with tab_subscripties:
 
     st.divider()
     st.subheader("Overrides per artikelcode")
-    st.caption("N = aantal subscripties, IP = inkoopprijs (€), LT = levertijd (dagen). "
+    st.caption("Z = aantal subscripties, IP = inkoopprijs (€), LT = levertijd (dagen). "
                "Laat een cel leeg om de Excel-waarde te gebruiken.")
 
     cfg.setdefault("ip_overrides", {})
@@ -472,7 +472,7 @@ with tab_subscripties:
         use_container_width=True,
         column_config={
             "Artikelcode": st.column_config.TextColumn("Artikelcode", required=True),
-            "N":           st.column_config.NumberColumn("N (subscripties)", min_value=1, step=1),
+            "N":           st.column_config.NumberColumn("Z (subscripties)", min_value=1, step=1),
             "IP (€)":      st.column_config.NumberColumn("IP (€)", min_value=0.0, format="%.2f"),
             "LT (dagen)":  st.column_config.NumberColumn("LT (dagen)", min_value=1, step=1),
         },
@@ -499,7 +499,7 @@ with tab_subscripties:
         if "overzicht_df" in st.session_state:
             st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
         sla_config_op(cfg)
-        st.toast(f"Overrides opgeslagen — {len(n_ov)} N, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="✅")
+        st.toast(f"Overrides opgeslagen — {len(n_ov)} Z, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="✅")
         st.session_state.pop("overzicht_df", None)
         st.rerun()
 
@@ -526,7 +526,7 @@ with tab_toevoegen:
                 min_value=1, value=30, step=1,
             )
             f_n = st.number_input(
-                "Aantal subscripties",
+                "Aantal subscripties (Z)",
                 min_value=1, value=cfg["standaard_n_klanten"], step=1,
             )
             f_ip = st.number_input(
@@ -647,8 +647,8 @@ with tab_config:
     st.subheader("Huidige configuratie")
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Standaard N", cfg["standaard_n_klanten"])
-    col2.metric("N-overrides", len(cfg.get("n_klanten_overrides", {})))
+    col1.metric("Standaard Z", cfg["standaard_n_klanten"])
+    col2.metric("Z-overrides", len(cfg.get("n_klanten_overrides", {})))
     col3.metric("IP/LT-overrides",
                 max(len(cfg.get("ip_overrides", {})), len(cfg.get("lt_overrides", {}))))
     col4.metric("Uitgesloten", len(cfg.get("uitgesloten_componenten", [])))
@@ -657,7 +657,7 @@ with tab_config:
     if cfg["n_klanten_overrides"]:
         st.write("**Overrides:**")
         st.dataframe(
-            pd.DataFrame([{"Code": k, "N": v}
+            pd.DataFrame([{"Code": k, "Z": v}
                           for k, v in cfg["n_klanten_overrides"].items()]),
             use_container_width=False,
         )
@@ -671,7 +671,7 @@ with tab_config:
                     "Omschrijving": v.get("descr", ""),
                     "λ/jr":        v["lambda_per_jaar"],
                     "LT(d)":       v["lt_dagen"],
-                    "N":           v.get("n_klanten", "std"),
+                    "Z":           v.get("n_klanten", "std"),
                     "IP(€)":       v.get("ip", 0),
                 }
                 for k, v in cfg["handmatige_componenten"].items()
@@ -703,7 +703,7 @@ with tab_historie:
             # Bouw DataFrame op
             rows = []
             for h in history:
-                row = {"Datum": h["datum"], "N": h["n_klanten"], "# componenten": h["n_actief"]}
+                row = {"Datum": h["datum"], "Z": h["n_klanten"], "# componenten": h["n_actief"]}
                 row.update(h.get("totalen", {}))
                 rows.append(row)
             hist_df = pd.DataFrame(rows).set_index("Datum")
@@ -897,7 +897,7 @@ with tab_historie:
 
         # ── N vs. haalbaarheid per α ──────────────────────────────────────────────
         st.divider()
-        st.subheader("N vs. haalbaarheid per α")
+        st.subheader("Z vs. haalbaarheid per α")
         st.caption(
             "Effect van het aantal subscripties op de BPA-marge en haalbaarheid "
             "voor verschillende abonnementstarieven. "
@@ -959,11 +959,11 @@ with tab_historie:
                                 color=_col_f, label=f'α = {_a_f:.0%}')
             _ax_nf.axhline(0, color='grey', linewidth=1.2, linestyle='--', label='Break-even')
             _ax_nf.axvline(_n_std, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std}')
-            _ax_nf.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                           label=f'Z huidig = {_n_std}')
+            _ax_nf.set_xlabel('Aantal subscripties (Z)', fontsize=11)
             _ax_nf.set_ylabel('Jaarlijkse BPA-marge (€)', fontsize=11)
             _ax_nf.set_title(
-                f'BPA-marge vs. N per α  '
+                f'BPA-marge vs. Z per α  '
                 f'(SL = {_nfp["sl"]:.1%}, '
                 f'κ_BPA = {_nfp["kappa_bpa"]:.0%}, '
                 f'κ_c = {_nfp["kappa_c"]:.0%})',
@@ -991,7 +991,7 @@ with tab_historie:
             _ax_hm.set_xticklabels(_N_FEAS_VALS, fontsize=9)
             _ax_hm.set_yticks(range(len(_ALPHA_FEAS)))
             _ax_hm.set_yticklabels([f'{a:.0%}' for a in _ALPHA_FEAS], fontsize=9)
-            _ax_hm.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_hm.set_xlabel('Aantal subscripties (Z)', fontsize=11)
             _ax_hm.set_ylabel('α', fontsize=12)
             _ax_hm.set_title(
                 'Haalbaarheid BPA per (N, α)  (✓ = haalbaar, ✗ = niet haalbaar)',
@@ -1015,7 +1015,7 @@ with tab_historie:
             _plt_nf.close(_fig_hm)
         # ── Haalbaarheid BPA per (N, SL) – heatmap ────────────────────────────────
         st.divider()
-        st.subheader("Haalbaarheid BPA per (N, serviceniveau)")
+        st.subheader("Haalbaarheid BPA per (Z, serviceniveau)")
         st.caption(
             "Groen = BPA is haalbaar (marge ≥ 0), rood = niet haalbaar. "
             "α wordt overgenomen uit tabblad 💰 Kostenanalyse; κ_BPA en κ_c idem."
@@ -1113,10 +1113,10 @@ with tab_historie:
             _ax_nsl.set_xticklabels([str(n) for n in _cols_nsl], fontsize=9)
             _ax_nsl.set_yticks(range(len(_rows_nsl)))
             _ax_nsl.set_yticklabels([f'{sl:.1%}' for sl in _rows_nsl], fontsize=9)
-            _ax_nsl.set_xlabel('Aantal subscripties (N)', fontsize=11)
+            _ax_nsl.set_xlabel('Aantal subscripties (Z)', fontsize=11)
             _ax_nsl.set_ylabel('Service level', fontsize=11)
             _ax_nsl.set_title(
-                f'Haalbaarheid BPA per (N, service level)  '
+                f'Haalbaarheid BPA per (Z, service level)  '
                 f'(α = {_a_lbl:.0%}, κ_BPA = {_kb_lbl:.0%})',
                 fontsize=12,
             )
@@ -1126,7 +1126,7 @@ with tab_historie:
                 _ni_std = min(range(len(_cols_nsl)),
                               key=lambda k: abs(_cols_nsl[k] - _n_std_nsl))
                 _ax_nsl.axvline(_ni_std, color='black', linewidth=2.0, linestyle=':')
-                _ax_nsl.text(_ni_std + 0.15, -0.7, f'N={_n_std_nsl}',
+                _ax_nsl.text(_ni_std + 0.15, -0.7, f'Z={_n_std_nsl}',
                              fontsize=8, color='black')
             except Exception:
                 pass
@@ -1137,9 +1137,9 @@ with tab_historie:
 
         # ── N vs. maximaal haalbaar serviceniveau ───────────────────────────────────
         st.divider()
-        st.subheader("N vs. maximaal haalbaar serviceniveau")
+        st.subheader("Z vs. maximaal haalbaar serviceniveau")
         st.caption(
-            "Voor elk aantal subscripties (N): wat is het hoogste service level waarbij het "
+            "Voor elk aantal subscripties (Z): wat is het hoogste service level waarbij het "
             "model nog haalbaar is? α, κ_BPA en κ_c worden overgenomen uit tabblad 💰 Kostenanalyse."
         )
 
@@ -1203,11 +1203,11 @@ with tab_historie:
                                         textcoords='offset points', xytext=(0, 7),
                                         ha='center', fontsize=8)
             _ax_bs.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std_sl}')
-            _ax_bs.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                           label=f'Z huidig = {_n_std_sl}')
+            _ax_bs.set_xlabel('Aantal subscripties (Z)', fontsize=11)
             _ax_bs.set_ylabel('Totale basisvoorraad S* (stuks)', fontsize=11)
             _ax_bs.set_title(
-                f'Totale S* vs. N per service level  '
+                f'Totale S* vs. Z per service level  '
                 f'(α = {_nsl_p["alpha"]:.0%})',
                 fontsize=12,
             )
@@ -1242,8 +1242,8 @@ with tab_historie:
                                         ha='center', fontsize=7)
             _ax_ds.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_ds.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std_sl}')
-            _ax_ds.set_xlabel('Aantal subscripties N (midden interval)', fontsize=11)
+                           label=f'Z huidig = {_n_std_sl}')
+            _ax_ds.set_xlabel('Aantal subscripties Z (midden interval)', fontsize=11)
             _ax_ds.set_ylabel('ΔS* / ΔN  (stuks per extra subscriptie)', fontsize=11)
             _ax_ds.set_title(
                 f'Pooling-effect: extra voorraad per extra subscriptie  '
@@ -1279,18 +1279,18 @@ with tab_historie:
             _cv_ok   = [cv for cv in _cv_arr if cv is not None]
             if _n_cv_ok:
                 _ax_cv.plot(_n_cv_ok, _cv_ok, marker='o', linewidth=2.5,
-                            color='#1976D2', label='CV(N) = 1/√(μₜₒₜ(N))')
+                            color='#1976D2', label='CV(Z) = 1/√(μₜₒₜ(Z))')
                 for _xv, _yv in zip(_n_cv_ok, _cv_ok):
                     _ax_cv.annotate(f'{_yv:.3f}', (_xv, _yv),
                                     textcoords='offset points', xytext=(0, 7),
                                     ha='center', fontsize=8)
             _ax_cv.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std_sl}')
-            _ax_cv.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                           label=f'Z huidig = {_n_std_sl}')
+            _ax_cv.set_xlabel('Aantal subscripties (Z)', fontsize=11)
             _ax_cv.set_ylabel('CV lead-time demand', fontsize=11)
             _ax_cv.set_title(
                 'Relatieve onzekerheid lead-time demand  '
-                'CV(N) = 1 / √(N · Σ λᵢ · Lᵢ / Nᵢ)',
+                'CV(Z) = 1 / √(Z · Σ λᵢ · Lᵢ / Zᵢ)',
                 fontsize=12,
             )
             _ax_cv.set_xticks(_N_FEAS_VALS)
@@ -1319,12 +1319,12 @@ with tab_historie:
                                         ha='center', fontsize=7)
             # Also plot mu/N = mu_per_sub as reference (pooling limit)
             _ax_sp.axhline(_mu_per_sub, color='grey', linewidth=1.0,
-                           linestyle='--', label=f'μ/N (lead-time demand per sub., ≈{_mu_per_sub:.3f})')
+                           linestyle='--', label=f'μ/Z (lead-time demand per sub., ≈{_mu_per_sub:.3f})')
             _ax_sp.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std_sl}')
-            _ax_sp.set_xlabel('Aantal subscripties (N)', fontsize=11)
-            _ax_sp.set_ylabel('S*(X,N) / N  (voorraad per subscriptie)', fontsize=11)
-            _ax_sp.set_title('Benodigde voorraad per subscriptie  S*(X,N) / N',
+                           label=f'Z huidig = {_n_std_sl}')
+            _ax_sp.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+            _ax_sp.set_ylabel('S*(X,Z) / Z  (voorraad per subscriptie)', fontsize=11)
+            _ax_sp.set_title('Benodigde voorraad per subscriptie  S*(X,Z) / Z',
                              fontsize=12)
             _ax_sp.set_xticks(_N_FEAS_VALS)
             _plt_sl.setp(_ax_sp.get_xticklabels(), rotation=30, ha='right')
@@ -1336,10 +1336,10 @@ with tab_historie:
 
             # ── S*(X,N)/N detail: N = 1 … 20 ────────────────────────────────
             st.caption(
-                "Detail: S*(X,N) / N voor N = 1 … 20, "
+                "Detail: S*(X,Z) / Z voor Z = 1 … 20, "
                 "berekend per component via inverse_service_level."
             )
-            if st.button("📊 Bereken S*/N voor N = 1 … 20"):
+            if st.button("📊 Bereken S*/Z voor Z = 1 … 20"):
                 _ov_det = st.session_state.overzicht_df.reset_index()
                 # Collect (lambda_per_N, lt_jr) per component
                 _comp_det = []
@@ -1352,7 +1352,7 @@ with tab_historie:
 
                 _N_DET = list(range(1, 21))
                 _det_results = {sl: [] for sl in SERVICE_LEVELS}
-                with st.spinner("Berekenen S*/N voor N = 1 … 20…"):
+                with st.spinner("Berekenen S*/Z voor Z = 1 … 20…"):
                     for _n_det in _N_DET:
                         for _sl_det in SERVICE_LEVELS:
                             _s_tot = sum(
@@ -1384,13 +1384,13 @@ with tab_historie:
                                              textcoords='offset points', xytext=(0, 7),
                                              ha='center', fontsize=7)
                 _ax_det.axhline(_mu_ref, color='grey', linewidth=1.0, linestyle='--',
-                                label=f'μ/N (ondergrens, ≈{_mu_ref:.3f})')
+                                label=f'μ/Z (ondergrens, ≈{_mu_ref:.3f})')
                 _ax_det.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                                label=f'N huidig = {_n_std_sl}')
-                _ax_det.set_xlabel('Aantal subscripties N', fontsize=11)
-                _ax_det.set_ylabel('S*(X,N) / N  (voorraad per subscriptie)', fontsize=11)
+                                label=f'Z huidig = {_n_std_sl}')
+                _ax_det.set_xlabel('Aantal subscripties Z', fontsize=11)
+                _ax_det.set_ylabel('S*(X,Z) / Z  (voorraad per subscriptie)', fontsize=11)
                 _ax_det.set_title(
-                    'Benodigde voorraad per subscriptie  S*(X,N) / N  (N = 1… 20)',
+                    'Benodigde voorraad per subscriptie  S*(X,Z) / Z  (Z = 1… 20)',
                     fontsize=12,
                 )
                 _ax_det.set_xticks(_N_DET_x)
@@ -1420,12 +1420,12 @@ with tab_historie:
                                         ha='center', fontsize=7)
             _ax_ss.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_ss.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'N huidig = {_n_std_sl}')
-            _ax_ss.set_xlabel('Aantal subscripties (N)', fontsize=11)
-            _ax_ss.set_ylabel('(S*(X,N) − μ(N)) / N  (safety stock per subscriptie)',
+                           label=f'Z huidig = {_n_std_sl}')
+            _ax_ss.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+            _ax_ss.set_ylabel('(S*(X,Z) − μ(Z)) / Z  (safety stock per subscriptie)',
                               fontsize=11)
             _ax_ss.set_title(
-                'Safety stock per subscriptie  (S*(X,N) − N · ΣλᵢLᵢ/Nᵢ) / N',
+                'Safety stock per subscriptie  (S*(X,Z) − Z · ΣλᵢLᵢ/Zᵢ) / Z',
                 fontsize=12,
             )
             _ax_ss.set_xticks(_N_FEAS_VALS)
@@ -1438,7 +1438,7 @@ with tab_historie:
 
         # ── Marginale kosten vs. N (pooling-effect) ─────────────────────
         st.divider()
-        st.subheader("Marginale kosten vs. N")
+        st.subheader("Marginale kosten vs. Z")
         st.caption(
             "Hoe nemen de incrementele kosten per extra subscriptie af naarmate N groeit? "
             "Dit visualiseert het pooling-effect: elke extra subscriptie vereist minder "
@@ -1449,7 +1449,7 @@ with tab_historie:
         _N_MC_VALS   = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
         _SL_MC_COLORS = ['#2ca02c', '#ff7f0e', '#1f77b4', '#d62728', '#9467bd', '#8c564b']
 
-        if st.button("📊 Bereken marginale kosten vs. N"):
+        if st.button("📊 Bereken marginale kosten vs. Z"):
             _kp_mc = st.session_state.get('kosten_params', {})
             _a_mc  = _kp_mc.get('alpha',     0.15)
             _kb_mc = _kp_mc.get('kappa_bpa', 0.20)
@@ -1515,10 +1515,10 @@ with tab_historie:
                              color=_color, label=_sl_lbl)
 
             _ax_mc1.axvline(_n_std_mc, color='black', linewidth=1.0,
-                            linestyle=':', label=f'N huidig = {_n_std_mc}')
+                            linestyle=':', label=f'Z huidig = {_n_std_mc}')
             _ax_mc1.set_ylabel('Totale BPA-kosten (€)', fontsize=11)
             _ax_mc1.set_title(
-                f'BPA-kosten vs. N  '
+                f'BPA-kosten vs. Z  '
                 f'(α = {_mc_p["alpha"]:.0%}, κ_BPA = {_mc_p["kappa_bpa"]:.0%})',
                 fontsize=12,
             )
@@ -1529,9 +1529,9 @@ with tab_historie:
 
             _ax_mc2.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_mc2.axvline(_n_std_mc, color='black', linewidth=1.0,
-                            linestyle=':', label=f'N huidig = {_n_std_mc}')
-            _ax_mc2.set_xlabel('Aantal subscripties (N)', fontsize=11)
-            _ax_mc2.set_ylabel('ΔC / ΔN  (extra kosten per extra subscriptie, €)',
+                            linestyle=':', label=f'Z huidig = {_n_std_mc}')
+            _ax_mc2.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+            _ax_mc2.set_ylabel('ΔC / ΔZ  (extra kosten per extra subscriptie, €)',
                                fontsize=11)
             _ax_mc2.set_title(
                 'Pooling-effect: marginale inventariskosten per extra subscriptie',
@@ -1558,7 +1558,7 @@ with tab_historie:
         _N_INV_VALS = list(range(1, 21))
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
 
-        if st.button("📊 Bereken investering vs. N"):
+        if st.button("📊 Bereken investering vs. Z"):
             _ov_inv = st.session_state.overzicht_df.reset_index()
             # Verzamel per component: lambda per subscriptie, LT, IP, VP, code
             _comp_inv = []
@@ -1583,7 +1583,7 @@ with tab_historie:
             _sl_top = st.session_state.get('kosten_params', {}).get('service_level', 0.990)
             _inv_per_comp = {sl: {c['code']: [] for c in _comp_inv} for sl in SERVICE_LEVELS}
 
-            with st.spinner("Berekenen investering vs. N…"):
+            with st.spinner("Berekenen investering vs. Z…"):
                 for _n_inv in _N_INV_VALS:
                     for _sl_inv in SERVICE_LEVELS:
                         _totaal = sum(
@@ -1628,8 +1628,8 @@ with tab_historie:
                                  color=_col_inv, label=f'SL = {_sl_inv:.1%}')
 
             _ax_inv.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                            label=f'N huidig = {_n_std_inv}')
-            _ax_inv.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                            label=f'Z huidig = {_n_std_inv}')
+            _ax_inv.set_xlabel('Aantal subscripties (Z)', fontsize=11)
             _ax_inv.set_ylabel('Totale voorraadwaarde (€)', fontsize=11)
             _ax_inv.set_title(
                 'Vereiste investering in basisvoorraad vs. aantal subscripties',
@@ -1647,12 +1647,12 @@ with tab_historie:
             # Tabel: investering per N en SL
             _inv_tbl_rows = []
             for _n_v in _N_INV_VALS:
-                _row_t = {'N': _n_v}
+                _row_t = {'Z': _n_v}
                 for _sl_v in SERVICE_LEVELS:
                     _pts = [r for r in _inv_d[_sl_v] if r['n'] == _n_v]
                     _row_t[f'SL {_sl_v:.1%}'] = f"€{_pts[0]['inv']:,.0f}" if _pts else '—'
                 _inv_tbl_rows.append(_row_t)
-            st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('N'), use_container_width=False)
+            st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('Z'), use_container_width=False)
 
             # ── Top-5 duurste componenten per VP ──────────────────────────
             if 'sens_inv_top5' in st.session_state:
@@ -1661,10 +1661,10 @@ with tab_historie:
                 _sl_lbl  = st.session_state.sens_inv_sl_top
 
                 _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
-                st.subheader("Top 5 duurste componenten (VP) — investering vs. N (per service level)")
+                st.subheader("Top 5 duurste componenten (VP) — investering vs. Z (per service level)")
                 st.caption(
                     "Gesommeerde investeringswaarde (S\u002a × IP) van de top 5 duurste componenten "
-                    "(op verkoopprijs) als functie van N, per service level."
+                    "(op verkoopprijs) als functie van Z, per service level."
                 )
 
                 # Haal x-waarden op uit de data
@@ -1690,11 +1690,11 @@ with tab_historie:
                                     label=f'SL {_sl_t5:.1%}')
 
                     _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                   label=f'N huidig = {_n_std_inv}')
-                    _ax_t5.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                                   label=f'Z huidig = {_n_std_inv}')
+                    _ax_t5.set_xlabel('Aantal subscripties (Z)', fontsize=11)
                     _ax_t5.set_ylabel('Gesommeerde investeringswaarde top 5 (€)', fontsize=11)
                     _ax_t5.set_title(
-                        'Top 5 duurste componenten (VP): gesommeerde investering vs. N per SL',
+                        'Top 5 duurste componenten (VP): gesommeerde investering vs. Z per SL',
                         fontsize=12,
                     )
                     _ax_t5.yaxis.set_major_formatter(_fmt_inv)
@@ -1715,10 +1715,10 @@ with tab_historie:
                 _comp_d_sl0_t10 = _comp_d.get(SERVICE_LEVELS[0], {})
                 _x10_sum_vals = [p['n'] for p in _comp_d_sl0_t10.get(_top10[0]['code'], [])] if _top10 else []
 
-                st.subheader("Top 10 duurste componenten (VP) — gesommeerde investering vs. N (per service level)")
+                st.subheader("Top 10 duurste componenten (VP) — gesommeerde investering vs. Z (per service level)")
                 st.caption(
                     "Gesommeerde investeringswaarde (S\u002a × IP) van de top 10 duurste componenten "
-                    "(op verkoopprijs) als functie van N, per service level."
+                    "(op verkoopprijs) als functie van Z, per service level."
                 )
 
                 if _x10_sum_vals:
@@ -1738,11 +1738,11 @@ with tab_historie:
                                       linewidth=2.0, linestyle=_ls_t10s,
                                       label=f'SL {_sl_t10s:.1%}')
                     _ax_t10s.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                     label=f'N huidig = {_n_std_inv}')
-                    _ax_t10s.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                                     label=f'Z huidig = {_n_std_inv}')
+                    _ax_t10s.set_xlabel('Aantal subscripties (Z)', fontsize=11)
                     _ax_t10s.set_ylabel('Gesommeerde investeringswaarde top 10 (€)', fontsize=11)
                     _ax_t10s.set_title(
-                        'Top 10 duurste componenten (VP): gesommeerde investering vs. N per SL',
+                        'Top 10 duurste componenten (VP): gesommeerde investering vs. Z per SL',
                         fontsize=12,
                     )
                     _ax_t10s.yaxis.set_major_formatter(_fmt_inv)
@@ -1764,9 +1764,9 @@ with tab_historie:
                 )
                 _sl_val_t10 = SERVICE_LEVELS[_sl_opts_t10.index(_sl_sel_t10)]
 
-                st.subheader("Top 10 duurste componenten (VP) — investering per component vs. N")
+                st.subheader("Top 10 duurste componenten (VP) — investering per component vs. Z")
                 st.caption(
-                    "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van N "
+                    "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van Z "
                     "voor het geselecteerde service level."
                 )
 
@@ -1789,11 +1789,11 @@ with tab_historie:
                             )
 
                     _ax_t10.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                    label=f'N huidig = {_n_std_inv}')
-                    _ax_t10.set_xlabel('Aantal subscripties (N)', fontsize=11)
+                                    label=f'Z huidig = {_n_std_inv}')
+                    _ax_t10.set_xlabel('Aantal subscripties (Z)', fontsize=11)
                     _ax_t10.set_ylabel('Investeringswaarde per component (€)', fontsize=11)
                     _ax_t10.set_title(
-                        f'Top 10 duurste componenten — investering vs. N  ({_sl_sel_t10})',
+                        f'Top 10 duurste componenten — investering vs. Z  ({_sl_sel_t10})',
                         fontsize=12,
                     )
                     _ax_t10.yaxis.set_major_formatter(_fmt_inv)
@@ -1811,20 +1811,20 @@ with tab_historie:
         st.caption(
             "Cumulatieve cashflow rekening houdend met de initiële investering in basisvoorraad, "
             "jaarlijkse voorraadkosten (κ\\_BPA × S\\* × IP) en groeiende abonnementsinkomsten "
-            "(α × VP × N). N groeit lineair van start naar doelstelling. "
+            "(α × VP × Z). Z groeit lineair van start naar doelstelling. "
             "α, κ\\_BPA en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
         )
 
         _col_mt1, _col_mt2, _col_mt3 = st.columns(3)
         with _col_mt1:
             _N_start_mt = st.number_input(
-                "N start (jaar 0)", min_value=1,
+                "Z start (jaar 0)", min_value=1,
                 value=int(cfg['standaard_n_klanten']), step=1,
                 key="marge_tijd_n_start",
             )
         with _col_mt2:
             _N_end_mt = st.number_input(
-                "N eind (doelstelling)", min_value=1,
+                "Z eind (doelstelling)", min_value=1,
                 value=max(int(cfg['standaard_n_klanten']) * 3, 10), step=1,
                 key="marge_tijd_n_end",
             )
@@ -1983,8 +1983,8 @@ with tab_historie:
 
             _ax_mt1b = _ax_mt1.twinx()
             _ax_mt1b.plot(_x_pos, _mtd['N'], color='#1976D2', marker='s',
-                          linewidth=1.5, linestyle=':', alpha=0.7, label='N')
-            _ax_mt1b.set_ylabel('N (subscripties)', fontsize=10, color='#1976D2')
+                          linewidth=1.5, linestyle=':', alpha=0.7, label='Z')
+            _ax_mt1b.set_ylabel('Z (subscripties)', fontsize=10, color='#1976D2')
             _ax_mt1b.tick_params(axis='y', labelcolor='#1976D2')
 
             _ax_mt1.set_xticks(_x_pos)
@@ -1993,7 +1993,7 @@ with tab_historie:
             _ax_mt1.set_title(
                 f'Jaarlijkse cashflow  (α = {_mtp["alpha"]:.0%}, '
                 f'κ_BPA = {_mtp["kappa_bpa"]:.0%}, SL = {_mtp["sl"]:.1%}, '
-                f'N: {_mtp["N_start"]} → {_mtp["N_end"]})',
+                f'Z: {_mtp["N_start"]} → {_mtp["N_end"]})',
                 fontsize=12,
             )
             _ax_mt1.yaxis.set_major_formatter(_fmt_mt)
@@ -2036,7 +2036,7 @@ with tab_historie:
             st.dataframe(pd.DataFrame([
                 {
                     'Jaar':               _t_arr[_ti],
-                    'N':                  _mtd['N'][_ti],
+                    'Z':                  _mtd['N'][_ti],
                     'Investering (€)':    f"€{-_inv_arr[_ti]:,.0f}",
                     'Voorraadkosten (€)': f"€{-_hold_arr[_ti]:,.0f}",
                     'Inkomsten (€)':      f"€{_rev_arr[_ti]:,.0f}",
@@ -2084,8 +2084,8 @@ with tab_historie:
             _ax10s1.plot(_xp10, _net10, color='black', marker='o', linewidth=1.8, linestyle='--', label='Netto jaar', zorder=5)
             _ax10s1.axhline(0, color='grey', linewidth=0.8)
             _ax10s1b = _ax10s1.twinx()
-            _ax10s1b.plot(_xp10, _mt10d['N'], color='#1976D2', marker='s', linewidth=1.5, linestyle=':', alpha=0.7, label='N')
-            _ax10s1b.set_ylabel('N (subscripties)', fontsize=10, color='#1976D2')
+            _ax10s1b.plot(_xp10, _mt10d['N'], color='#1976D2', marker='s', linewidth=1.5, linestyle=':', alpha=0.7, label='Z')
+            _ax10s1b.set_ylabel('Z (subscripties)', fontsize=10, color='#1976D2')
             _ax10s1b.tick_params(axis='y', labelcolor='#1976D2')
             _ax10s1.set_xticks(_xp10)
             _ax10s1.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
@@ -2093,7 +2093,7 @@ with tab_historie:
             _ax10s1.set_title(
                 f'Jaarlijkse cashflow top 10  (α={_mt10p["alpha"]:.0%}, '
                 f'κ_BPA={_mt10p["kappa_bpa"]:.0%}, SL={_mt10p["sl"]:.1%}, '
-                f'N: {_mt10p["N_start"]} → {_mt10p["N_end"]})', fontsize=12)
+                f'Z: {_mt10p["N_start"]} → {_mt10p["N_end"]})', fontsize=12)
             _ax10s1.yaxis.set_major_formatter(_fmt10)
             _h10a, _l10a = _ax10s1.get_legend_handles_labels()
             _h10b, _l10b = _ax10s1b.get_legend_handles_labels()
@@ -2312,7 +2312,7 @@ with tab_drempel:
     st.subheader("Subscriptiedrempel per component")
     st.caption(
         "Per component: hoeveel extra subscripties zijn er nodig voordat S\u002a met 1 stijgt? "
-        "Aanname: λ schaalt lineair met N (λ = N × λ_huidig / N_huidig). "
+        "Aanname: λ schaalt lineair met Z (λ = Z × λ_huidig / Z_huidig). "
         "Van toepassing op MTBF-gebaseerde componenten."
     )
 
@@ -2367,20 +2367,20 @@ with tab_drempel:
             _drempel_rows.append({
                 "Code":          _code,
                 "Omschrijving":  str(_row.get("Descr", ""))[:35],
-                "N huidig":      _n,
+                "Z huidig":      _n,
                 "S* huidig":     _s_now,
-                "N voor S*+1":   _n_drempel if _n_drempel is not None else f">{_n + _MAX_N_SEARCH}",
-                "Extra N nodig": _extra,
+                "Z voor S*+1":   _n_drempel if _n_drempel is not None else f">{_n + _MAX_N_SEARCH}",
+                "Extra Z nodig": _extra,
                 "λ/jr":          round(_lam, 4),
                 "μ = λ·L":       round(float(_row["mu"]), 4),
             })
 
         _tbl_d = pd.DataFrame(_drempel_rows).set_index("Code")
-        _tbl_d_sorted = _tbl_d.sort_values("Extra N nodig", na_position="last")
+        _tbl_d_sorted = _tbl_d.sort_values("Extra Z nodig", na_position="last")
 
         # Tabel weergeven met kleurcodering op basis van drempel
         def _kleur_drempel(row):
-            v = row["Extra N nodig"]
+            v = row["Extra Z nodig"]
             if pd.isna(v):
                 bg = "#d4edda"   # groen: geen drempel gevonden in zoekbereik
             elif int(v) <= 2:
@@ -2395,18 +2395,18 @@ with tab_drempel:
             _tbl_d_sorted.style
                 .apply(_kleur_drempel, axis=1)
                 .format({
-                    "N huidig":      "{:.0f}",
+                    "Z huidig":      "{:.0f}",
                     "S* huidig":     "{:.0f}",
                     "λ/jr":          "{:.4f}",
                     "μ = λ·L":       "{:.4f}",
-                    "Extra N nodig": lambda v: f"{int(v)}" if pd.notna(v) else "—",
+                    "Extra Z nodig": lambda v: f"{int(v)}" if pd.notna(v) else "—",
                 }),
             use_container_width=True,
             height=500,
         )
 
         # ── Bar chart: Extra N nodig per component ─────────────────────────
-        _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra N nodig"].notna()].copy()
+        _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra Z nodig"].notna()].copy()
         if not _plot_d.empty:
             import matplotlib.pyplot as _plt_d
 
@@ -2417,7 +2417,7 @@ with tab_drempel:
             _MAX_BARS = 60
             _n_total  = len(_plot_d)
             if _n_total > _MAX_BARS:
-                _plot_d = _plot_d.nsmallest(_MAX_BARS, "Extra N nodig")
+                _plot_d = _plot_d.nsmallest(_MAX_BARS, "Extra Z nodig")
                 st.caption(
                     f"📊 Grafiek toont de **{_MAX_BARS}** componenten met de "
                     f"laagste drempel (van {_n_total} totaal). Volledige lijst "
@@ -2430,7 +2430,7 @@ with tab_drempel:
             _fig_d, _ax_d = _plt_d.subplots(figsize=(_fig_w, 5), dpi=100)
             _ax_d.bar(
                 range(len(_plot_d)),
-                _plot_d["Extra N nodig"].astype(int),
+                _plot_d["Extra Z nodig"].astype(int),
                 color="#1976D2",
             )
             _ax_d.set_xticks(range(len(_plot_d)))
@@ -2826,7 +2826,7 @@ with tab_budget:
         "Stel een maximaal investeringsbudget in en selecteer greedy de componenten "
         "met de hoogste **waarde per euro**. Investering per component = `S* × IP` "
         "bij het gekozen service level. Standaard-criterium = **Winst/jr ÷ investering "
-        "(ROI)**, met `Winst/jr = N·α·VP − κ_BPA·IP·S*` (identiek aan Kostenanalyse-tab)."
+        "(ROI)**, met `Winst/jr = Z·α·VP − κ_BPA·IP·S*` (identiek aan Kostenanalyse-tab)."
     )
 
     _ov_df = st.session_state.get("overzicht_df")
@@ -3017,7 +3017,7 @@ with tab_budget:
             # ── Metrics rij 2: economie (BPA-formule) ──
             _w1, _w2, _w3, _w4 = st.columns(4)
             _w1.metric("Omzet / jaar", f"€ {_omzet_geko:,.0f}",
-                       help="Σ N·α·VP over geselecteerde componenten")
+                       help="Σ Z·α·VP over geselecteerde componenten")
             _w2.metric("C_BPA / jaar", f"€ {_cbpa_geko:,.0f}",
                        help="Σ κ_BPA·IP·S* over geselecteerde componenten")
             _w3.metric("Winst / jaar", f"€ {_winst_geko:+,.0f}",
@@ -3033,7 +3033,7 @@ with tab_budget:
                 _rows_b.append({
                     'Code':          str(_code),
                     'Omschrijving':  str(_r.get('Descr', ''))[:35],
-                    'N':             int(_r['n_klanten']),
+                    'Z':             int(_r['n_klanten']),
                     'S*':            int(_r[_sl_keuze]),
                     'IP (€)':        round(float(_r['IP']), 2),
                     'VP (€)':        round(float(_r['VP']), 2),
@@ -3374,7 +3374,7 @@ with tab_subsim:
             if _descr is not None:
                 _tbl.insert(0, "Descr", _tbl.index.map(_descr.to_dict()).fillna(""))
             if _ncur is not None:
-                _tbl["N_huidig"] = _tbl.index.map(_ncur.to_dict())
+                _tbl["Z_huidig"] = _tbl.index.map(_ncur.to_dict())
 
         _toon = _tbl.rename(columns={
             "gem_subs":  "Gem. subs",
@@ -3434,21 +3434,21 @@ with tab_subsim:
 
         # ── Toepassen als N-overrides ─────────────────────────────────────
         st.divider()
-        st.subheader("Resultaat toepassen op subscripties (N)")
+        st.subheader("Resultaat toepassen op subscripties (Z)")
         st.caption(
             "Zet het gesimuleerde aantal subscripties per component als "
-            "N-override in de configuratie. Dit vervangt het statische N "
+            "Z-override in de configuratie. Dit vervangt het statische Z "
             "voor de geselecteerde componenten in alle berekeningen."
         )
         _stat_keuze = st.radio(
-            "Welke statistiek toepassen als N?",
+            "Welke statistiek toepassen als Z?",
             options=["Gemiddelde", "Mediaan (P50)", "P95 (conservatief)"],
             index=0, horizontal=True, key="subsim_stat",
         )
         _stat_kol = {"Gemiddelde": "gem_subs", "Mediaan (P50)": "p50",
                      "P95 (conservatief)": "p95"}[_stat_keuze]
 
-        if st.button("💾 Toepassen als N-overrides", key="subsim_apply"):
+        if st.button("💾 Toepassen als Z-overrides", key="subsim_apply"):
             _n_ov = dict(cfg.get("n_klanten_overrides", {}))
             _aantal = 0
             for _code, _row in _sim_df.iterrows():
@@ -3462,7 +3462,7 @@ with tab_subsim:
             invalidate_caches()
             st.session_state.pop("overzicht_df", None)
             st.success(
-                f"✅ {_aantal} N-overrides bijgewerkt op basis van "
+                f"✅ {_aantal} Z-overrides bijgewerkt op basis van "
                 f"'{_stat_keuze}'. Tab 📊 Overzicht en de kostenmodellen "
                 f"gebruiken nu de gesimuleerde subscripties."
             )
