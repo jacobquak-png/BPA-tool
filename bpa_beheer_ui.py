@@ -1552,10 +1552,22 @@ with tab_historie:
         st.caption(
             "Totale voorraadwaarde (Σ S\u002a × inkoopprijs) als functie van het aantal "
             "subscripties per service level. Toont hoeveel kapitaal BPA in voorraad "
-            "moet investeren naarmate het klantenbestand groeit."
+            "moet investeren naarmate het klantenbestand groeit. De x-as begint bij "
+            "het verwachte aantal subscripties uit de simulatie en groeit van daaruit "
+            "lineair verder."
         )
 
-        _N_INV_VALS = list(range(1, 21))
+        # X-as begint bij het verwachte aantal subscripties uit de simulatie
+        # (afgerond gemiddelde over de gesimuleerde componenten); val terug op
+        # de standaard-Z als er nog geen simulatie is gedraaid. Vanaf dat
+        # startpunt groeit de x lineair (+1 per stap, 20 punten).
+        _sim_df_inv = st.session_state.get("subsim_df")
+        if (_sim_df_inv is not None and not _sim_df_inv.empty
+                and "gem_subs" in _sim_df_inv.columns):
+            _z_start_inv = max(1, int(round(float(_sim_df_inv["gem_subs"].mean()))))
+        else:
+            _z_start_inv = max(1, int(cfg['standaard_n_klanten']))
+        _N_INV_VALS = list(range(_z_start_inv, _z_start_inv + 20))
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
 
         if st.button("📊 Bereken investering vs. Z"):
