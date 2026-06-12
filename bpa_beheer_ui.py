@@ -3271,18 +3271,19 @@ with tab_subsim:
     st.subheader("Subscriptie-simulatie per component")
     st.markdown(
         "Monte Carlo simulatie van het **aantal subscripties per component** op "
-        "basis van de tabs `Adoptie` en `bestellingen_per_klant` in de Excel. "
-        "Alleen de componenten uit de **classificatie-selectie** worden "
-        "gesimuleerd.\n\n"
-        "Een klant kan **hóógstens één** subscriptie per component nemen. Elke "
-        "order van de klant is een afzonderlijke kans (met kans = adoption "
-        "rate) om te converteren, dus de kans dat een klant minstens één keer "
-        "een subscriptie neemt is:\n\n"
-        "$$p_{sub} = 1 - (1 - \\text{adoption rate})^{\\,\\text{aantal orders "
-        "van de klant}}$$\n\n"
-        "Per klant wordt dan $\\text{Bernoulli}(p_{sub})$ getrokken (0 of 1). "
-        "De som over alle klanten is het aantal subscripties voor dat component "
-        "in die run (maximaal het aantal klanten)."
+        "basis van de tab `Adoptie` in de Excel. Alleen de componenten uit de "
+        "**classificatie-selectie** worden gesimuleerd.\n\n"
+        "Per (component, klant) wordt een **binomiale** trekking gedaan over de "
+        "orders van de klant voor dat component (elke order is een trial met "
+        "succeskans = de **adoption rate**). De klant neemt een subscriptie "
+        "(**binair**) als er minstens één succes is:\n\n"
+        "$$K_{klant} \\sim \\text{Binomiaal}\\big(n = \\text{orders voor het "
+        "component},\\; p = \\text{adoption rate}\\big), \\quad "
+        "X_{klant} = \\mathbb{1}[K_{klant} \\ge 1]$$\n\n"
+        "Zo neemt de kans op een subscriptie toe naarmate de klant meer orders "
+        "heeft: $P(X_{klant}=1) = 1-(1-p)^{n}$. Het aantal subscripties voor een "
+        "component is de som $\\sum_{klanten} X_{klant}$ (maximaal het aantal "
+        "klanten)."
     )
 
     _cls_codes = sorted(get_classificatie_info().get("items", {}).keys())
@@ -3294,7 +3295,7 @@ with tab_subsim:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    col_a, col_b, col_c = st.columns(3)
+    col_a, col_b = st.columns(2)
     with col_a:
         _sim_runs = st.number_input(
             "Aantal Monte Carlo runs", min_value=10, max_value=50000,
@@ -3305,17 +3306,6 @@ with tab_subsim:
             "Seed (reproduceerbaar)", min_value=0, max_value=10_000_000,
             value=42, step=1, key="subsim_seed",
         )
-    with col_c:
-        _sim_bron_label = st.radio(
-            "n = hoeveelheid orders van de klant",
-            options=["Totaal orders van de klant", "Orders voor dit component"],
-            index=0,
-            key="subsim_bron",
-            help="'Totaal' gebruikt Totaal_bestellingen_klant_5jr "
-                 "(tab bestellingen_per_klant). 'Component' gebruikt "
-                 "Aantal_orders_5jr van de klant voor dit specifieke component.",
-        )
-    _sim_bron = "totaal" if _sim_bron_label.startswith("Totaal") else "component"
 
     if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
                  disabled=not _cls_codes):
@@ -3325,7 +3315,6 @@ with tab_subsim:
                 _sim_df = simuleer_subscripties_per_component(
                     n_runs=int(_sim_runs),
                     seed=int(_sim_seed),
-                    orders_bron=_sim_bron,
                     codes=_codes,
                 )
             if _sim_df.empty:
@@ -3336,7 +3325,6 @@ with tab_subsim:
                 st.session_state.pop("subsim_df", None)
             else:
                 st.session_state["subsim_df"]   = _sim_df
-                st.session_state["subsim_bron_used"] = _sim_bron
                 st.session_state["subsim_runs_used"] = int(_sim_runs)
                 st.session_state["subsim_seed_used"] = int(_sim_seed)
         except Exception as e:
@@ -3348,8 +3336,7 @@ with tab_subsim:
         st.markdown(
             f"**Resultaat** — {len(_sim_df)} componenten · "
             f"{st.session_state.get('subsim_runs_used')} runs · "
-            f"seed {st.session_state.get('subsim_seed_used')} · "
-            f"n-bron: `{st.session_state.get('subsim_bron_used')}`"
+            f"seed {st.session_state.get('subsim_seed_used')}"
         )
 
         # Voeg omschrijving en huidige N toe vanuit het overzicht (indien aanwezig).
@@ -3372,7 +3359,7 @@ with tab_subsim:
             "min_subs":  "Min",
             "max_subs":  "Max",
             "n_klanten": "Klanten",
-            "n_orders":  "Orders (Σn)",
+            "n_orders":  "Orders component (Σ)",
             "runs":      "Runs",
         })
         st.dataframe(
@@ -3401,7 +3388,6 @@ with tab_subsim:
             _runs_arr = simuleer_subscripties_runs(
                 n_runs=int(st.session_state.get("subsim_runs_used", 1000)),
                 seed=int(st.session_state.get("subsim_seed_used", 42)),
-                orders_bron=st.session_state.get("subsim_bron_used", "totaal"),
                 codes=[_sel_code],
             ).get(_sel_code)
             if _runs_arr is not None and len(_runs_arr) > 0:
