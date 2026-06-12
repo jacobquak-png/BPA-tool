@@ -1552,27 +1552,31 @@ with tab_historie:
         st.caption(
             "Totale voorraadwaarde (Σ S\u002a × inkoopprijs) als functie van het aantal "
             "subscripties per service level. Toont hoeveel kapitaal BPA in voorraad "
-            "moet investeren naarmate het klantenbestand groeit. De x-as begint bij "
-            "het verwachte aantal subscripties uit de simulatie en groeit van daaruit "
-            "lineair verder."
+            "moet investeren naarmate het klantenbestand groeit. De x-as toont het "
+            "TOTALE aantal subscripties over alle componenten en start bij de som van "
+            "de gesimuleerde sub-aantallen; alle componenten schalen van daaruit "
+            "proportioneel mee omhoog."
         )
 
-        # X-as begint bij het verwachte aantal subscripties uit de simulatie
-        # (afgerond gemiddelde over de gesimuleerde componenten); val terug op
-        # de standaard-Z als er nog geen simulatie is gedraaid. Vanaf dat
-        # startpunt groeit de x lineair (+1 per stap, 20 punten).
+        # Baseline per component = verwacht aantal subs uit de simulatie (per
+        # code), met terugval op de geconfigureerde n_klanten. De x-as toont het
+        # TOTAAL aantal subscripties over alle componenten (= som van de
+        # baselines bij factor 1.0); alle componenten schalen proportioneel mee.
         _sim_df_inv = st.session_state.get("subsim_df")
+        _sim_base_inv = {}
         if (_sim_df_inv is not None and not _sim_df_inv.empty
                 and "gem_subs" in _sim_df_inv.columns):
-            _z_start_inv = max(1, int(round(float(_sim_df_inv["gem_subs"].mean()))))
-        else:
-            _z_start_inv = max(1, int(cfg['standaard_n_klanten']))
-        _N_INV_VALS = list(range(_z_start_inv, _z_start_inv + 20))
+            _sim_base_inv = {
+                str(_c): max(1, int(round(float(_v))))
+                for _c, _v in _sim_df_inv["gem_subs"].items()
+            }
+        # Groeifactoren: 20 punten van 1.0x (huidig totaal) tot 2.9x in stappen van 0.1.
+        _INV_FACTORS = [round(1.0 + 0.1 * _k, 1) for _k in range(20)]
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
 
-        if st.button("📊 Bereken investering vs. Z"):
+        if st.button("📊 Bereken investering vs. totaal subs"):
             _ov_inv = st.session_state.overzicht_df.reset_index()
-            # Verzamel per component: lambda per subscriptie, LT, IP, VP, code
+            # Verzamel per component: lambda per subscriptie, baseline-subs, LT, IP, VP, code
             _comp_inv = []
             for _, _ri in _ov_inv.iterrows():
                 _ni = float(_ri.get('n_klanten', 0) or 0)
@@ -1581,37 +1585,43 @@ with tab_historie:
                 _ip = float(_ri.get('IP', 0) or 0)
                 _vp = float(_ri.get('VP', 0) or 0)
                 if _ni > 0 and _li > 0 and _lt > 0:
+                    _code = str(_ri.get('Code', ''))
                     _comp_inv.append({
-                        'code':        str(_ri.get('Code', '')),
+                        'code':        _code,
                         'descr':       str(_ri.get('Descr', '')),
                         'lam_per_sub': _li / _ni,
+                        'n_base':      float(_sim_base_inv.get(_code, _ni)),
                         'lt_jr':       _lt / 365,
                         'ip':          _ip,
                         'vp':          _vp,
                     })
+
+            # Totaal subs bij factor 1.0 = som van de (gesimuleerde) baselines.
+            _T0_inv = sum(_c['n_base'] for _c in _comp_inv)
 
             _inv_results = {sl: [] for sl in SERVICE_LEVELS}
             # Per-component resultaten voor top-5 grafiek (alle SL's)
             _sl_top = st.session_state.get('kosten_params', {}).get('service_level', 0.990)
             _inv_per_comp = {sl: {c['code']: [] for c in _comp_inv} for sl in SERVICE_LEVELS}
 
-            with st.spinner("Berekenen investering vs. Z…"):
-                for _n_inv in _N_INV_VALS:
+            with st.spinner("Berekenen investering vs. totaal subs…"):
+                for _f_inv in _INV_FACTORS:
+                    _tot_subs = int(round(_T0_inv * _f_inv))   # x-waarde: totaal subscripties
                     for _sl_inv in SERVICE_LEVELS:
                         _totaal = sum(
                             BPAOptimizationModel.inverse_service_level(
-                                _sl_inv, _c['lam_per_sub'] * _n_inv, _c['lt_jr']
+                                _sl_inv, _c['lam_per_sub'] * _c['n_base'] * _f_inv, _c['lt_jr']
                             ) * _c['ip']
                             for _c in _comp_inv
                         )
-                        _inv_results[_sl_inv].append({'n': _n_inv, 'inv': _totaal})
-                    # Per-component per SL (voor top-5 grafiek)
+                        _inv_results[_sl_inv].append({'n': _tot_subs, 'inv': _totaal})
+                    # Per-component per SL (voor top-5/top-10 grafiek)
                     for _c in _comp_inv:
                         for _sl_c in SERVICE_LEVELS:
                             _s = BPAOptimizationModel.inverse_service_level(
-                                _sl_c, _c['lam_per_sub'] * _n_inv, _c['lt_jr']
+                                _sl_c, _c['lam_per_sub'] * _c['n_base'] * _f_inv, _c['lt_jr']
                             )
-                            _inv_per_comp[_sl_c][_c['code']].append({'n': _n_inv, 'inv': _s * _c['ip']})
+                            _inv_per_comp[_sl_c][_c['code']].append({'n': _tot_subs, 'inv': _s * _c['ip']})
 
             # Top 5 / Top 10 duurste componenten op VP
             _top5_codes  = sorted(_comp_inv, key=lambda c: c['vp'], reverse=True)[:5]
@@ -1622,13 +1632,15 @@ with tab_historie:
             st.session_state.sens_inv_top5   = _top5_codes
             st.session_state.sens_inv_top10  = _top10_codes
             st.session_state.sens_inv_sl_top = _sl_top
+            st.session_state.sens_inv_t0     = int(round(_T0_inv))
 
         if 'sens_inv' in st.session_state:
             import matplotlib.pyplot as _plt_inv
             import matplotlib.ticker as _mt_inv
 
             _inv_d    = st.session_state.sens_inv
-            _n_std_inv = int(cfg['standaard_n_klanten'])
+            _tot0_inv = int(st.session_state.get('sens_inv_t0', 0))
+            _x_ticks_inv = [r['n'] for r in _inv_d[SERVICE_LEVELS[0]]]
             _fmt_inv  = _mt_inv.FuncFormatter(lambda v, _: f'€{v:,.0f}')
 
             _fig_inv, _ax_inv = _plt_inv.subplots(figsize=(11, 5))
@@ -1639,16 +1651,16 @@ with tab_historie:
                     _ax_inv.plot(_xi, _yi, marker='o', linewidth=2,
                                  color=_col_inv, label=f'SL = {_sl_inv:.1%}')
 
-            _ax_inv.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                            label=f'Z huidig = {_n_std_inv}')
-            _ax_inv.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+            _ax_inv.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
+                            label=f'Totaal subs (sim) = {_tot0_inv}')
+            _ax_inv.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
             _ax_inv.set_ylabel('Totale voorraadwaarde (€)', fontsize=11)
             _ax_inv.set_title(
-                'Vereiste investering in basisvoorraad vs. aantal subscripties',
+                'Vereiste investering in basisvoorraad vs. totaal aantal subscripties',
                 fontsize=12,
             )
             _ax_inv.yaxis.set_major_formatter(_fmt_inv)
-            _ax_inv.set_xticks(_N_INV_VALS)
+            _ax_inv.set_xticks(_x_ticks_inv)
             _plt_inv.setp(_ax_inv.get_xticklabels(), rotation=30, ha='right')
             _ax_inv.legend(fontsize=9)
             _ax_inv.grid(True, alpha=0.3)
@@ -1656,15 +1668,15 @@ with tab_historie:
             st.pyplot(_fig_inv)
             _plt_inv.close(_fig_inv)
 
-            # Tabel: investering per N en SL
+            # Tabel: investering per totaal aantal subs en SL
             _inv_tbl_rows = []
-            for _n_v in _N_INV_VALS:
-                _row_t = {'Z': _n_v}
+            for _n_v in _x_ticks_inv:
+                _row_t = {'Totaal subs': _n_v}
                 for _sl_v in SERVICE_LEVELS:
                     _pts = [r for r in _inv_d[_sl_v] if r['n'] == _n_v]
                     _row_t[f'SL {_sl_v:.1%}'] = f"€{_pts[0]['inv']:,.0f}" if _pts else '—'
                 _inv_tbl_rows.append(_row_t)
-            st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('Z'), use_container_width=False)
+            st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('Totaal subs'), use_container_width=False)
 
             # ── Top-5 duurste componenten per VP ──────────────────────────
             if 'sens_inv_top5' in st.session_state:
@@ -1673,10 +1685,10 @@ with tab_historie:
                 _sl_lbl  = st.session_state.sens_inv_sl_top
 
                 _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
-                st.subheader("Top 5 duurste componenten (VP) — investering vs. Z (per service level)")
+                st.subheader("Top 5 duurste componenten (VP) — investering vs. totaal subs (per service level)")
                 st.caption(
                     "Gesommeerde investeringswaarde (S\u002a × IP) van de top 5 duurste componenten "
-                    "(op verkoopprijs) als functie van Z, per service level."
+                    "(op verkoopprijs) als functie van het totaal aantal subscripties, per service level."
                 )
 
                 # Haal x-waarden op uit de data
@@ -1701,16 +1713,16 @@ with tab_historie:
                                     linewidth=2.0, linestyle=_ls_t5,
                                     label=f'SL {_sl_t5:.1%}')
 
-                    _ax_t5.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                   label=f'Z huidig = {_n_std_inv}')
-                    _ax_t5.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+                    _ax_t5.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
+                                   label=f'Totaal subs (sim) = {_tot0_inv}')
+                    _ax_t5.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
                     _ax_t5.set_ylabel('Gesommeerde investeringswaarde top 5 (€)', fontsize=11)
                     _ax_t5.set_title(
-                        'Top 5 duurste componenten (VP): gesommeerde investering vs. Z per SL',
+                        'Top 5 duurste componenten (VP): gesommeerde investering vs. totaal subs per SL',
                         fontsize=12,
                     )
                     _ax_t5.yaxis.set_major_formatter(_fmt_inv)
-                    _ax_t5.set_xticks(_N_INV_VALS)
+                    _ax_t5.set_xticks(_x5_vals)
                     _plt_inv.setp(_ax_t5.get_xticklabels(), rotation=30, ha='right')
                     _ax_t5.legend(fontsize=9, loc='upper left')
                     _ax_t5.grid(True, alpha=0.3)
@@ -1727,10 +1739,10 @@ with tab_historie:
                 _comp_d_sl0_t10 = _comp_d.get(SERVICE_LEVELS[0], {})
                 _x10_sum_vals = [p['n'] for p in _comp_d_sl0_t10.get(_top10[0]['code'], [])] if _top10 else []
 
-                st.subheader("Top 10 duurste componenten (VP) — gesommeerde investering vs. Z (per service level)")
+                st.subheader("Top 10 duurste componenten (VP) — gesommeerde investering vs. totaal subs (per service level)")
                 st.caption(
                     "Gesommeerde investeringswaarde (S\u002a × IP) van de top 10 duurste componenten "
-                    "(op verkoopprijs) als functie van Z, per service level."
+                    "(op verkoopprijs) als functie van het totaal aantal subscripties, per service level."
                 )
 
                 if _x10_sum_vals:
@@ -1749,16 +1761,16 @@ with tab_historie:
                         _ax_t10s.plot(_x10_sum_vals, _tot10s, color=_col_t10s, marker='o',
                                       linewidth=2.0, linestyle=_ls_t10s,
                                       label=f'SL {_sl_t10s:.1%}')
-                    _ax_t10s.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                     label=f'Z huidig = {_n_std_inv}')
-                    _ax_t10s.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+                    _ax_t10s.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
+                                     label=f'Totaal subs (sim) = {_tot0_inv}')
+                    _ax_t10s.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
                     _ax_t10s.set_ylabel('Gesommeerde investeringswaarde top 10 (€)', fontsize=11)
                     _ax_t10s.set_title(
-                        'Top 10 duurste componenten (VP): gesommeerde investering vs. Z per SL',
+                        'Top 10 duurste componenten (VP): gesommeerde investering vs. totaal subs per SL',
                         fontsize=12,
                     )
                     _ax_t10s.yaxis.set_major_formatter(_fmt_inv)
-                    _ax_t10s.set_xticks(_N_INV_VALS)
+                    _ax_t10s.set_xticks(_x10_sum_vals)
                     _plt_inv.setp(_ax_t10s.get_xticklabels(), rotation=30, ha='right')
                     _ax_t10s.legend(fontsize=9, loc='upper left')
                     _ax_t10s.grid(True, alpha=0.3)
@@ -1776,9 +1788,9 @@ with tab_historie:
                 )
                 _sl_val_t10 = SERVICE_LEVELS[_sl_opts_t10.index(_sl_sel_t10)]
 
-                st.subheader("Top 10 duurste componenten (VP) — investering per component vs. Z")
+                st.subheader("Top 10 duurste componenten (VP) — investering per component vs. totaal subs")
                 st.caption(
-                    "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van Z "
+                    "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van het totaal aantal subscripties "
                     "voor het geselecteerde service level."
                 )
 
@@ -1800,16 +1812,16 @@ with tab_historie:
                                 label=_lbl10,
                             )
 
-                    _ax_t10.axvline(_n_std_inv, color='black', linewidth=1.0, linestyle=':',
-                                    label=f'Z huidig = {_n_std_inv}')
-                    _ax_t10.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+                    _ax_t10.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
+                                    label=f'Totaal subs (sim) = {_tot0_inv}')
+                    _ax_t10.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
                     _ax_t10.set_ylabel('Investeringswaarde per component (€)', fontsize=11)
                     _ax_t10.set_title(
-                        f'Top 10 duurste componenten — investering vs. Z  ({_sl_sel_t10})',
+                        f'Top 10 duurste componenten — investering vs. totaal subs  ({_sl_sel_t10})',
                         fontsize=12,
                     )
                     _ax_t10.yaxis.set_major_formatter(_fmt_inv)
-                    _ax_t10.set_xticks(_N_INV_VALS)
+                    _ax_t10.set_xticks(_x10_vals)
                     _plt_inv.setp(_ax_t10.get_xticklabels(), rotation=30, ha='right')
                     _ax_t10.legend(fontsize=8, loc='upper left', ncol=2)
                     _ax_t10.grid(True, alpha=0.3)
