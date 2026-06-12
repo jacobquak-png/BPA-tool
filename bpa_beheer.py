@@ -40,6 +40,10 @@ EXCEL_PATH  = os.path.join(SCRIPT_DIR,
                            'annual_use_abc_met_artikeldata_complete_europa.xlsx')
 SHEET_NAME  = 'Filtered '
 
+# Tabs voor de subscriptie-simulatie (binomiale adoptie per component/klant).
+SHEET_ADOPTIE      = 'Adoptie'
+SHEET_BESTELLINGEN = 'bestellingen_per_klant'
+
 # Selectiebestand geproduceerd door classificatie_scoring.py.
 # Aanwezigheid activeert de classificatie-koppeling (whitelist + LT-bron).
 SELECTIE_PATH = os.path.join(SCRIPT_DIR, 'bpa_selectie.json')
@@ -497,6 +501,178 @@ def bouw_model_kosten(
         cost_data=cost_data,
     )
     return model, model.check_feasibility()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SUBSCRIPTIE-SIMULATIE  (binomiale adoptie per component)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def laad_adoptie_data(excel_file=None) -> pd.DataFrame:
+    """
+    Laad de 'Adoptie'-tab met per (component, klant)-combinatie het aantal
+    orders en de adoption rate.
+
+    excel_file: bestandspad (str) of file-like object; valt terug op EXCEL_PATH.
+
+    Returns een DataFrame met kolommen:
+        Code, Klant, Orders_component_klant, Orders_klant_totaal, Adoption_rate
+    """
+    bron = excel_file if excel_file is not None else EXCEL_PATH
+    df = pd.read_excel(bron, sheet_name=SHEET_ADOPTIE)
+    df = df.rename(columns={
+        'Verkooporderregel artikel.Artikel.Artikelcode': 'Code',
+        'Order.Relatie':                                 'Klant',
+        'Aantal_orders_5jr':                             'Orders_component_klant',
+        'Totaal_bestellingen_klant_5jr':                 'Orders_klant_totaal',
+        'Adoption_rate':                                 'Adoption_rate',
+    })
+    df['Code']  = df['Code'].astype(str).str.strip()
+    df['Klant'] = df['Klant'].astype(str).str.strip()
+    df['Adoption_rate'] = (
+        pd.to_numeric(df['Adoption_rate'], errors='coerce').fillna(0.0).clip(0.0, 1.0)
+    )
+    df['Orders_component_klant'] = (
+        pd.to_numeric(df['Orders_component_klant'], errors='coerce')
+        .fillna(0).clip(lower=0).astype(int)
+    )
+    df['Orders_klant_totaal'] = (
+        pd.to_numeric(df['Orders_klant_totaal'], errors='coerce')
+        .fillna(0).clip(lower=0).astype(int)
+    )
+    return df[['Code', 'Klant', 'Orders_component_klant',
+               'Orders_klant_totaal', 'Adoption_rate']]
+
+
+def classificatie_codes() -> set:
+    """Geef de set artikelcodes uit de classificatie-selectie (bpa_selectie.json).
+
+    Lege set als er geen selectiebestand is. Wordt gebruikt om de
+    subscriptie-simulatie standaard te beperken tot de componenten die uit
+    de classificatie komen.
+    """
+    sel = laad_classificatie_selectie()
+    return {str(c).strip() for c in sel.get('items', {}).keys()}
+
+
+def simuleer_subscripties_per_component(
+    n_runs:      int   = 500,
+    seed:        int   = 42,
+    excel_file         = None,
+    orders_bron: str   = 'totaal',
+    codes              = None,
+) -> pd.DataFrame:
+    """
+    Monte Carlo simulatie van het aantal subscripties per component.
+
+    Per run en per (component, klant)-combinatie geldt: een klant kan hóógstens
+    één subscriptie voor een component nemen. Elke order van de klant is een
+    afzonderlijke kans (met kans = adoption rate) dat de klant converteert,
+    dus de kans dat een klant minstens één keer een subscriptie neemt is:
+
+        p_sub = 1 - (1 - adoption_rate) ** aantal_orders_van_de_klant
+
+    Vervolgens wordt per klant een Bernoulli(p_sub) getrokken (0 of 1). De som
+    over alle klanten = het aantal subscripties voor dat component in die run
+    (maximaal het aantal klanten). Over alle runs wordt de verdeling samengevat.
+
+    Parameters
+    ----------
+    n_runs : aantal Monte Carlo runs (stochastische trekkingen).
+    seed   : seed voor reproduceerbaarheid (None = willekeurig).
+    excel_file : bestandspad of file-like object; valt terug op EXCEL_PATH.
+    orders_bron : welke 'hoeveelheid orders van de klant' als n wordt gebruikt:
+        'totaal'    → Totaal_bestellingen_klant_5jr (tab bestellingen_per_klant).
+        'component' → Aantal_orders_5jr van de klant voor dit component.
+    codes : optionele iterable van artikelcodes om de simulatie te beperken.
+            Bij None worden standaard alleen de classificatie-componenten
+            (bpa_selectie.json) gesimuleerd.
+
+    Returns
+    -------
+    DataFrame geïndexeerd op Code met kolommen:
+        gem_subs, std_subs, p05, p50, p95, min_subs, max_subs,
+        n_klanten, n_orders, runs
+    """
+    runs = simuleer_subscripties_runs(
+        n_runs=n_runs, seed=seed, excel_file=excel_file,
+        orders_bron=orders_bron, codes=codes,
+    )
+    if not runs:
+        return pd.DataFrame()
+
+    adoptie = laad_adoptie_data(excel_file)
+    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
+    if codes_set:
+        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
+    n_kolom = ('Orders_klant_totaal' if orders_bron == 'totaal'
+               else 'Orders_component_klant')
+    n_klanten = adoptie.groupby('Code').size()
+    n_orders  = adoptie.groupby('Code')[n_kolom].sum()
+
+    resultaten: dict = {}
+    for code, subs_per_run in runs.items():
+        resultaten[code] = {
+            'gem_subs':  float(subs_per_run.mean()),
+            'std_subs':  float(subs_per_run.std(ddof=0)),
+            'p05':       float(np.percentile(subs_per_run, 5)),
+            'p50':       float(np.percentile(subs_per_run, 50)),
+            'p95':       float(np.percentile(subs_per_run, 95)),
+            'min_subs':  int(subs_per_run.min()),
+            'max_subs':  int(subs_per_run.max()),
+            'n_klanten': int(n_klanten.get(code, 0)),
+            'n_orders':  int(n_orders.get(code, 0)),
+            'runs':      int(n_runs),
+        }
+    out = pd.DataFrame.from_dict(resultaten, orient='index')
+    out.index.name = 'Code'
+    return out.sort_values('gem_subs', ascending=False)
+
+
+def simuleer_subscripties_runs(
+    n_runs:      int   = 500,
+    seed:        int   = 42,
+    excel_file         = None,
+    orders_bron: str   = 'totaal',
+    codes              = None,
+) -> dict:
+    """
+    Voer de subscriptie-simulatie uit en geef de ruwe trekkingen terug.
+
+    Een klant kan hóógstens één subscriptie per component nemen. De kans dat een
+    klant converteert is p_sub = 1 - (1 - adoption_rate) ** aantal_orders; per
+    klant wordt een Bernoulli(p_sub) getrokken en gesommeerd over de klanten.
+
+    Bij codes=None wordt standaard beperkt tot de classificatie-componenten.
+
+    Returns een dict {code → np.ndarray van lengte n_runs} met per run het
+    gesimuleerde aantal subscripties voor dat component. Handig voor het
+    plotten van de verdeling (histogram) per component.
+    """
+    adoptie = laad_adoptie_data(excel_file)
+    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
+    if codes_set:
+        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
+    if adoptie.empty:
+        return {}
+
+    if orders_bron not in ('totaal', 'component'):
+        raise ValueError("orders_bron moet 'totaal' of 'component' zijn.")
+    n_kolom = ('Orders_klant_totaal' if orders_bron == 'totaal'
+               else 'Orders_component_klant')
+
+    rng = np.random.default_rng(seed)
+    runs: dict = {}
+    for code, grp in adoptie.groupby('Code', sort=True):
+        n_arr = grp[n_kolom].to_numpy()
+        p_arr = grp['Adoption_rate'].to_numpy()
+        # Kans dat een klant minstens één keer converteert over zijn orders.
+        # Elke order is een onafhankelijke kans (p = adoption rate); een klant
+        # kan echter maar één subscriptie per component nemen → binair per klant.
+        p_sub = 1.0 - np.power(1.0 - p_arr, n_arr)
+        # (n_runs, n_klanten) Bernoulli-trekkingen → som over klanten per run.
+        draws = (rng.random(size=(n_runs, p_sub.shape[0])) < p_sub[None, :])
+        runs[code] = draws.sum(axis=1)
+    return runs
 
 
 # ══════════════════════════════════════════════════════════════════════════════
