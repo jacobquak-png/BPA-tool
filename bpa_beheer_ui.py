@@ -3356,6 +3356,27 @@ with tab_subsim:
             value=42, step=1, key="subsim_seed",
         )
 
+    # ── Adoption rates aanpasbaar (Benelux vs. overig) ────────────────────
+    st.markdown("**Adoption rates**")
+    st.caption(
+        "De data kent twee adoption-rate niveaus: een hoger niveau voor "
+        "Benelux-klanten en een lager niveau voor de overige klanten. Pas ze "
+        "hieronder aan om te toetsen of de aannames realistisch zijn — de "
+        "simulatie hermapt de twee niveaus naar deze waarden."
+    )
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        _rate_benelux = st.number_input(
+            "Adoption rate Benelux (hoog)", min_value=0.0, max_value=1.0,
+            value=0.70, step=0.05, format="%.2f", key="subsim_rate_benelux",
+        )
+    with col_r2:
+        _rate_overig = st.number_input(
+            "Adoption rate overig (laag)", min_value=0.0, max_value=1.0,
+            value=0.40, step=0.05, format="%.2f", key="subsim_rate_overig",
+        )
+    _rate_overrides = {"benelux": float(_rate_benelux), "overig": float(_rate_overig)}
+
     if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
                  disabled=not _cls_codes):
         _codes = _cls_codes if _cls_codes else None
@@ -3366,6 +3387,7 @@ with tab_subsim:
                     seed=int(_sim_seed),
                     excel_file=_excel_arg(),
                     codes=_codes,
+                    rate_overrides=_rate_overrides,
                 )
             if _sim_df.empty:
                 st.warning(
@@ -3377,6 +3399,7 @@ with tab_subsim:
                 st.session_state["subsim_df"]   = _sim_df
                 st.session_state["subsim_runs_used"] = int(_sim_runs)
                 st.session_state["subsim_seed_used"] = int(_sim_seed)
+                st.session_state["subsim_rates_used"] = _rate_overrides
         except Exception as e:
             st.error(f"Simulatie mislukt: {e}")
 
@@ -3453,6 +3476,7 @@ with tab_subsim:
                     seed=int(st.session_state.get("subsim_seed_used", 42)),
                     excel_file=_excel_arg(),
                     codes=[_sel_code],
+                    rate_overrides=st.session_state.get("subsim_rates_used"),
                 ).get(_sel_code)
             except ValueError as _hist_err:
                 _runs_arr = None
