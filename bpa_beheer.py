@@ -507,7 +507,46 @@ def bouw_model_kosten(
 #  SUBSCRIPTIE-SIMULATIE  (binomiale adoptie per component)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def laad_adoptie_data(excel_file=None) -> pd.DataFrame:
+def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
+    """Hermap de twee adoption-rate niveaus (Benelux hoog / overig laag).
+
+    De data bevat per (component, klant) een vooraf bepaalde adoption rate met
+    twee niveaus: een hoog niveau voor Benelux-klanten en een laag niveau voor
+    de overige klanten. Met deze functie kunnen die twee niveaus in de tool
+    worden overschreven zonder de data opnieuw te genereren.
+
+    rate_overrides : dict met optionele sleutels 'benelux' en/of 'overig'
+                     (waarden tussen 0 en 1). De twee oorspronkelijke niveaus
+                     worden gedetecteerd als de twee meest voorkomende positieve
+                     waarden; rijen op het hoge niveau krijgen de Benelux-rate,
+                     rijen op het lage niveau de overig-rate. Nul-waarden (geen
+                     data) blijven ongemoeid.
+    """
+    if not rate_overrides:
+        return rates
+    p_ben = rate_overrides.get('benelux')
+    p_ov  = rate_overrides.get('overig')
+    if p_ben is None and p_ov is None:
+        return rates
+    _pos = rates[rates > 0]
+    if _pos.empty:
+        return rates
+    # Twee meest voorkomende positieve niveaus = Benelux (hoog) en overig (laag).
+    _niveaus = sorted(_pos.round(4).value_counts().index.tolist()[:2])
+    if not _niveaus:
+        return rates
+    _laag = _niveaus[0]
+    _hoog = _niveaus[-1]
+    _r = rates.round(4)
+    out = rates.copy()
+    if p_ben is not None:
+        out = out.mask(_r == round(_hoog, 4), float(p_ben))
+    if p_ov is not None and _hoog != _laag:
+        out = out.mask(_r == round(_laag, 4), float(p_ov))
+    return out.clip(0.0, 1.0)
+
+
+def laad_adoptie_data(excel_file=None, rate_overrides=None) -> pd.DataFrame:
     """
     Laad de 'Adoptie'-tab met per (component, klant)-combinatie het aantal
     orders en de adoption rate.
@@ -539,6 +578,8 @@ def laad_adoptie_data(excel_file=None) -> pd.DataFrame:
     df['Adoption_rate'] = (
         pd.to_numeric(df['Adoption_rate'], errors='coerce').fillna(0.0).clip(0.0, 1.0)
     )
+    # Optioneel: de twee adoption-rate niveaus (Benelux/overig) overschrijven.
+    df['Adoption_rate'] = _hermap_adoption_rates(df['Adoption_rate'], rate_overrides)
     df['Orders_component_klant'] = (
         pd.to_numeric(df['Orders_component_klant'], errors='coerce')
         .fillna(0).clip(lower=0).astype(int)
@@ -567,6 +608,7 @@ def simuleer_subscripties_per_component(
     seed:        int   = 42,
     excel_file         = None,
     codes              = None,
+    rate_overrides     = None,
 ) -> pd.DataFrame:
     """
     Monte Carlo simulatie van het aantal subscripties per component.
@@ -603,6 +645,7 @@ def simuleer_subscripties_per_component(
     """
     runs = simuleer_subscripties_runs(
         n_runs=n_runs, seed=seed, excel_file=excel_file, codes=codes,
+        rate_overrides=rate_overrides,
     )
     if not runs:
         return pd.DataFrame()
@@ -638,6 +681,7 @@ def simuleer_subscripties_runs(
     seed:        int   = 42,
     excel_file         = None,
     codes              = None,
+    rate_overrides     = None,
 ) -> dict:
     """
     Voer de subscriptie-simulatie uit en geef de ruwe trekkingen terug.
@@ -656,7 +700,7 @@ def simuleer_subscripties_runs(
     gesimuleerde aantal subscripties voor dat component. Handig voor het
     plotten van de verdeling (histogram) per component.
     """
-    adoptie = laad_adoptie_data(excel_file)
+    adoptie = laad_adoptie_data(excel_file, rate_overrides=rate_overrides)
     codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
     if codes_set:
         adoptie = adoptie[adoptie['Code'].isin(codes_set)]
