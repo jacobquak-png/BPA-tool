@@ -737,6 +737,63 @@ def pareto_alpha_X(
     return pd.DataFrame(rijen)
 
 
+def optimale_alpha_bij_X(
+    overzicht_df,
+    X_fix:         float,
+    alpha_grid,
+    p_dichtbij0:   float,
+    p_ver0:        float,
+    alpha0:        float,
+    X0:            float,
+    kappa_bpa:     float,
+    kappa_c:       float,
+    gamma_alpha:   float = 1.0,
+    gamma_X:       float = 0.5,
+    excel_file           = None,
+    codes                = None,
+    alleen_haalbaar:     bool = False,
+):
+    """Zoek het prijspercentage α dat de BPA-marge maximaliseert bij vast X.
+
+    Houdt het service level X vast op ``X_fix`` en evalueert de volledige
+    keten (α,X) → p_r → E[Z_i] → kostenmodel voor elke α in ``alpha_grid``.
+    Omdat een hogere α de omzet per klant verhoogt maar de adoptie verlaagt,
+    bestaat doorgaans een inwendig marge-optimum.
+
+    Parameters
+    ----------
+    alleen_haalbaar : als True wordt het optimum alleen gezocht onder de
+                      haalbare combinaties (marge ≥ 0 én alle klanten
+                      profiteren); bij geen enkele haalbare α valt de functie
+                      terug op de marge-maximalisatie over alle α.
+
+    Returns
+    -------
+    (curve_df, best_row) waarbij:
+        curve_df : DataFrame met kolommen alpha, X, margin, surplus,
+                   total_Z, feasible (de volledige α-sweep bij X_fix);
+        best_row : de rij (pd.Series) met de gekozen optimale α, of None
+                   als er geen geldige marge berekend kon worden.
+    """
+    curve = pareto_alpha_X(
+        overzicht_df, list(alpha_grid), [float(X_fix)],
+        p_dichtbij0, p_ver0, alpha0, X0, kappa_bpa, kappa_c,
+        gamma_alpha, gamma_X, excel_file=excel_file, codes=codes,
+    )
+    if curve.empty:
+        return curve, None
+    _geldig = curve.dropna(subset=['margin'])
+    if _geldig.empty:
+        return curve, None
+    _kandidaten = _geldig
+    if alleen_haalbaar:
+        _haalbaar = _geldig[_geldig['feasible']]
+        if not _haalbaar.empty:
+            _kandidaten = _haalbaar
+    best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
+    return curve, best
+
+
 def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
     """Hermap de twee adoption-rate niveaus (Benelux hoog / overig laag).
 
