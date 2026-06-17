@@ -647,6 +647,9 @@ def pareto_alpha_X(
     gamma_X:       float = 0.5,
     excel_file           = None,
     codes                = None,
+    gebruik_simulatie: bool = False,
+    n_runs:        int = 500,
+    seed:          int = 42,
 ) -> pd.DataFrame:
     """Pareto-analyse over (α, X): BPA-marge vs. totaal klantsurplus.
 
@@ -654,10 +657,20 @@ def pareto_alpha_X(
     ``X_waarden`` wordt de volledige keten doorgerekend:
 
       1. p_r(α, X) per regio via de logit-specificatie (willingness-to-pay);
-      2. E[Z_i] = Σ_n q_{in} per component (analytisch, geen Monte Carlo);
-      3. een overzicht met n_klanten = E[Z_i] (λ proportioneel meegeschaald);
+      2. Z_i per component: analytisch E[Z_i] = Σ_n q_{in} (default) of —
+         als ``gebruik_simulatie=True`` — het Monte-Carlo gemiddelde over
+         ``n_runs`` binomiale trekkingen (zelfde bron als de simulatietab);
+      3. een overzicht met n_klanten = Z_i (λ proportioneel meegeschaald);
       4. het kostenmodel → BPA-marge en het totale klantsurplus
          Σ_klant (zelf-voorraadkosten − abonnementskosten).
+
+    Parameters
+    ----------
+    gebruik_simulatie : gebruik Monte-Carlo gesimuleerde Z i.p.v. de
+                        analytische verwachtingswaarde.
+    n_runs, seed      : aantal trekkingen en seed voor de Monte-Carlo modus.
+                        Dezelfde seed wordt per (α,X) hergebruikt (common
+                        random numbers) zodat de marge-curve glad blijft.
 
     Returns een DataFrame met kolommen:
         alpha, X, margin, surplus, total_Z, feasible.
@@ -674,6 +687,7 @@ def pareto_alpha_X(
 
     rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
     h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
+    h_int    = adoptie['Orders_component_klant'].to_numpy(dtype=int)
     code_arr = adoptie['Code'].to_numpy()
     r4       = np.round(rates, 4)
     _pos     = r4[r4 > 0]
@@ -702,10 +716,20 @@ def pareto_alpha_X(
             _rate[high_mask] = _p_d
             if _hoog != _laag:
                 _rate[low_mask] = _p_v
-            _q  = 1.0 - (1.0 - _rate) ** h
+            if gebruik_simulatie:
+                # Monte-Carlo: per (component,klant) binomiale trekking over de
+                # orders; klant abonneert (binair) bij ≥ 1 succes. Z_i = gemiddeld
+                # aantal abonnees over de runs. Zelfde seed per (α,X) → gladde curve.
+                _rng = np.random.default_rng(seed)
+                _draws = _rng.binomial(
+                    h_int[None, :], _rate[None, :],
+                    size=(int(n_runs), h_int.shape[0]))
+                _q = (_draws >= 1).mean(axis=0)
+            else:
+                _q = 1.0 - (1.0 - _rate) ** h
             _ez = pd.Series(_q).groupby(code_arr).sum()
 
-            # Overzicht met n_klanten = E[Z_i] (λ meegeschaald); componenten
+            # Overzicht met n_klanten = Z_i (λ meegeschaald); componenten
             # zonder adoptie-data behouden hun basiswaarden.
             _n_new   = _ez.reindex(base.index)
             _present = _n_new.notna()
@@ -752,6 +776,9 @@ def optimale_alpha_bij_X(
     excel_file           = None,
     codes                = None,
     alleen_haalbaar:     bool = False,
+    gebruik_simulatie: bool = False,
+    n_runs:        int = 500,
+    seed:          int = 42,
 ):
     """Zoek het prijspercentage α dat de BPA-marge maximaliseert bij vast X.
 
@@ -779,6 +806,7 @@ def optimale_alpha_bij_X(
         overzicht_df, list(alpha_grid), [float(X_fix)],
         p_dichtbij0, p_ver0, alpha0, X0, kappa_bpa, kappa_c,
         gamma_alpha, gamma_X, excel_file=excel_file, codes=codes,
+        gebruik_simulatie=gebruik_simulatie, n_runs=n_runs, seed=seed,
     )
     if curve.empty:
         return curve, None
