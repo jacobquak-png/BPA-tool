@@ -31,6 +31,7 @@ from bpa_beheer import (
     regionale_adoptie_parameter,
     verwacht_subscripties_per_component,
     gevoeligheid_verwachte_z,
+    pareto_alpha_X,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -3560,6 +3561,141 @@ with tab_subsim:
             _figs.tight_layout()
             st.pyplot(_figs)
             _plt_sens.close(_figs)
+
+    # ── Pareto-efficiëntie: BPA-winst vs. klantsurplus over (α, X) ─────────
+    with st.expander("🧭 Pareto-efficiëntie: BPA-winst vs. klantsurplus over (α, X)"):
+        st.caption(
+            "Elk punt is een combinatie van prijspercentage α en service level X. "
+            "Via de keten $(α,X)\\to p_r\\to E[Z_i]\\to$ kostenmodel worden twee "
+            "concurrerende doelen berekend: de **BPA-marge** (€) en het totale "
+            "**klantsurplus** $\\sum_{klant}(\\text{zelf-voorraadkosten}-"
+            "\\text{abonnementskosten})$. De Pareto-frontier verbindt de "
+            "niet-gedomineerde combinaties (geen enkele andere (α,X) scoort op "
+            "beide doelen beter)."
+        )
+        _kp_par = st.session_state.get("kosten_params", {})
+        _kappa_bpa_par = float(_kp_par.get("kappa_bpa", 0.20))
+        _kappa_c_par   = float(_kp_par.get("kappa_c", 0.25))
+        st.caption(
+            f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_par:.0%}**, "
+            f"κ_c = **{_kappa_c_par:.0%}** _(pas aan via 💰 Kostenanalyse)_."
+        )
+
+        _cp1, _cp2 = st.columns(2)
+        with _cp1:
+            _pa_min = st.number_input(
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
+                step=0.01, format="%.2f", key="subsim_par_amin")
+            _pa_max = st.number_input(
+                "α-bereik max", min_value=0.01, max_value=1.0, value=0.30,
+                step=0.01, format="%.2f", key="subsim_par_amax")
+            _pa_n = st.slider("Aantal α-waarden", 2, 12, 7, key="subsim_par_na")
+        with _cp2:
+            _px_min = st.number_input(
+                "X-bereik min", min_value=0.50, max_value=0.9999, value=0.95,
+                step=0.005, format="%.3f", key="subsim_par_xmin")
+            _px_max = st.number_input(
+                "X-bereik max", min_value=0.50, max_value=0.9999, value=0.999,
+                step=0.005, format="%.3f", key="subsim_par_xmax")
+            _px_n = st.slider("Aantal X-waarden", 2, 12, 5, key="subsim_par_nx")
+
+        if st.button("Bereken Pareto-frontier", key="subsim_par_btn",
+                     disabled=not _cls_codes):
+            try:
+                _ov_par = get_overzicht_df(cfg)
+                if _ov_par is None or _ov_par.empty:
+                    st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+                else:
+                    _a_vals = list(np.linspace(float(_pa_min), float(_pa_max), int(_pa_n)))
+                    _x_vals = list(np.linspace(float(_px_min), float(_px_max), int(_px_n)))
+                    with st.spinner("Pareto-frontier berekenen…"):
+                        _par_df = pareto_alpha_X(
+                            _ov_par, _a_vals, _x_vals,
+                            _p_dichtbij0, _p_ver0, _alpha0_sim, _X0_sim,
+                            _kappa_bpa_par, _kappa_c_par,
+                            _gamma_alpha, _gamma_X,
+                            excel_file=_excel_arg(), codes=_cls_codes)
+                    if _par_df.empty:
+                        st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
+                        st.session_state.pop("subsim_par_data", None)
+                    else:
+                        st.session_state["subsim_par_data"] = _par_df
+            except ValueError as _par_err:
+                st.warning(
+                    "Pareto-analyse niet beschikbaar: de bron-Excel bevat geen "
+                    f"tab 'Adoptie'. ({_par_err})"
+                )
+                st.session_state.pop("subsim_par_data", None)
+
+        _par_df = st.session_state.get("subsim_par_data")
+        if _par_df is not None and not _par_df.empty:
+            import matplotlib.pyplot as _plt_par
+            _valid = _par_df.dropna(subset=["margin", "surplus"]).reset_index(drop=True)
+            if _valid.empty:
+                st.info("Geen geldige (haalbare) (α,X)-combinaties om te plotten.")
+            else:
+                _m = _valid["margin"].to_numpy()
+                _s = _valid["surplus"].to_numpy()
+                # Niet-gedomineerde punten (maximaliseer marge én surplus).
+                _eff = np.ones(len(_valid), dtype=bool)
+                for _i in range(len(_valid)):
+                    for _j in range(len(_valid)):
+                        if _i == _j:
+                            continue
+                        if (_m[_j] >= _m[_i] and _s[_j] >= _s[_i]
+                                and (_m[_j] > _m[_i] or _s[_j] > _s[_i])):
+                            _eff[_i] = False
+                            break
+                _figp, _axp = _plt_par.subplots(figsize=(8, 5.5))
+                _sc = _axp.scatter(
+                    _valid["margin"], _valid["surplus"],
+                    c=_valid["alpha"], cmap="viridis", s=70,
+                    edgecolor="white", linewidth=0.6, zorder=3)
+                _cb = _figp.colorbar(_sc, ax=_axp)
+                _cb.set_label("prijspercentage α")
+                # Pareto-frontier: niet-gedomineerde punten verbinden.
+                _front = _valid[_eff].sort_values("margin")
+                _axp.plot(
+                    _front["margin"], _front["surplus"],
+                    color="#d62728", lw=2, marker="o", ms=9,
+                    markerfacecolor="none", markeredgecolor="#d62728",
+                    label="Pareto-frontier", zorder=4)
+                # Markeer onhaalbare combinaties (rand rood).
+                _infeas = _valid[~_valid["feasible"]]
+                if not _infeas.empty:
+                    _axp.scatter(
+                        _infeas["margin"], _infeas["surplus"],
+                        facecolors="none", edgecolors="red", s=130,
+                        linewidth=1.2, label="niet haalbaar", zorder=5)
+                _axp.axhline(0, color="grey", lw=0.8, ls=":")
+                _axp.axvline(0, color="grey", lw=0.8, ls=":")
+                _axp.set_xlabel("BPA-marge (€)")
+                _axp.set_ylabel("totaal klantsurplus (€)")
+                _axp.set_title("Pareto-efficiëntie over (α, X)")
+                _axp.grid(True, alpha=0.3)
+                _axp.legend(loc="best", fontsize=9)
+                _figp.tight_layout()
+                st.pyplot(_figp)
+                _plt_par.close(_figp)
+
+                # Tabel met de Pareto-efficiënte combinaties.
+                st.markdown("**Pareto-efficiënte (α, X)-combinaties**")
+                _tab = _front.copy()
+                _tab["α"]              = _tab["alpha"].map(lambda v: f"{v:.0%}")
+                _tab["X"]              = _tab["X"].map(lambda v: f"{v:.3f}")
+                _tab["BPA-marge (€)"]  = _tab["margin"].map(lambda v: f"{v:,.0f}")
+                _tab["Klantsurplus (€)"] = _tab["surplus"].map(lambda v: f"{v:,.0f}")
+                _tab["Σ E[Z]"]         = _tab["total_Z"].map(lambda v: f"{v:,.0f}")
+                _tab["Haalbaar"]       = _tab["feasible"].map(lambda b: "✓" if b else "✗")
+                st.dataframe(
+                    _tab[["α", "X", "BPA-marge (€)", "Klantsurplus (€)",
+                          "Σ E[Z]", "Haalbaar"]],
+                    hide_index=True, use_container_width=True)
+                st.download_button(
+                    "⬇️ Download alle (α,X)-resultaten (CSV)",
+                    _par_df.to_csv(index=False).encode("utf-8"),
+                    file_name="pareto_alpha_X.csv", mime="text/csv",
+                    key="subsim_par_dl")
 
     if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
                  disabled=not _cls_codes):
