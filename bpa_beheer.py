@@ -507,6 +507,71 @@ def bouw_model_kosten(
 #  SUBSCRIPTIE-SIMULATIE  (binomiale adoptie per component)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def regionale_adoptie_parameter(
+    p0: float,
+    alpha: float, X: float,
+    alpha0: float, X0: float,
+    gamma_alpha: float = 1.0, gamma_X: float = 0.5,
+) -> float:
+    """Regionale adoptieparameter p_r(α, X) volgens de logit-specificatie.
+
+    Het baseline-niveau p0 = p_{r,0} geldt bij de referentie-instelling
+    (α0, X0). Prijs en service level schuiven de adoptie op de logit-schaal:
+
+        p_r(α, X) = σ( logit(p0)
+                       − γ_α · (α − α0) / α0
+                       + γ_X · [g(X) − g(X0)] )
+
+    met σ(y) = 1/(1+e^{−y}),  logit(p) = ln(p/(1−p))  en  g(X) = −ln(1−X).
+
+    Een hogere prijs (α > α0) verlaagt de adoptie; een hoger service level
+    (X > X0) verhoogt de adoptie. Bij (α0, X0) geldt p_r = p0. Het resultaat
+    blijft begrensd tussen 0 en 1.
+    """
+    _eps = 1e-9
+    p0 = float(min(max(p0, _eps), 1.0 - _eps))
+    if alpha0 == 0:
+        alpha0 = _eps
+
+    def _g(x: float) -> float:
+        x = float(min(max(x, _eps), 1.0 - _eps))
+        return -np.log(1.0 - x)
+
+    _logit_p0 = np.log(p0 / (1.0 - p0))
+    _y = (
+        _logit_p0
+        - gamma_alpha * (alpha - alpha0) / alpha0
+        + gamma_X * (_g(X) - _g(X0))
+    )
+    return float(1.0 / (1.0 + np.exp(-_y)))
+
+
+def verwacht_subscripties_per_component(
+    excel_file     = None,
+    codes          = None,
+    rate_overrides = None,
+) -> pd.Series:
+    """Analytisch verwacht aantal subscripties E[Z_i] per component.
+
+    Gebruikt de gesloten vorm E[Z_i] = Σ_n q_{in} met
+    q_{in} = 1 − (1 − p_r)^{h_{in}}, zonder Monte Carlo. Handig om de
+    verwachte Z snel (en deterministisch) door te zetten naar de andere
+    tabs bij wijziging van α, X of de adoptie-parameters.
+
+    Returns een Series geïndexeerd op Code met het verwachte aantal subs.
+    """
+    adoptie = laad_adoptie_data(excel_file, rate_overrides=rate_overrides)
+    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
+    if codes_set:
+        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
+    if adoptie.empty:
+        return pd.Series(dtype=float)
+    _q = 1.0 - (1.0 - adoptie['Adoption_rate']) ** adoptie['Orders_component_klant']
+    _ez = _q.groupby(adoptie['Code']).sum()
+    _ez.index.name = 'Code'
+    return _ez.sort_values(ascending=False)
+
+
 def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
     """Hermap de twee adoption-rate niveaus (Benelux hoog / overig laag).
 
