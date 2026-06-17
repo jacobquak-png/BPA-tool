@@ -28,6 +28,8 @@ from bpa_beheer import (
     laad_classificatie_selectie,
     simuleer_subscripties_per_component,
     simuleer_subscripties_runs,
+    regionale_adoptie_parameter,
+    verwacht_subscripties_per_component,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -3356,26 +3358,133 @@ with tab_subsim:
             value=42, step=1, key="subsim_seed",
         )
 
-    # ── Adoption rates aanpasbaar (Benelux vs. overig) ────────────────────
-    st.markdown("**Adoption rates**")
+    # ── Adoptiemodel: regionale baseline + logit-effect van α en X ────────
+    st.markdown("**Adoptiemodel (willingness-to-pay)**")
     st.caption(
-        "De data kent twee adoption-rate niveaus: een hoger niveau voor "
-        "Benelux-klanten en een lager niveau voor de overige klanten. Pas ze "
-        "hieronder aan om te toetsen of de aannames realistisch zijn — de "
-        "simulatie hermapt de twee niveaus naar deze waarden."
+        "De adoptiekans per klant volgt $q_{in}=1-(1-p_r)^{h_{in}}$ met $h_{in}$ "
+        "= historische orders. De regionale adoptieparameter $p_r$ hangt af van "
+        "prijspercentage α en service level X via een logit-specificatie: "
+        "$p_r(α,X)=σ(\\,\\mathrm{logit}(p_{r,0})-γ_α\\frac{α-α_0}{α_0}+γ_X[g(X)-g(X_0)]\\,)$ "
+        "met $g(X)=-\\ln(1-X)$. De twee baselines $p_{r,0}$ gelden bij de "
+        "referentie $(α_0,X_0)$."
     )
+
+    # Standaarden voor α en X uit de Kostenanalyse-tab; hier overschrijfbaar.
+    _kp_sim = st.session_state.get("kosten_params", {})
+    _alpha_def_sim = float(_kp_sim.get("alpha", 0.15))
+    _X_def_sim     = float(_kp_sim.get("service_level", 0.99))
+
+    st.markdown("_Regionale baseline-adoptie $p_{r,0}$ (bij referentie $α_0, X_0$)_")
     col_r1, col_r2 = st.columns(2)
     with col_r1:
-        _rate_benelux = st.number_input(
-            "Adoption rate Benelux (hoog)", min_value=0.0, max_value=1.0,
-            value=0.70, step=0.05, format="%.2f", key="subsim_rate_benelux",
+        _p_dichtbij0 = st.number_input(
+            "Baseline p_r0 dichtbij (Benelux)", min_value=0.0, max_value=1.0,
+            value=0.70, step=0.05, format="%.2f", key="subsim_p_dichtbij0",
         )
     with col_r2:
-        _rate_overig = st.number_input(
-            "Adoption rate overig (laag)", min_value=0.0, max_value=1.0,
-            value=0.40, step=0.05, format="%.2f", key="subsim_rate_overig",
+        _p_ver0 = st.number_input(
+            "Baseline p_r0 ver (overig)", min_value=0.0, max_value=1.0,
+            value=0.40, step=0.05, format="%.2f", key="subsim_p_ver0",
         )
-    _rate_overrides = {"benelux": float(_rate_benelux), "overig": float(_rate_overig)}
+
+    st.markdown("_Prijs en service level (effect op adoptie)_")
+    col_ax1, col_ax2 = st.columns(2)
+    with col_ax1:
+        _alpha_sim = st.number_input(
+            "α (prijspercentage)", min_value=0.0, max_value=1.0,
+            value=_alpha_def_sim, step=0.01, format="%.2f", key="subsim_alpha",
+        )
+    with col_ax2:
+        _X_sim = st.number_input(
+            "X (service level)", min_value=0.50, max_value=0.9999,
+            value=_X_def_sim, step=0.005, format="%.3f", key="subsim_X",
+        )
+
+    with st.expander("Referentie en gevoeligheden (α₀, X₀, γ_α, γ_X)"):
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            _alpha0_sim = st.number_input(
+                "α₀ baseline prijspercentage", min_value=0.0001, max_value=1.0,
+                value=0.15, step=0.01, format="%.2f", key="subsim_alpha0",
+            )
+            _gamma_alpha = st.number_input(
+                "γ_α prijsgevoeligheid", min_value=0.0, max_value=20.0,
+                value=1.0, step=0.1, format="%.2f", key="subsim_gamma_alpha",
+            )
+        with col_b2:
+            _X0_sim = st.number_input(
+                "X₀ baseline service level", min_value=0.50, max_value=0.9999,
+                value=0.98, step=0.005, format="%.3f", key="subsim_X0",
+            )
+            _gamma_X = st.number_input(
+                "γ_X servicegevoeligheid", min_value=0.0, max_value=20.0,
+                value=0.5, step=0.1, format="%.2f", key="subsim_gamma_X",
+            )
+
+    # Effectieve regionale adoptieparameters p_r(α, X) via de logit-formule.
+    _p_dichtbij = regionale_adoptie_parameter(
+        _p_dichtbij0, _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
+        _gamma_alpha, _gamma_X,
+    )
+    _p_ver = regionale_adoptie_parameter(
+        _p_ver0, _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
+        _gamma_alpha, _gamma_X,
+    )
+    _c_pr1, _c_pr2 = st.columns(2)
+    _c_pr1.metric("p_r(α,X) dichtbij", f"{_p_dichtbij:.3f}",
+                  delta=f"{_p_dichtbij - _p_dichtbij0:+.3f}")
+    _c_pr2.metric("p_r(α,X) ver", f"{_p_ver:.3f}",
+                  delta=f"{_p_ver - _p_ver0:+.3f}")
+
+    # De twee data-niveaus worden hermapt naar de berekende p_r(α,X)-waarden.
+    _rate_overrides = {"benelux": float(_p_dichtbij), "overig": float(_p_ver)}
+
+    # ── Automatische doorwerking naar alle tabs ───────────────────────────
+    # Verwacht aantal subscripties E[Z_i(α,X)] = Σ_n q_in wordt analytisch
+    # (deterministisch, zonder Monte Carlo) bepaald en als integer Z-override
+    # in de configuratie gezet zodra α, X of een adoptie-parameter wijzigt.
+    _auto_z = st.checkbox(
+        "Verwachte Z automatisch doorzetten naar alle tabs bij wijziging van α/X",
+        value=True, key="subsim_auto_z",
+        help="Schrijft E[Z_i(α,X)] per component als integer Z-override en "
+             "herberekent de overige tabs.",
+    )
+    if _auto_z and _cls_codes:
+        _auto_sig = (
+            round(_alpha_sim, 6), round(_X_sim, 6),
+            round(_alpha0_sim, 6), round(_X0_sim, 6),
+            round(_gamma_alpha, 6), round(_gamma_X, 6),
+            round(_p_dichtbij0, 6), round(_p_ver0, 6),
+            tuple(_cls_codes),
+        )
+        if st.session_state.get("subsim_auto_sig") != _auto_sig:
+            try:
+                _ez = verwacht_subscripties_per_component(
+                    excel_file=_excel_arg(),
+                    codes=_cls_codes,
+                    rate_overrides=_rate_overrides,
+                )
+                if not _ez.empty:
+                    _n_ov = dict(cfg.get("n_klanten_overrides", {}))
+                    for _code, _val in _ez.items():
+                        _n_ov[str(_code)] = max(1, int(round(float(_val))))
+                    cfg["n_klanten_overrides"] = _n_ov
+                    if "overzicht_df" in st.session_state:
+                        st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
+                    sla_config_op(cfg)
+                    invalidate_caches()
+                    st.session_state.pop("overzicht_df", None)
+                    st.session_state["subsim_auto_sig"] = _auto_sig
+                    st.success(
+                        f"✅ Verwachte Z (α={_alpha_sim:.2f}, X={_X_sim:.3f}) "
+                        f"automatisch doorgezet naar {len(_ez)} componenten."
+                    )
+                    st.rerun()
+            except ValueError as _auto_err:
+                st.info(
+                    "Automatische doorwerking overgeslagen: de bron-Excel bevat "
+                    f"geen tab 'Adoptie'. ({_auto_err})"
+                )
 
     if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
                  disabled=not _cls_codes):
