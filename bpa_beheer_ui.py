@@ -3732,6 +3732,23 @@ with tab_subsim:
         _opt_feas = st.checkbox(
             "Alleen haalbare combinaties meenemen (marge ≥ 0 én alle klanten profiteren)",
             value=False, key="subsim_opt_feas")
+        _opt_mc = st.checkbox(
+            "Monte-Carlo gesimuleerde Z gebruiken (zelfde bron als de simulatietab)",
+            value=False, key="subsim_opt_mc",
+            help="Aan: Z = gemiddelde over trekkingen per α (met seed). "
+                 "Uit: Z = analytische verwachtingswaarde E[Z] (sneller, ruisvrij).")
+        if _opt_mc:
+            _co3, _co4 = st.columns(2)
+            with _co3:
+                _opt_runs = st.number_input(
+                    "Aantal runs", min_value=50, max_value=5000, value=500,
+                    step=50, key="subsim_opt_runs")
+            with _co4:
+                _opt_seed = st.number_input(
+                    "Seed", min_value=0, max_value=10_000, value=42,
+                    step=1, key="subsim_opt_seed")
+        else:
+            _opt_runs, _opt_seed = 500, 42
 
         if st.button("🎯 Bereken optimale α", key="subsim_opt_btn",
                      disabled=not _cls_codes):
@@ -3748,7 +3765,9 @@ with tab_subsim:
                             _kappa_bpa_opt, _kappa_c_opt,
                             _gamma_alpha, _gamma_X,
                             excel_file=_excel_arg(), codes=_cls_codes,
-                            alleen_haalbaar=bool(_opt_feas))
+                            alleen_haalbaar=bool(_opt_feas),
+                            gebruik_simulatie=bool(_opt_mc),
+                            n_runs=int(_opt_runs), seed=int(_opt_seed))
                     if _opt_curve is None or _opt_curve.empty or _opt_best is None:
                         st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_opt_data", None)
@@ -3757,6 +3776,7 @@ with tab_subsim:
                             "curve": _opt_curve,
                             "best": _opt_best.to_dict(),
                             "X": float(_X_opt),
+                            "mc": bool(_opt_mc),
                         }
             except ValueError as _opt_err:
                 st.warning(
@@ -3771,10 +3791,12 @@ with tab_subsim:
             _ocurve = _opt_data["curve"].dropna(subset=["margin"]).sort_values("alpha")
             _obest  = _opt_data["best"]
             _oX     = _opt_data["X"]
+            _o_mc   = _opt_data.get("mc", False)
+            _z_lbl  = "Σ Z (Monte-Carlo)" if _o_mc else "Σ E[Z] (analytisch)"
             _cm1, _cm2, _cm3 = st.columns(3)
             _cm1.metric("Optimale α", f"{_obest['alpha']:.1%}")
             _cm2.metric("BPA-marge", f"€ {_obest['margin']:,.0f}")
-            _cm3.metric("Σ E[Z]", f"{_obest['total_Z']:,.0f}",
+            _cm3.metric(_z_lbl, f"{_obest['total_Z']:,.0f}",
                         help=f"Haalbaar: {'ja' if _obest['feasible'] else 'nee'}")
             _figo, _axo = _plt_opt.subplots(figsize=(9, 4.5))
             _axo.plot(_ocurve["alpha"], _ocurve["margin"],
@@ -3785,14 +3807,15 @@ with tab_subsim:
             _axo.axhline(0, color="grey", lw=0.8, ls=":")
             _axo.set_xlabel("prijspercentage α")
             _axo.set_ylabel("BPA-marge (€)")
-            _axo.set_title(f"Marge vs. α bij vast X = {_oX:.3f}")
+            _z_src = "Monte-Carlo Z" if _o_mc else "analytische E[Z]"
+            _axo.set_title(f"Marge vs. α bij vast X = {_oX:.3f}  ({_z_src})")
             _axo.grid(True, alpha=0.3)
-            # Tweede as: totale adoptie Σ E[Z] om de trade-off te tonen.
+            # Tweede as: totale adoptie Σ Z om de trade-off te tonen.
             _axo2 = _axo.twinx()
             _axo2.plot(_ocurve["alpha"], _ocurve["total_Z"],
                        color="#2ca02c", lw=1.5, ls="-.", alpha=0.7,
-                       label="Σ E[Z]")
-            _axo2.set_ylabel("totaal subscripties  Σ E[Z]", color="#2ca02c")
+                       label=_z_lbl)
+            _axo2.set_ylabel(f"totaal subscripties  {_z_lbl}", color="#2ca02c")
             _axo2.tick_params(axis="y", labelcolor="#2ca02c")
             _l1, _lab1 = _axo.get_legend_handles_labels()
             _l2, _lab2 = _axo2.get_legend_handles_labels()
