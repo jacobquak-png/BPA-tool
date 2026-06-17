@@ -633,6 +633,110 @@ def gevoeligheid_verwachte_z(
     return totalen
 
 
+def pareto_alpha_X(
+    overzicht_df,
+    alpha_waarden,
+    X_waarden,
+    p_dichtbij0:   float,
+    p_ver0:        float,
+    alpha0:        float,
+    X0:            float,
+    kappa_bpa:     float,
+    kappa_c:       float,
+    gamma_alpha:   float = 1.0,
+    gamma_X:       float = 0.5,
+    excel_file           = None,
+    codes                = None,
+) -> pd.DataFrame:
+    """Pareto-analyse over (α, X): BPA-marge vs. totaal klantsurplus.
+
+    Voor elk paar (α, X) uit het cartesisch product van ``alpha_waarden`` en
+    ``X_waarden`` wordt de volledige keten doorgerekend:
+
+      1. p_r(α, X) per regio via de logit-specificatie (willingness-to-pay);
+      2. E[Z_i] = Σ_n q_{in} per component (analytisch, geen Monte Carlo);
+      3. een overzicht met n_klanten = E[Z_i] (λ proportioneel meegeschaald);
+      4. het kostenmodel → BPA-marge en het totale klantsurplus
+         Σ_klant (zelf-voorraadkosten − abonnementskosten).
+
+    Returns een DataFrame met kolommen:
+        alpha, X, margin, surplus, total_Z, feasible.
+    """
+    if overzicht_df is None or overzicht_df.empty:
+        return pd.DataFrame()
+
+    adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
+    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
+    if codes_set:
+        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
+    if adoptie.empty:
+        return pd.DataFrame()
+
+    rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
+    h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
+    code_arr = adoptie['Code'].to_numpy()
+    r4       = np.round(rates, 4)
+    _pos     = r4[r4 > 0]
+    if _pos.size == 0:
+        return pd.DataFrame()
+    _niveaus = sorted(pd.Series(_pos).value_counts().index.tolist()[:2])
+    _laag = _niveaus[0]
+    _hoog = _niveaus[-1]
+    high_mask = r4 == round(_hoog, 4)
+    low_mask  = r4 == round(_laag, 4)
+
+    # Per-component λ per klant uit het basisoverzicht (λ/n is invariant in n).
+    base      = overzicht_df
+    base_n    = base['n_klanten'].astype(float)
+    base_lam  = base['lambda_jr'].astype(float)
+    lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
+
+    rijen = []
+    for _a in alpha_waarden:
+        for _x in X_waarden:
+            _p_d = regionale_adoptie_parameter(
+                p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X)
+            _p_v = regionale_adoptie_parameter(
+                p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X)
+            _rate = rates.copy()
+            _rate[high_mask] = _p_d
+            if _hoog != _laag:
+                _rate[low_mask] = _p_v
+            _q  = 1.0 - (1.0 - _rate) ** h
+            _ez = pd.Series(_q).groupby(code_arr).sum()
+
+            # Overzicht met n_klanten = E[Z_i] (λ meegeschaald); componenten
+            # zonder adoptie-data behouden hun basiswaarden.
+            _n_new   = _ez.reindex(base.index)
+            _present = _n_new.notna()
+            _n_int   = _n_new.where(_present, base_n).round().clip(lower=1).astype(int)
+            mod = base.copy()
+            mod['n_klanten'] = _n_int.values
+            mod['lambda_jr'] = np.where(
+                _present.values,
+                _n_int.values.astype(float) * lam_per_cust.values,
+                base_lam.values,
+            )
+            try:
+                _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
+                _margin  = float(_res['bpa_margin'])
+                _surplus = float(sum(
+                    v['savings'] for v in _res['customer_benefits'].values()))
+                _feas    = bool(_res['feasible'])
+            except Exception:
+                _margin = _surplus = float('nan')
+                _feas   = False
+            rijen.append({
+                'alpha':    float(_a),
+                'X':        float(_x),
+                'margin':   _margin,
+                'surplus':  _surplus,
+                'total_Z':  float(_ez.sum()),
+                'feasible': _feas,
+            })
+    return pd.DataFrame(rijen)
+
+
 def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
     """Hermap de twee adoption-rate niveaus (Benelux hoog / overig laag).
 
