@@ -30,6 +30,7 @@ from bpa_beheer import (
     simuleer_subscripties_runs,
     regionale_adoptie_parameter,
     verwacht_subscripties_per_component,
+    gevoeligheid_verwachte_z,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -3485,6 +3486,80 @@ with tab_subsim:
                     "Automatische doorwerking overgeslagen: de bron-Excel bevat "
                     f"geen tab 'Adoptie'. ({_auto_err})"
                 )
+
+    # ── Gevoeligheidsanalyse: verwachte Z vs. (α, X) ──────────────────────
+    with st.expander("📈 Gevoeligheidsanalyse: verwachte Z vs. prijs α en service level X"):
+        st.caption(
+            "Toont het totaal verwachte aantal subscripties $\\sum_i E[Z_i]$ als "
+            "functie van het prijspercentage α (bij vast X) en van het service "
+            "level X (bij vaste α). De stippellijn markeert de huidige instelling."
+        )
+        _cga, _cgb = st.columns(2)
+        with _cga:
+            _a_min = st.number_input(
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.0,
+                step=0.01, format="%.2f", key="subsim_sens_amin")
+            _a_max = st.number_input(
+                "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
+                step=0.01, format="%.2f", key="subsim_sens_amax")
+        with _cgb:
+            _x_min = st.number_input(
+                "X-bereik min", min_value=0.50, max_value=0.9999, value=0.90,
+                step=0.005, format="%.3f", key="subsim_sens_xmin")
+            _x_max = st.number_input(
+                "X-bereik max", min_value=0.50, max_value=0.9999, value=0.999,
+                step=0.005, format="%.3f", key="subsim_sens_xmax")
+        _n_grid = st.slider(
+            "Aantal gridpunten", min_value=5, max_value=60, value=25,
+            key="subsim_sens_n")
+
+        if st.button("Bereken gevoeligheid", key="subsim_sens_btn",
+                     disabled=not _cls_codes):
+            try:
+                _a_grid = list(np.linspace(float(_a_min), float(_a_max), int(_n_grid)))
+                _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_n_grid)))
+                with st.spinner("Gevoeligheid berekenen…"):
+                    _z_vs_a = gevoeligheid_verwachte_z(
+                        _a_grid, 'alpha', _p_dichtbij0, _p_ver0,
+                        _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
+                        _gamma_alpha, _gamma_X,
+                        excel_file=_excel_arg(), codes=_cls_codes)
+                    _z_vs_x = gevoeligheid_verwachte_z(
+                        _x_grid, 'X', _p_dichtbij0, _p_ver0,
+                        _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
+                        _gamma_alpha, _gamma_X,
+                        excel_file=_excel_arg(), codes=_cls_codes)
+                st.session_state["subsim_sens_data"] = {
+                    "a_grid": _a_grid, "z_vs_a": _z_vs_a,
+                    "x_grid": _x_grid, "z_vs_x": _z_vs_x,
+                    "alpha": float(_alpha_sim), "X": float(_X_sim),
+                }
+            except ValueError as _sens_err:
+                st.warning(
+                    "Gevoeligheid niet beschikbaar: de bron-Excel bevat geen "
+                    f"tab 'Adoptie'. ({_sens_err})"
+                )
+                st.session_state.pop("subsim_sens_data", None)
+
+        _sens = st.session_state.get("subsim_sens_data")
+        if _sens:
+            import matplotlib.pyplot as _plt_sens
+            _figs, (_axa, _axx) = _plt_sens.subplots(1, 2, figsize=(11, 4))
+            _axa.plot(_sens["a_grid"], _sens["z_vs_a"], color="#1f77b4", lw=2)
+            _axa.axvline(_sens["alpha"], color="grey", ls="--", lw=1)
+            _axa.set_xlabel("prijspercentage α")
+            _axa.set_ylabel("verwacht totaal subscripties  Σ E[Z]")
+            _axa.set_title(f"Z vs. α  (X = {_sens['X']:.3f})")
+            _axa.grid(True, alpha=0.3)
+            _axx.plot(_sens["x_grid"], _sens["z_vs_x"], color="#2ca02c", lw=2)
+            _axx.axvline(_sens["X"], color="grey", ls="--", lw=1)
+            _axx.set_xlabel("service level X")
+            _axx.set_ylabel("verwacht totaal subscripties  Σ E[Z]")
+            _axx.set_title(f"Z vs. X  (α = {_sens['alpha']:.2f})")
+            _axx.grid(True, alpha=0.3)
+            _figs.tight_layout()
+            st.pyplot(_figs)
+            _plt_sens.close(_figs)
 
     if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
                  disabled=not _cls_codes):
