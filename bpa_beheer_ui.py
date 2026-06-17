@@ -32,6 +32,7 @@ from bpa_beheer import (
     verwacht_subscripties_per_component,
     gevoeligheid_verwachte_z,
     pareto_alpha_X,
+    optimale_alpha_bij_X,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -3696,6 +3697,114 @@ with tab_subsim:
                     _par_df.to_csv(index=False).encode("utf-8"),
                     file_name="pareto_alpha_X.csv", mime="text/csv",
                     key="subsim_par_dl")
+
+    # ── Optimale α bij vast service level X ───────────────────────────────
+    with st.expander("🎯 Optimale α bij vast service level X (marge maximaliseren)"):
+        st.caption(
+            "Zet het service level X vast en zoek het prijspercentage α dat de "
+            "BPA-marge maximaliseert. Een hogere α verhoogt de omzet per klant "
+            "maar verlaagt de adoptie $E[Z_i]$ via het WTP-model, dus er bestaat "
+            "doorgaans een inwendig optimum."
+        )
+        _kp_opt = st.session_state.get("kosten_params", {})
+        _kappa_bpa_opt = float(_kp_opt.get("kappa_bpa", 0.20))
+        _kappa_c_opt   = float(_kp_opt.get("kappa_c", 0.25))
+        st.caption(
+            f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_opt:.0%}**, "
+            f"κ_c = **{_kappa_c_opt:.0%}** _(pas aan via 💰 Kostenanalyse)_."
+        )
+
+        _co1, _co2 = st.columns(2)
+        with _co1:
+            _X_opt = st.number_input(
+                "Vast service level X", min_value=0.50, max_value=0.9999,
+                value=float(_X_sim), step=0.005, format="%.3f",
+                key="subsim_opt_X")
+            _oa_min = st.number_input(
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
+                step=0.01, format="%.2f", key="subsim_opt_amin")
+        with _co2:
+            _oa_n = st.slider(
+                "Aantal α-waarden", 5, 60, 25, key="subsim_opt_na")
+            _oa_max = st.number_input(
+                "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
+                step=0.01, format="%.2f", key="subsim_opt_amax")
+        _opt_feas = st.checkbox(
+            "Alleen haalbare combinaties meenemen (marge ≥ 0 én alle klanten profiteren)",
+            value=False, key="subsim_opt_feas")
+
+        if st.button("🎯 Bereken optimale α", key="subsim_opt_btn",
+                     disabled=not _cls_codes):
+            try:
+                _ov_opt = get_overzicht_df(cfg)
+                if _ov_opt is None or _ov_opt.empty:
+                    st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+                else:
+                    _oa_grid = list(np.linspace(float(_oa_min), float(_oa_max), int(_oa_n)))
+                    with st.spinner("Optimale α zoeken…"):
+                        _opt_curve, _opt_best = optimale_alpha_bij_X(
+                            _ov_opt, float(_X_opt), _oa_grid,
+                            _p_dichtbij0, _p_ver0, _alpha0_sim, _X0_sim,
+                            _kappa_bpa_opt, _kappa_c_opt,
+                            _gamma_alpha, _gamma_X,
+                            excel_file=_excel_arg(), codes=_cls_codes,
+                            alleen_haalbaar=bool(_opt_feas))
+                    if _opt_curve is None or _opt_curve.empty or _opt_best is None:
+                        st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
+                        st.session_state.pop("subsim_opt_data", None)
+                    else:
+                        st.session_state["subsim_opt_data"] = {
+                            "curve": _opt_curve,
+                            "best": _opt_best.to_dict(),
+                            "X": float(_X_opt),
+                        }
+            except ValueError as _opt_err:
+                st.warning(
+                    "Optimalisatie niet beschikbaar: de bron-Excel bevat geen "
+                    f"tab 'Adoptie'. ({_opt_err})"
+                )
+                st.session_state.pop("subsim_opt_data", None)
+
+        _opt_data = st.session_state.get("subsim_opt_data")
+        if _opt_data:
+            import matplotlib.pyplot as _plt_opt
+            _ocurve = _opt_data["curve"].dropna(subset=["margin"]).sort_values("alpha")
+            _obest  = _opt_data["best"]
+            _oX     = _opt_data["X"]
+            _cm1, _cm2, _cm3 = st.columns(3)
+            _cm1.metric("Optimale α", f"{_obest['alpha']:.1%}")
+            _cm2.metric("BPA-marge", f"€ {_obest['margin']:,.0f}")
+            _cm3.metric("Σ E[Z]", f"{_obest['total_Z']:,.0f}",
+                        help=f"Haalbaar: {'ja' if _obest['feasible'] else 'nee'}")
+            _figo, _axo = _plt_opt.subplots(figsize=(9, 4.5))
+            _axo.plot(_ocurve["alpha"], _ocurve["margin"],
+                      color="#1f77b4", lw=2, marker="o", ms=4,
+                      label="BPA-marge")
+            _axo.axvline(_obest["alpha"], color="#d62728", ls="--", lw=1.5,
+                         label=f"optimale α = {_obest['alpha']:.1%}")
+            _axo.axhline(0, color="grey", lw=0.8, ls=":")
+            _axo.set_xlabel("prijspercentage α")
+            _axo.set_ylabel("BPA-marge (€)")
+            _axo.set_title(f"Marge vs. α bij vast X = {_oX:.3f}")
+            _axo.grid(True, alpha=0.3)
+            # Tweede as: totale adoptie Σ E[Z] om de trade-off te tonen.
+            _axo2 = _axo.twinx()
+            _axo2.plot(_ocurve["alpha"], _ocurve["total_Z"],
+                       color="#2ca02c", lw=1.5, ls="-.", alpha=0.7,
+                       label="Σ E[Z]")
+            _axo2.set_ylabel("totaal subscripties  Σ E[Z]", color="#2ca02c")
+            _axo2.tick_params(axis="y", labelcolor="#2ca02c")
+            _l1, _lab1 = _axo.get_legend_handles_labels()
+            _l2, _lab2 = _axo2.get_legend_handles_labels()
+            _axo.legend(_l1 + _l2, _lab1 + _lab2, loc="best", fontsize=9)
+            _figo.tight_layout()
+            st.pyplot(_figo)
+            _plt_opt.close(_figo)
+            st.download_button(
+                "⬇️ Download marge-vs-α curve (CSV)",
+                _opt_data["curve"].to_csv(index=False).encode("utf-8"),
+                file_name="optimale_alpha_bij_X.csv", mime="text/csv",
+                key="subsim_opt_dl")
 
     if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
                  disabled=not _cls_codes):
