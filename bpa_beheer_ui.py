@@ -33,6 +33,7 @@ from bpa_beheer import (
     gevoeligheid_verwachte_z,
     pareto_alpha_X,
     optimale_alpha_bij_X,
+    winst_voor_wtp_grid,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -4022,32 +4023,36 @@ with tab_subsim:
 with tab_sensitivity:
     st.subheader("Sensitivity-analyse van de WTP-functie")
     st.markdown(
-        "Plot de **regionale adoptieparameter** $p_r$ (de uitkomst van de "
-        "willingness-to-pay-functie) tegen een vrij te kiezen element van de "
-        "WTP-functie. Optioneel varieer je een **tweede** element om een familie "
-        "van curves te tekenen, zodat je twee variabelen direct tegen elkaar "
-        "kunt afwegen.\n\n"
-        "$$p_r(α,X)=σ\\!\\Big(\\mathrm{logit}(p_0)-γ_α\\tfrac{α-α_0}{α_0}"
-        "+γ_X\\big[g(X)-g(X_0)\\big]\\Big)\\cdot \\mathrm{gate}(α),\\quad "
-        "g(X)=-\\ln(1-X)$$"
+        "Plot de **totale BPA-winst (€)** tegen een vrij te kiezen element van de "
+        "willingness-to-pay-functie. Optioneel varieer je een **tweede** element "
+        "om een familie van curves te tekenen, zodat je twee variabelen direct "
+        "tegen elkaar kunt afwegen.\n\n"
+        "Per parameterpunt loopt de volledige keten: "
+        "$\\text{WTP-elementen}\\to p_r(α,X)\\to E[Z_i]\\to$ kostenmodel "
+        "$\\to$ **BPA-marge**. De adoptie volgt "
+        "$p_r(α,X)=σ\\!\\big(\\mathrm{logit}(p_0)-γ_α\\tfrac{α-α_0}{α_0}"
+        "+γ_X[g(X)-g(X_0)]\\big)\\cdot \\mathrm{gate}(α)$ met $g(X)=-\\ln(1-X)$, "
+        "voor de twee regionale baselines (Benelux/overig)."
     )
 
     # ── Registry van WTP-elementen (label, grenzen, stap, default) ─────────
     _WTP_PARAMS = {
-        "p0":          {"label": "p₀ — baseline adoptie",       "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
-        "alpha":       {"label": "α — prijspercentage",          "min": 0.0,    "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X":           {"label": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "alpha0":      {"label": "α₀ — referentieprijs",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X0":          {"label": "X₀ — referentie service",      "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "gamma_alpha": {"label": "γ_α — prijsgevoeligheid",      "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "gamma_X":     {"label": "γ_X — servicegevoeligheid",    "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "s_alpha":     {"label": "s — scherpte WTP-plafond",     "min": 0.005,  "max": 0.10,   "step": 0.005, "fmt": "%.3f"},
+        "p_dichtbij0": {"label": "p₀ dichtbij — baseline Benelux", "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
+        "p_ver0":      {"label": "p₀ ver — baseline overig",       "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
+        "alpha":       {"label": "α — prijspercentage",            "min": 0.0,    "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X":           {"label": "X — service level",              "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "alpha0":      {"label": "α₀ — referentieprijs",           "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X0":          {"label": "X₀ — referentie service",        "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "gamma_alpha": {"label": "γ_α — prijsgevoeligheid",        "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "gamma_X":     {"label": "γ_X — servicegevoeligheid",      "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "s_alpha":     {"label": "s — scherpte WTP-plafond",       "min": 0.005,  "max": 0.10,   "step": 0.005, "fmt": "%.3f"},
     }
 
     # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
     _kp_se = st.session_state.get("kosten_params", {})
     _seed_se = {
-        "p0":          float(st.session_state.get("subsim_p_dichtbij0", 0.70)),
+        "p_dichtbij0": float(st.session_state.get("subsim_p_dichtbij0", 0.70)),
+        "p_ver0":      float(st.session_state.get("subsim_p_ver0", 0.40)),
         "alpha":       float(_kp_se.get("alpha", 0.15)),
         "X":           float(_kp_se.get("service_level", 0.99)),
         "alpha0":      float(st.session_state.get("subsim_alpha0", 0.15)),
@@ -4068,7 +4073,7 @@ with tab_sensitivity:
     with _cx:
         _x_var = st.selectbox(
             "X-as variabele", options=list(_WTP_PARAMS.keys()),
-            format_func=lambda k: _labels_se[k], index=1, key="se_x_var",
+            format_func=lambda k: _labels_se[k], index=2, key="se_x_var",
             help="Het WTP-element dat over de x-as wordt gevarieerd.")
     with _ccurve:
         _curve_opts = ["(geen)"] + [k for k in _WTP_PARAMS if k != _x_var]
@@ -4144,79 +4149,146 @@ with tab_sensitivity:
             step=0.01, format="%.3f", key="se_kappa_c", disabled=not _wtp_gate)
     _alpha_max_se = float(_kc_input) if _wtp_gate else None
 
-    # ── Berekenen ─────────────────────────────────────────────────────────
-    def _pr_for(_params):
-        """Roep de WTP-functie aan met een dict van alle elementen."""
-        return regionale_adoptie_parameter(
-            _params["p0"], _params["alpha"], _params["X"],
-            _params["alpha0"], _params["X0"],
-            _params["gamma_alpha"], _params["gamma_X"],
-            alpha_max=_alpha_max_se, s_alpha=_params["s_alpha"],
+    # ── Kostenparameters + bron ───────────────────────────────────────────
+    _kappa_bpa_se = float(_kp_se.get("kappa_bpa", 0.20))
+    _kappa_c_se   = float(_kp_se.get("kappa_c", 0.25))
+    st.caption(
+        f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_se:.0%}**, "
+        f"κ_c = **{_kappa_c_se:.0%}** _(pas aan via 💰 Kostenanalyse)_."
+    )
+
+    _cls_codes_se = sorted(get_classificatie_info().get("items", {}).keys())
+    if not _cls_codes_se:
+        st.warning(
+            "Geen classificatie-selectie (`bpa_selectie.json`) gevonden. "
+            "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
+
+    _excel_se = st.session_state.get("cls_upload")
+
+    def _excel_arg_se():
+        if _excel_se is None:
+            return None
+        try:
+            _excel_se.seek(0)
+        except (AttributeError, ValueError):
+            pass
+        return _excel_se
 
     _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_x_n)))
 
-    import matplotlib.pyplot as _plt_se
-    _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
-    _cmap_se = _plt_se.cm.viridis
-
-    for _ci, _cval in enumerate(_curve_vals):
-        _ys = []
-        for _xv in _x_grid:
-            _p = dict(_fixed)
-            _p[_x_var] = float(_xv)
-            if _cval is not None:
-                _p[_curve_var] = float(_cval)
-            _ys.append(_pr_for(_p))
-        if _cval is None:
-            _ax_se.plot(_x_grid, _ys, color="#1f77b4", lw=2.2)
-        else:
-            _col = _cmap_se(_ci / max(1, len(_curve_vals) - 1))
-            _spec_c = _WTP_PARAMS[_curve_var]
-            _ax_se.plot(_x_grid, _ys, lw=2.0, color=_col,
-                        label=f"{_spec_c['label'].split(' ')[0]} = {_cval:{_spec_c['fmt'][1:]}}")
-
-    # Markeer de huidige (vaste) waarde van de x-as variabele.
-    _x_cur = _clip_se(_x_var, _seed_se[_x_var])
-    if _x_min <= _x_cur <= _x_max:
-        _ax_se.axvline(_x_cur, color="grey", ls="--", lw=1,
-                       label=f"huidige {_spec_x['label'].split(' ')[0]} = {_x_cur:{_spec_x['fmt'][1:]}}")
-
-    _ax_se.set_xlabel(_spec_x["label"], fontsize=11)
-    _ax_se.set_ylabel("regionale adoptieparameter  $p_r$", fontsize=11)
-    _ax_se.set_ylim(-0.02, 1.02)
-    _ax_se.set_title("Sensitivity van $p_r$ t.o.v. de WTP-elementen", fontsize=12)
-    _ax_se.grid(True, alpha=0.3)
-    if _curve_var != "(geen)" or (_x_min <= _x_cur <= _x_max):
-        _ax_se.legend(fontsize=9)
-    _fig_se.tight_layout()
-    st.pyplot(_fig_se)
-    _plt_se.close(_fig_se)
-
-    # ── Datatabel + download ──────────────────────────────────────────────
-    with st.expander("📋 Data achter de grafiek"):
-        _tbl = {_spec_x["label"].split(" ")[0]: _x_grid}
+    # ── Param-dicts voor alle (x, curve)-punten ───────────────────────────
+    def _bouw_param_dicts():
+        _dicts = []
         for _cval in _curve_vals:
-            _ys = []
             for _xv in _x_grid:
                 _p = dict(_fixed)
                 _p[_x_var] = float(_xv)
                 if _cval is not None:
                     _p[_curve_var] = float(_cval)
-                _ys.append(_pr_for(_p))
+                _p["alpha_max"] = _alpha_max_se
+                _dicts.append(_p)
+        return _dicts
+
+    if st.button("📊 Bereken winst-sensitivity", type="primary",
+                 disabled=not _cls_codes_se, key="se_bereken"):
+        try:
+            _ov_se = get_overzicht_df(cfg)
+        except Exception as _e:
+            _ov_se = None
+            st.error(f"Kon overzicht niet laden: {_e}")
+        if _ov_se is None or _ov_se.empty:
+            st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+        else:
+            with st.spinner("Winst-sensitivity berekenen via het kostenmodel…"):
+                try:
+                    _marges = winst_voor_wtp_grid(
+                        _ov_se, _bouw_param_dicts(),
+                        _kappa_bpa_se, _kappa_c_se,
+                        excel_file=_excel_arg_se(), codes=_cls_codes_se,
+                    )
+                    _nx = len(_x_grid)
+                    _per_curve = [
+                        _marges[_i * _nx:(_i + 1) * _nx]
+                        for _i in range(len(_curve_vals))
+                    ]
+                    st.session_state["se_resultaat"] = {
+                        "x_grid":     _x_grid,
+                        "per_curve":  _per_curve,
+                        "x_var":      _x_var,
+                        "curve_var":  _curve_var,
+                        "curve_vals": _curve_vals,
+                        "x_label":    _spec_x["label"],
+                        "x_fmt":      _spec_x["fmt"],
+                        "x_cur":      _clip_se(_x_var, _seed_se[_x_var]),
+                    }
+                except ValueError as _se_err:
+                    st.warning(
+                        "Berekening niet beschikbaar: de bron-Excel bevat geen "
+                        f"tab 'Adoptie'. ({_se_err})"
+                    )
+                    st.session_state.pop("se_resultaat", None)
+
+    # ── Plot van het laatst berekende resultaat ───────────────────────────
+    _res_se = st.session_state.get("se_resultaat")
+    if _res_se:
+        import matplotlib.pyplot as _plt_se
+        import matplotlib.ticker as _mt_se
+
+        _xg        = _res_se["x_grid"]
+        _per_curve = _res_se["per_curve"]
+        _cvals     = _res_se["curve_vals"]
+        _cv_var    = _res_se["curve_var"]
+        _x_lbl     = _res_se["x_label"]
+        _x_fmt     = _res_se["x_fmt"]
+
+        _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
+        _cmap_se = _plt_se.cm.viridis
+        for _ci, _cval in enumerate(_cvals):
+            _ys = _per_curve[_ci]
             if _cval is None:
-                _tbl["p_r"] = _ys
+                _ax_se.plot(_xg, _ys, color="#1f77b4", lw=2.2, marker="o", ms=3)
             else:
-                _spec_c = _WTP_PARAMS[_curve_var]
-                _tbl[f"p_r @ {_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"] = _ys
-        _df_se = pd.DataFrame(_tbl)
-        st.dataframe(_df_se, use_container_width=True, height=320)
-        st.download_button(
-            "⬇️ Download sensitivity-data (CSV)",
-            data=_df_se.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
-            file_name=f"wtp_sensitivity_{date.today()}.csv",
-            mime="text/csv",
-        )
+                _col = _cmap_se(_ci / max(1, len(_cvals) - 1))
+                _spec_c = _WTP_PARAMS[_cv_var]
+                _ax_se.plot(_xg, _ys, lw=2.0, color=_col, marker="o", ms=3,
+                            label=f"{_spec_c['label'].split(' ')[0]} = {_cval:{_spec_c['fmt'][1:]}}")
+
+        _x_cur = _res_se["x_cur"]
+        if _xg and min(_xg) <= _x_cur <= max(_xg):
+            _ax_se.axvline(_x_cur, color="grey", ls="--", lw=1,
+                           label=f"huidige {_x_lbl.split(' ')[0]} = {_x_cur:{_x_fmt[1:]}}")
+        _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
+        _ax_se.set_xlabel(_x_lbl, fontsize=11)
+        _ax_se.set_ylabel("totale BPA-winst (€)", fontsize=11)
+        _ax_se.set_title("Sensitivity van de BPA-winst t.o.v. de WTP-elementen", fontsize=12)
+        _ax_se.yaxis.set_major_formatter(_mt_se.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+        _ax_se.grid(True, alpha=0.3)
+        if _cv_var != "(geen)" or (_xg and min(_xg) <= _x_cur <= max(_xg)):
+            _ax_se.legend(fontsize=9)
+        _fig_se.tight_layout()
+        st.pyplot(_fig_se)
+        _plt_se.close(_fig_se)
+
+        # ── Datatabel + download ──────────────────────────────────────────
+        with st.expander("📋 Data achter de grafiek"):
+            _tbl = {_x_lbl.split(" ")[0]: _xg}
+            for _ci, _cval in enumerate(_cvals):
+                if _cval is None:
+                    _tbl["Winst (€)"] = _per_curve[_ci]
+                else:
+                    _spec_c = _WTP_PARAMS[_cv_var]
+                    _tbl[f"Winst (€) @ {_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"] = _per_curve[_ci]
+            _df_se = pd.DataFrame(_tbl)
+            st.dataframe(_df_se, use_container_width=True, height=320)
+            st.download_button(
+                "⬇️ Download sensitivity-data (CSV)",
+                data=_df_se.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
+                file_name=f"wtp_winst_sensitivity_{date.today()}.csv",
+                mime="text/csv",
+            )
+    else:
+        st.info("Stel de parameters in en klik op **📊 Bereken winst-sensitivity**.")
 
 
 
