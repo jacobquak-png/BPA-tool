@@ -1563,10 +1563,6 @@ with tab_historie:
             "proportioneel mee omhoog."
         )
 
-        if not st.session_state.get('greedy_codes'):
-            st.info("ℹ️ Open eerst de Budget-tab en bereken de greedy-selectie; "
-                    "de investering wordt dan beperkt tot die componenten.")
-
         # Baseline per component = verwacht aantal subs uit de simulatie (per
         # code), met terugval op de geconfigureerde n_klanten. De x-as toont het
         # TOTAAL aantal subscripties over alle componenten (= som van de
@@ -1585,8 +1581,6 @@ with tab_historie:
 
         if st.button("📊 Bereken investering vs. totaal subs"):
             _ov_inv = st.session_state.overzicht_df.reset_index()
-            # Alleen de componenten uit de greedy budget-analyse meenemen.
-            _greedy_codes = set(st.session_state.get('greedy_codes', []))
             # Verzamel per component: lambda per subscriptie, baseline-subs, LT, IP, VP, code
             _comp_inv = []
             for _, _ri in _ov_inv.iterrows():
@@ -1595,10 +1589,8 @@ with tab_historie:
                 _lt = float(_ri.get('LT_dagen', 0) or 0)
                 _ip = float(_ri.get('IP', 0) or 0)
                 _vp = float(_ri.get('VP', 0) or 0)
-                _code = str(_ri.get('Code', ''))
-                if _greedy_codes and _code not in _greedy_codes:
-                    continue
                 if _ni > 0 and _li > 0 and _lt > 0:
+                    _code = str(_ri.get('Code', ''))
                     _comp_inv.append({
                         'code':        _code,
                         'descr':       str(_ri.get('Descr', '')),
@@ -3030,10 +3022,6 @@ with tab_budget:
 
             _in  = _df_sorted[_df_sorted["In_selectie"]]
             _uit = _df_sorted[~_df_sorted["In_selectie"]]
-
-            # Greedy-geselecteerde codes beschikbaar maken voor andere tabs
-            # (o.a. de investeringsgrafiek in de Historie-tab).
-            st.session_state['greedy_codes'] = [str(c) for c in _in.index]
 
             _inv_gekozen  = float(_in["Inv"].sum())
             _waarde_geko  = float(_in["Waarde"].sum())
