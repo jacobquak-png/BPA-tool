@@ -768,7 +768,9 @@ def pareto_alpha_X(
             # zonder adoptie-data behouden hun basiswaarden.
             _n_new   = _ez.reindex(base.index)
             _present = _n_new.notna()
-            _n_int   = _n_new.where(_present, base_n).round().clip(lower=1).astype(int)
+            # Aanwezige componenten mogen naar 0 abonnees zakken (Z_i = 0 bij
+            # α ≥ κ_c); niet-aanwezige componenten behouden hun basiswaarde.
+            _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
             mod = base.copy()
             mod['n_klanten'] = _n_int.values
             mod['lambda_jr'] = np.where(
@@ -776,15 +778,21 @@ def pareto_alpha_X(
                 _n_int.values.astype(float) * lam_per_cust.values,
                 base_lam.values,
             )
-            try:
-                _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
-                _margin  = float(_res['bpa_margin'])
-                _surplus = float(sum(
-                    v['savings'] for v in _res['customer_benefits'].values()))
-                _feas    = bool(_res['feasible'])
-            except Exception:
-                _margin = _surplus = float('nan')
-                _feas   = False
+            if int(mod['n_klanten'].sum()) <= 0:
+                # Geen enkele abonnee → geen omzet en geen kosten: marge = 0.
+                _margin  = 0.0
+                _surplus = 0.0
+                _feas    = False
+            else:
+                try:
+                    _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
+                    _margin  = float(_res['bpa_margin'])
+                    _surplus = float(sum(
+                        v['savings'] for v in _res['customer_benefits'].values()))
+                    _feas    = bool(_res['feasible'])
+                except Exception:
+                    _margin = _surplus = float('nan')
+                    _feas   = False
             rijen.append({
                 'alpha':    float(_a),
                 'X':        float(_x),
