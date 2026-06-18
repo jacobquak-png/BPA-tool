@@ -512,6 +512,7 @@ def regionale_adoptie_parameter(
     alpha: float, X: float,
     alpha0: float, X0: float,
     gamma_alpha: float = 1.0, gamma_X: float = 0.5,
+    alpha_max: float = None, s_alpha: float = 0.02,
 ) -> float:
     """Regionale adoptieparameter p_r(α, X) volgens de logit-specificatie.
 
@@ -527,6 +528,20 @@ def regionale_adoptie_parameter(
     Een hogere prijs (α > α0) verlaagt de adoptie; een hoger service level
     (X > X0) verhoogt de adoptie. Bij (α0, X0) geldt p_r = p0. Het resultaat
     blijft begrensd tussen 0 en 1.
+
+    WTP-plafond op α (= α_U = κ_c)
+    ------------------------------
+    Een klant abonneert alleen als α·U_i^c ≤ κ_c·U_i^c, dus α ≤ κ_c (U_i^c
+    valt weg). Als ``alpha_max`` (= κ_c) is opgegeven, wordt de logit-kans
+    vermenigvuldigd met een gladde poort die de adoptie naar 0 brengt naarmate
+    α → α_max:
+
+        gate(α) = 1 / (1 + e^{(α − α_max)/s})
+
+    gate = P(κ_{c,n} > α) bij spreiding s in de klant-specifieke κ_c. Bij
+    α = α_max is gate = ½ (indifferente klant); s → 0 geeft een harde cutoff,
+    zodat de adoptiecurve automatisch afloopt zodra de bovengrens α_U bereikt
+    wordt.
     """
     _eps = 1e-9
     p0 = float(min(max(p0, _eps), 1.0 - _eps))
@@ -543,7 +558,17 @@ def regionale_adoptie_parameter(
         - gamma_alpha * (alpha - alpha0) / alpha0
         + gamma_X * (_g(X) - _g(X0))
     )
-    return float(1.0 / (1.0 + np.exp(-_y)))
+    p = float(1.0 / (1.0 + np.exp(-_y)))
+
+    # WTP-plafond: adoptie zakt glad naar 0 naarmate α de bovengrens α_U nadert.
+    if alpha_max is not None:
+        s = float(s_alpha)
+        if s <= 0:
+            gate = 1.0 if alpha < alpha_max else 0.0
+        else:
+            gate = 1.0 / (1.0 + np.exp((alpha - alpha_max) / s))
+        p *= gate
+    return float(p)
 
 
 def verwacht_subscripties_per_component(
@@ -585,6 +610,8 @@ def gevoeligheid_verwachte_z(
     gamma_X:       float = 0.5,
     excel_file           = None,
     codes                = None,
+    kappa_c:       float = None,
+    s_alpha:       float = 0.02,
 ):
     """Totaal verwacht aantal subscripties Σ_i E[Z_i] als functie van α of X.
 
@@ -621,9 +648,11 @@ def gevoeligheid_verwachte_z(
         _a = float(_v) if parameter == 'alpha' else float(alpha)
         _x = float(_v) if parameter == 'X' else float(X)
         _p_d = regionale_adoptie_parameter(
-            p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X)
+            p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
+            alpha_max=kappa_c, s_alpha=s_alpha)
         _p_v = regionale_adoptie_parameter(
-            p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X)
+            p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
+            alpha_max=kappa_c, s_alpha=s_alpha)
         _rate = rates.copy()
         _rate[high_mask] = _p_d
         if _hoog != _laag:
@@ -650,6 +679,7 @@ def pareto_alpha_X(
     gebruik_simulatie: bool = False,
     n_runs:        int = 500,
     seed:          int = 42,
+    s_alpha:       float = 0.02,
 ) -> pd.DataFrame:
     """Pareto-analyse over (α, X): BPA-marge vs. totaal klantsurplus.
 
@@ -709,9 +739,11 @@ def pareto_alpha_X(
     for _a in alpha_waarden:
         for _x in X_waarden:
             _p_d = regionale_adoptie_parameter(
-                p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X)
+                p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
+                alpha_max=kappa_c, s_alpha=s_alpha)
             _p_v = regionale_adoptie_parameter(
-                p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X)
+                p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
+                alpha_max=kappa_c, s_alpha=s_alpha)
             _rate = rates.copy()
             _rate[high_mask] = _p_d
             if _hoog != _laag:
@@ -779,6 +811,7 @@ def optimale_alpha_bij_X(
     gebruik_simulatie: bool = False,
     n_runs:        int = 500,
     seed:          int = 42,
+    s_alpha:       float = 0.02,
 ):
     """Zoek het prijspercentage α dat de BPA-marge maximaliseert bij vast X.
 
@@ -807,6 +840,7 @@ def optimale_alpha_bij_X(
         p_dichtbij0, p_ver0, alpha0, X0, kappa_bpa, kappa_c,
         gamma_alpha, gamma_X, excel_file=excel_file, codes=codes,
         gebruik_simulatie=gebruik_simulatie, n_runs=n_runs, seed=seed,
+        s_alpha=s_alpha,
     )
     if curve.empty:
         return curve, None
