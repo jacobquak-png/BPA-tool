@@ -4164,7 +4164,14 @@ with tab_sensitivity:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    _excel_se = st.session_state.get("cls_upload")
+    # Bron-Excel met de tab 'Adoptie': zelfde resolutie als de Subscriptie-
+    # simulatie-tab — eerst de daar geüploade Excel (`subsim_upload`), dan de
+    # classificatie-upload (`cls_upload`), anders de repo-Excel.
+    _excel_se = st.session_state.get("subsim_upload") or st.session_state.get("cls_upload")
+    if _excel_se is not None:
+        st.caption(f"Bron-Excel: **{getattr(_excel_se, 'name', 'geüploade Excel')}**")
+    else:
+        st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(EXCEL_PATH)}`)")
 
     def _excel_arg_se():
         if _excel_se is None:
