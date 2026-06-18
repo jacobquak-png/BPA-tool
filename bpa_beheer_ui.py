@@ -171,7 +171,7 @@ if "overzicht_df" not in st.session_state:
 #  TABS
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget, tab_subsim = st.tabs([
+tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget, tab_subsim, tab_sensitivity = st.tabs([
     "📊 Overzicht",
     "✏️ Subscripties aanpassen",
     "➕ Component toevoegen",
@@ -183,6 +183,7 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
     "🏷️ Classificatie",
     "💼 Budget-scenario",
     "🎲 Subscriptie-simulatie",
+    "📐 Sensitivity (WTP)",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4012,6 +4013,210 @@ with tab_subsim:
             st.rerun()
     else:
         st.info("Stel de parameters in en klik op **🎲 Simulatie draaien**.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────────
+#  TAB 12 – SENSITIVITY (WTP)  – elementen van de adoptie-/WTP-functie plotten
+# ─────────────────────────────────────────────────────────────────────────────────
+
+with tab_sensitivity:
+    st.subheader("Sensitivity-analyse van de WTP-functie")
+    st.markdown(
+        "Plot de **regionale adoptieparameter** $p_r$ (de uitkomst van de "
+        "willingness-to-pay-functie) tegen een vrij te kiezen element van de "
+        "WTP-functie. Optioneel varieer je een **tweede** element om een familie "
+        "van curves te tekenen, zodat je twee variabelen direct tegen elkaar "
+        "kunt afwegen.\n\n"
+        "$$p_r(α,X)=σ\\!\\Big(\\mathrm{logit}(p_0)-γ_α\\tfrac{α-α_0}{α_0}"
+        "+γ_X\\big[g(X)-g(X_0)\\big]\\Big)\\cdot \\mathrm{gate}(α),\\quad "
+        "g(X)=-\\ln(1-X)$$"
+    )
+
+    # ── Registry van WTP-elementen (label, grenzen, stap, default) ─────────
+    _WTP_PARAMS = {
+        "p0":          {"label": "p₀ — baseline adoptie",       "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
+        "alpha":       {"label": "α — prijspercentage",          "min": 0.0,    "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X":           {"label": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "alpha0":      {"label": "α₀ — referentieprijs",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X0":          {"label": "X₀ — referentie service",      "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "gamma_alpha": {"label": "γ_α — prijsgevoeligheid",      "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "gamma_X":     {"label": "γ_X — servicegevoeligheid",    "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "s_alpha":     {"label": "s — scherpte WTP-plafond",     "min": 0.005,  "max": 0.10,   "step": 0.005, "fmt": "%.3f"},
+    }
+
+    # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
+    _kp_se = st.session_state.get("kosten_params", {})
+    _seed_se = {
+        "p0":          float(st.session_state.get("subsim_p_dichtbij0", 0.70)),
+        "alpha":       float(_kp_se.get("alpha", 0.15)),
+        "X":           float(_kp_se.get("service_level", 0.99)),
+        "alpha0":      float(st.session_state.get("subsim_alpha0", 0.15)),
+        "X0":          float(st.session_state.get("subsim_X0", 0.98)),
+        "gamma_alpha": float(st.session_state.get("subsim_gamma_alpha", 1.0)),
+        "gamma_X":     float(st.session_state.get("subsim_gamma_X", 0.5)),
+        "s_alpha":     float(st.session_state.get("subsim_s_alpha", 0.02)),
+    }
+
+    def _clip_se(_name, _val):
+        _spec = _WTP_PARAMS[_name]
+        return float(min(max(_val, _spec["min"]), _spec["max"]))
+
+    _labels_se = {k: v["label"] for k, v in _WTP_PARAMS.items()}
+
+    # ── As-keuzes ─────────────────────────────────────────────────────────
+    _cx, _ccurve = st.columns(2)
+    with _cx:
+        _x_var = st.selectbox(
+            "X-as variabele", options=list(_WTP_PARAMS.keys()),
+            format_func=lambda k: _labels_se[k], index=1, key="se_x_var",
+            help="Het WTP-element dat over de x-as wordt gevarieerd.")
+    with _ccurve:
+        _curve_opts = ["(geen)"] + [k for k in _WTP_PARAMS if k != _x_var]
+        _curve_var = st.selectbox(
+            "Curve-variabele (optioneel)", options=_curve_opts,
+            format_func=lambda k: _labels_se.get(k, k), index=0, key="se_curve_var",
+            help="Een tweede element dat per curve verandert (familie van lijnen).")
+
+    # ── X-as bereik ───────────────────────────────────────────────────────
+    _spec_x = _WTP_PARAMS[_x_var]
+    st.markdown(f"**X-as bereik — {_spec_x['label']}**")
+    _cx1, _cx2, _cx3 = st.columns(3)
+    with _cx1:
+        _x_min = st.number_input(
+            "min", min_value=_spec_x["min"], max_value=_spec_x["max"],
+            value=_spec_x["min"], step=_spec_x["step"], format=_spec_x["fmt"],
+            key="se_x_min")
+    with _cx2:
+        _x_max = st.number_input(
+            "max", min_value=_spec_x["min"], max_value=_spec_x["max"],
+            value=_spec_x["max"], step=_spec_x["step"], format=_spec_x["fmt"],
+            key="se_x_max")
+    with _cx3:
+        _x_n = st.slider("gridpunten", min_value=5, max_value=200, value=60,
+                         key="se_x_n")
+
+    # ── Curve-variabele waarden ───────────────────────────────────────────
+    _curve_vals = [None]
+    if _curve_var != "(geen)":
+        _spec_c = _WTP_PARAMS[_curve_var]
+        st.markdown(f"**Curve-waarden — {_spec_c['label']}**")
+        _cc1, _cc2, _cc3 = st.columns(3)
+        with _cc1:
+            _c_min = st.number_input(
+                "curve min", min_value=_spec_c["min"], max_value=_spec_c["max"],
+                value=_clip_se(_curve_var, _seed_se[_curve_var]),
+                step=_spec_c["step"], format=_spec_c["fmt"], key="se_c_min")
+        with _cc2:
+            _c_max = st.number_input(
+                "curve max", min_value=_spec_c["min"], max_value=_spec_c["max"],
+                value=_spec_c["max"], step=_spec_c["step"], format=_spec_c["fmt"],
+                key="se_c_max")
+        with _cc3:
+            _c_n = st.slider("aantal curves", min_value=1, max_value=8, value=4,
+                             key="se_c_n")
+        _curve_vals = list(np.linspace(float(_c_min), float(_c_max), int(_c_n)))
+
+    # ── Vaste waarden voor de overige elementen ───────────────────────────
+    _fixed = {k: _clip_se(k, _seed_se[k]) for k in _WTP_PARAMS}
+    _vrij = [k for k in _WTP_PARAMS if k not in (_x_var, _curve_var)]
+    with st.expander("⚙️ Vaste waarden voor de overige elementen", expanded=True):
+        _fc = st.columns(2)
+        for _i, _k in enumerate(_vrij):
+            _spec = _WTP_PARAMS[_k]
+            with _fc[_i % 2]:
+                _fixed[_k] = st.number_input(
+                    _spec["label"], min_value=_spec["min"], max_value=_spec["max"],
+                    value=_clip_se(_k, _seed_se[_k]), step=_spec["step"],
+                    format=_spec["fmt"], key=f"se_fix_{_k}")
+
+    # ── WTP-plafond (α_U = κ_c) ───────────────────────────────────────────
+    _kc_se = float(_kp_se.get("kappa_c", 0.25))
+    _cw1, _cw2 = st.columns([2, 1])
+    with _cw1:
+        _wtp_gate = st.checkbox(
+            f"WTP-plafond toepassen (adoptie → 0 richting α = κ_c ≈ {_kc_se:.0%})",
+            value=True, key="se_wtp_gate",
+            help="Vermenigvuldigt p_r met de gladde poort gate(α) zodat de "
+                 "adoptie naar 0 zakt naarmate α de bovengrens κ_c nadert.")
+    with _cw2:
+        _kc_input = st.number_input(
+            "κ_c (α_U)", min_value=0.01, max_value=1.0, value=_kc_se,
+            step=0.01, format="%.3f", key="se_kappa_c", disabled=not _wtp_gate)
+    _alpha_max_se = float(_kc_input) if _wtp_gate else None
+
+    # ── Berekenen ─────────────────────────────────────────────────────────
+    def _pr_for(_params):
+        """Roep de WTP-functie aan met een dict van alle elementen."""
+        return regionale_adoptie_parameter(
+            _params["p0"], _params["alpha"], _params["X"],
+            _params["alpha0"], _params["X0"],
+            _params["gamma_alpha"], _params["gamma_X"],
+            alpha_max=_alpha_max_se, s_alpha=_params["s_alpha"],
+        )
+
+    _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_x_n)))
+
+    import matplotlib.pyplot as _plt_se
+    _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
+    _cmap_se = _plt_se.cm.viridis
+
+    for _ci, _cval in enumerate(_curve_vals):
+        _ys = []
+        for _xv in _x_grid:
+            _p = dict(_fixed)
+            _p[_x_var] = float(_xv)
+            if _cval is not None:
+                _p[_curve_var] = float(_cval)
+            _ys.append(_pr_for(_p))
+        if _cval is None:
+            _ax_se.plot(_x_grid, _ys, color="#1f77b4", lw=2.2)
+        else:
+            _col = _cmap_se(_ci / max(1, len(_curve_vals) - 1))
+            _spec_c = _WTP_PARAMS[_curve_var]
+            _ax_se.plot(_x_grid, _ys, lw=2.0, color=_col,
+                        label=f"{_spec_c['label'].split(' ')[0]} = {_cval:{_spec_c['fmt'][1:]}}")
+
+    # Markeer de huidige (vaste) waarde van de x-as variabele.
+    _x_cur = _clip_se(_x_var, _seed_se[_x_var])
+    if _x_min <= _x_cur <= _x_max:
+        _ax_se.axvline(_x_cur, color="grey", ls="--", lw=1,
+                       label=f"huidige {_spec_x['label'].split(' ')[0]} = {_x_cur:{_spec_x['fmt'][1:]}}")
+
+    _ax_se.set_xlabel(_spec_x["label"], fontsize=11)
+    _ax_se.set_ylabel("regionale adoptieparameter  $p_r$", fontsize=11)
+    _ax_se.set_ylim(-0.02, 1.02)
+    _ax_se.set_title("Sensitivity van $p_r$ t.o.v. de WTP-elementen", fontsize=12)
+    _ax_se.grid(True, alpha=0.3)
+    if _curve_var != "(geen)" or (_x_min <= _x_cur <= _x_max):
+        _ax_se.legend(fontsize=9)
+    _fig_se.tight_layout()
+    st.pyplot(_fig_se)
+    _plt_se.close(_fig_se)
+
+    # ── Datatabel + download ──────────────────────────────────────────────
+    with st.expander("📋 Data achter de grafiek"):
+        _tbl = {_spec_x["label"].split(" ")[0]: _x_grid}
+        for _cval in _curve_vals:
+            _ys = []
+            for _xv in _x_grid:
+                _p = dict(_fixed)
+                _p[_x_var] = float(_xv)
+                if _cval is not None:
+                    _p[_curve_var] = float(_cval)
+                _ys.append(_pr_for(_p))
+            if _cval is None:
+                _tbl["p_r"] = _ys
+            else:
+                _spec_c = _WTP_PARAMS[_curve_var]
+                _tbl[f"p_r @ {_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"] = _ys
+        _df_se = pd.DataFrame(_tbl)
+        st.dataframe(_df_se, use_container_width=True, height=320)
+        st.download_button(
+            "⬇️ Download sensitivity-data (CSV)",
+            data=_df_se.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
+            file_name=f"wtp_sensitivity_{date.today()}.csv",
+            mime="text/csv",
+        )
 
 
 
