@@ -804,7 +804,7 @@ def pareto_alpha_X(
     return pd.DataFrame(rijen)
 
 
-def winst_voor_wtp_grid(
+def metrieken_voor_wtp_grid(
     overzicht_df,
     param_dicts,
     kappa_bpa: float,
@@ -812,12 +812,13 @@ def winst_voor_wtp_grid(
     excel_file       = None,
     codes            = None,
 ):
-    """Totale BPA-marge (€) voor een lijst WTP-parametercombinaties.
+    """Meerdere keten-uitkomsten per WTP-parametercombinatie.
 
     Generaliseert de keten van ``pareto_alpha_X``: voor elke parameter-dict in
     ``param_dicts`` worden de twee regionale adoptieparameters p_r berekend
     (Benelux/overig), daaruit het verwachte aantal subscripties E[Z_i] per
-    component, en vervolgens via het kostenmodel de BPA-marge.
+    component, en vervolgens via het kostenmodel de BPA-marge en het totale
+    klantsurplus.
 
     Elke dict bevat de sleutels: ``p_dichtbij0``, ``p_ver0``, ``alpha``, ``X``,
     ``alpha0``, ``X0``, ``gamma_alpha``, ``gamma_X``, ``s_alpha`` en optioneel
@@ -826,18 +827,31 @@ def winst_voor_wtp_grid(
     De Adoptie-data en het basisoverzicht worden één keer geladen; per dict
     wordt alleen p_r → E[Z] → kostenmodel doorgerekend.
 
-    Returns een lijst marges (float), parallel aan ``param_dicts`` (NaN bij een
-    niet-doorgerekende combinatie).
+    Returns een lijst dicts (parallel aan ``param_dicts``), elk met sleutels:
+        ``bpa_margin``  – totale BPA-marge (€);
+        ``surplus``     – totaal klantsurplus (€);
+        ``total_Z``     – verwacht totaal aantal subscripties E[Z];
+        ``p_dichtbij``  – adoptieparameter p_r (Benelux);
+        ``p_ver``       – adoptieparameter p_r (overig);
+        ``feasible``    – of het kostenmodel haalbaar was.
+    NaN bij een niet-doorgerekende combinatie.
     """
+    def _leeg():
+        return {
+            'bpa_margin': float('nan'), 'surplus': float('nan'),
+            'total_Z': float('nan'), 'p_dichtbij': float('nan'),
+            'p_ver': float('nan'), 'feasible': False,
+        }
+
     if overzicht_df is None or overzicht_df.empty or not param_dicts:
-        return [float('nan') for _ in (param_dicts or [])]
+        return [_leeg() for _ in (param_dicts or [])]
 
     adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
     codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
     if codes_set:
         adoptie = adoptie[adoptie['Code'].isin(codes_set)]
     if adoptie.empty:
-        return [float('nan') for _ in param_dicts]
+        return [_leeg() for _ in param_dicts]
 
     rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
     h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
@@ -845,7 +859,7 @@ def winst_voor_wtp_grid(
     r4       = np.round(rates, 4)
     _pos     = r4[r4 > 0]
     if _pos.size == 0:
-        return [float('nan') for _ in param_dicts]
+        return [_leeg() for _ in param_dicts]
     _niveaus = sorted(pd.Series(_pos).value_counts().index.tolist()[:2])
     _laag = _niveaus[0]
     _hoog = _niveaus[-1]
@@ -857,7 +871,7 @@ def winst_voor_wtp_grid(
     base_lam  = base['lambda_jr'].astype(float)
     lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
 
-    marges = []
+    resultaten = []
     for p in param_dicts:
         _a    = float(p['alpha'])
         _x    = float(p['X'])
@@ -875,6 +889,7 @@ def winst_voor_wtp_grid(
             _rate[low_mask] = _p_v
         _q  = 1.0 - (1.0 - _rate) ** h
         _ez = pd.Series(_q).groupby(code_arr).sum()
+        _total_z = float(_ez.sum())
         _n_new   = _ez.reindex(base.index)
         _present = _n_new.notna()
         _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
@@ -885,15 +900,48 @@ def winst_voor_wtp_grid(
             _n_int.values.astype(float) * lam_per_cust.values,
             base_lam.values,
         )
+        _rec = {
+            'total_Z':    _total_z,
+            'p_dichtbij': float(_p_d),
+            'p_ver':      float(_p_v),
+        }
         if int(mod['n_klanten'].sum()) <= 0:
-            marges.append(0.0)
-            continue
-        try:
-            _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
-            marges.append(float(_res['bpa_margin']))
-        except Exception:
-            marges.append(float('nan'))
-    return marges
+            _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False})
+        else:
+            try:
+                _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
+                _rec.update({
+                    'bpa_margin': float(_res['bpa_margin']),
+                    'surplus':    float(sum(
+                        v['savings'] for v in _res['customer_benefits'].values())),
+                    'feasible':   bool(_res['feasible']),
+                })
+            except Exception:
+                _rec.update({'bpa_margin': float('nan'),
+                             'surplus': float('nan'), 'feasible': False})
+        resultaten.append(_rec)
+    return resultaten
+
+
+def winst_voor_wtp_grid(
+    overzicht_df,
+    param_dicts,
+    kappa_bpa: float,
+    kappa_c:   float,
+    excel_file       = None,
+    codes            = None,
+):
+    """Totale BPA-marge (€) voor een lijst WTP-parametercombinaties.
+
+    Dunne wrapper rond :func:`metrieken_voor_wtp_grid` die alleen de
+    BPA-marge per parameter-dict teruggeeft (lijst van floats, parallel aan
+    ``param_dicts``; NaN bij een niet-doorgerekende combinatie).
+    """
+    _recs = metrieken_voor_wtp_grid(
+        overzicht_df, param_dicts, kappa_bpa, kappa_c,
+        excel_file=excel_file, codes=codes,
+    )
+    return [r.get('bpa_margin', float('nan')) for r in _recs]
 
 
 def optimale_alpha_bij_X(
