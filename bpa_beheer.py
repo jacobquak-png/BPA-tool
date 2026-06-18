@@ -536,12 +536,13 @@ def regionale_adoptie_parameter(
     vermenigvuldigd met een gladde poort die de adoptie naar 0 brengt naarmate
     α → α_max:
 
-        gate(α) = 1 / (1 + e^{(α − α_max)/s})
+        gate(α) = 1 − e^{−(α_max − α)/s}   voor α < α_max,   anders 0
 
-    gate = P(κ_{c,n} > α) bij spreiding s in de klant-specifieke κ_c. Bij
-    α = α_max is gate = ½ (indifferente klant); s → 0 geeft een harde cutoff,
-    zodat de adoptiecurve automatisch afloopt zodra de bovengrens α_U bereikt
-    wordt.
+    Dit is gate(α) = P(κ_{c,n} > α) met klant-specifieke breakeven
+    κ_{c,n} = κ_max − E, E ~ Exp(gemiddelde s). De bovengrens α_max = κ_c is
+    dus de maximale breakeven: bij α = α_max geldt gate = 0, zodat Z_i exact 0
+    wordt zodra de bovengrens α_U bereikt wordt. Kleine s → bijna harde cutoff;
+    grotere s → geleidelijker aflopen door spreiding in de klant-κ_c.
     """
     _eps = 1e-9
     p0 = float(min(max(p0, _eps), 1.0 - _eps))
