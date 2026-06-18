@@ -564,10 +564,12 @@ def regionale_adoptie_parameter(
     # WTP-plafond: adoptie zakt glad naar 0 naarmate α de bovengrens α_U nadert.
     if alpha_max is not None:
         s = float(s_alpha)
-        if s <= 0:
-            gate = 1.0 if alpha < alpha_max else 0.0
+        if alpha >= alpha_max:
+            gate = 0.0
+        elif s <= 0:
+            gate = 1.0
         else:
-            gate = 1.0 / (1.0 + np.exp((alpha - alpha_max) / s))
+            gate = 1.0 - np.exp(-(alpha_max - alpha) / s)
         p *= gate
     return float(p)
 
