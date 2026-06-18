@@ -3424,14 +3424,34 @@ with tab_subsim:
                 value=0.5, step=0.1, format="%.2f", key="subsim_gamma_X",
             )
 
+        st.markdown("**WTP-plafond op α (= α_U = κ_c)**")
+        _kc_subsim = float(st.session_state.get("kosten_params", {}).get("kappa_c", 0.25))
+        _wtp_plafond = st.checkbox(
+            f"Adoptie laten aflopen naar 0 richting α = κ_c (≈ {_kc_subsim:.0%})",
+            value=True, key="subsim_wtp_plafond",
+            help="Een klant abonneert alleen als α ≤ κ_c (abonnement niet duurder "
+                 "dan zelf-voorraad). Aan: de WTP-curve zakt glad naar 0 naarmate "
+                 "α de bovengrens α_U = κ_c nadert.")
+        _s_alpha = st.slider(
+            "Scherpte s (spreiding in klant-κ_c)", min_value=0.005, max_value=0.10,
+            value=0.02, step=0.005, format="%.3f", key="subsim_s_alpha",
+            help="Klein s → bijna harde cutoff bij α_U; groter s → geleidelijker "
+                 "aflopen door heterogeniteit in de klant-specifieke κ_c.",
+            disabled=not _wtp_plafond)
+
+    # κ_c als WTP-plafond op α: alleen doorgeven als de optie aanstaat.
+    _alpha_max_subsim = _kc_subsim if _wtp_plafond else None
+
     # Effectieve regionale adoptieparameters p_r(α, X) via de logit-formule.
     _p_dichtbij = regionale_adoptie_parameter(
         _p_dichtbij0, _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
         _gamma_alpha, _gamma_X,
+        alpha_max=_alpha_max_subsim, s_alpha=_s_alpha,
     )
     _p_ver = regionale_adoptie_parameter(
         _p_ver0, _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
         _gamma_alpha, _gamma_X,
+        alpha_max=_alpha_max_subsim, s_alpha=_s_alpha,
     )
     _c_pr1, _c_pr2 = st.columns(2)
     _c_pr1.metric("p_r(α,X) dichtbij", f"{_p_dichtbij:.3f}",
@@ -3525,12 +3545,14 @@ with tab_subsim:
                         _a_grid, 'alpha', _p_dichtbij0, _p_ver0,
                         _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
                         _gamma_alpha, _gamma_X,
-                        excel_file=_excel_arg(), codes=_cls_codes)
+                        excel_file=_excel_arg(), codes=_cls_codes,
+                        kappa_c=_alpha_max_subsim, s_alpha=_s_alpha)
                     _z_vs_x = gevoeligheid_verwachte_z(
                         _x_grid, 'X', _p_dichtbij0, _p_ver0,
                         _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
                         _gamma_alpha, _gamma_X,
-                        excel_file=_excel_arg(), codes=_cls_codes)
+                        excel_file=_excel_arg(), codes=_cls_codes,
+                        kappa_c=_alpha_max_subsim, s_alpha=_s_alpha)
                 st.session_state["subsim_sens_data"] = {
                     "a_grid": _a_grid, "z_vs_a": _z_vs_a,
                     "x_grid": _x_grid, "z_vs_x": _z_vs_x,
@@ -3615,7 +3637,8 @@ with tab_subsim:
                             _p_dichtbij0, _p_ver0, _alpha0_sim, _X0_sim,
                             _kappa_bpa_par, _kappa_c_par,
                             _gamma_alpha, _gamma_X,
-                            excel_file=_excel_arg(), codes=_cls_codes)
+                            excel_file=_excel_arg(), codes=_cls_codes,
+                            s_alpha=_s_alpha)
                     if _par_df.empty:
                         st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_par_data", None)
@@ -3767,7 +3790,8 @@ with tab_subsim:
                             excel_file=_excel_arg(), codes=_cls_codes,
                             alleen_haalbaar=bool(_opt_feas),
                             gebruik_simulatie=bool(_opt_mc),
-                            n_runs=int(_opt_runs), seed=int(_opt_seed))
+                            n_runs=int(_opt_runs), seed=int(_opt_seed),
+                            s_alpha=_s_alpha)
                     if _opt_curve is None or _opt_curve.empty or _opt_best is None:
                         st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_opt_data", None)
