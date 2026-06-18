@@ -34,6 +34,7 @@ from bpa_beheer import (
     pareto_alpha_X,
     optimale_alpha_bij_X,
     winst_voor_wtp_grid,
+    metrieken_voor_wtp_grid,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -4023,13 +4024,13 @@ with tab_subsim:
 with tab_sensitivity:
     st.subheader("Sensitivity-analyse van de WTP-functie")
     st.markdown(
-        "Plot de **totale BPA-winst (€)** tegen een vrij te kiezen element van de "
-        "willingness-to-pay-functie. Optioneel varieer je een **tweede** element "
-        "om een familie van curves te tekenen, zodat je twee variabelen direct "
+        "Kies zelf de **afhankelijke (y-as)** uitkomst en de **onafhankelijke (x-as)** "
+        "variabele uit de willingness-to-pay-keten. Optioneel varieer je een **tweede** "
+        "element om een familie van curves te tekenen, zodat je twee variabelen direct "
         "tegen elkaar kunt afwegen.\n\n"
         "Per parameterpunt loopt de volledige keten: "
         "$\\text{WTP-elementen}\\to p_r(α,X)\\to E[Z_i]\\to$ kostenmodel "
-        "$\\to$ **BPA-marge**. De adoptie volgt "
+        "$\\to$ **BPA-marge / klantsurplus**. De adoptie volgt "
         "$p_r(α,X)=σ\\!\\big(\\mathrm{logit}(p_0)-γ_α\\tfrac{α-α_0}{α_0}"
         "+γ_X[g(X)-g(X_0)]\\big)\\cdot \\mathrm{gate}(α)$ met $g(X)=-\\ln(1-X)$, "
         "voor de twee regionale baselines (Benelux/overig)."
@@ -4068,7 +4069,23 @@ with tab_sensitivity:
 
     _labels_se = {k: v["label"] for k, v in _WTP_PARAMS.items()}
 
-    # ── As-keuzes ─────────────────────────────────────────────────────────
+    # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
+    _Y_METRICS = {
+        "bpa_margin": {"label": "Totale BPA-winst (€)",            "axis": "totale BPA-winst (€)",            "tbl": "BPA-winst (€)",   "kind": "euro"},
+        "surplus":    {"label": "Totaal klantsurplus (€)",        "axis": "totaal klantsurplus (€)",        "tbl": "Klantsurplus (€)", "kind": "euro"},
+        "total_Z":    {"label": "Verwacht aantal subscripties E[Z]", "axis": "verwacht aantal subscripties E[Z]", "tbl": "E[Z]",          "kind": "num"},
+        "p_dichtbij": {"label": "Adoptie p_r — Benelux",          "axis": "adoptieparameter p_r (Benelux)",   "tbl": "p_r Benelux",    "kind": "pct"},
+        "p_ver":      {"label": "Adoptie p_r — overig",           "axis": "adoptieparameter p_r (overig)",    "tbl": "p_r overig",     "kind": "pct"},
+    }
+
+    # ── Afhankelijke (y-as) variabele ─────────────────────────────────────
+    _y_var = st.selectbox(
+        "Y-as variabele (afhankelijk)", options=list(_Y_METRICS.keys()),
+        format_func=lambda k: _Y_METRICS[k]["label"], index=0, key="se_y_var",
+        help="De keten-uitkomst die tegen de gekozen x-as wordt geplot.")
+    _y_spec = _Y_METRICS[_y_var]
+
+    # ── Onafhankelijke as-keuzes ──────────────────────────────────────────
     _cx, _ccurve = st.columns(2)
     with _cx:
         _x_var = st.selectbox(
@@ -4197,7 +4214,7 @@ with tab_sensitivity:
                 _dicts.append(_p)
         return _dicts
 
-    if st.button("📊 Bereken winst-sensitivity", type="primary",
+    if st.button("📊 Bereken sensitivity", type="primary",
                  disabled=not _cls_codes_se, key="se_bereken"):
         try:
             _ov_se = get_overzicht_df(cfg)
@@ -4209,14 +4226,15 @@ with tab_sensitivity:
         else:
             with st.spinner("Winst-sensitivity berekenen via het kostenmodel…"):
                 try:
-                    _marges = winst_voor_wtp_grid(
+                    _recs = metrieken_voor_wtp_grid(
                         _ov_se, _bouw_param_dicts(),
                         _kappa_bpa_se, _kappa_c_se,
                         excel_file=_excel_arg_se(), codes=_cls_codes_se,
                     )
+                    _yvals = [r.get(_y_var, float("nan")) for r in _recs]
                     _nx = len(_x_grid)
                     _per_curve = [
-                        _marges[_i * _nx:(_i + 1) * _nx]
+                        _yvals[_i * _nx:(_i + 1) * _nx]
                         for _i in range(len(_curve_vals))
                     ]
                     st.session_state["se_resultaat"] = {
@@ -4228,6 +4246,10 @@ with tab_sensitivity:
                         "x_label":    _spec_x["label"],
                         "x_fmt":      _spec_x["fmt"],
                         "x_cur":      _clip_se(_x_var, _seed_se[_x_var]),
+                        "y_axis":     _y_spec["axis"],
+                        "y_label":    _y_spec["label"],
+                        "y_tbl":      _y_spec["tbl"],
+                        "y_kind":     _y_spec["kind"],
                     }
                 except ValueError as _se_err:
                     st.warning(
@@ -4248,6 +4270,10 @@ with tab_sensitivity:
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
         _x_fmt     = _res_se["x_fmt"]
+        _y_axis    = _res_se.get("y_axis", "totale BPA-winst (€)")
+        _y_lbl     = _res_se.get("y_label", "Totale BPA-winst (€)")
+        _y_tbl     = _res_se.get("y_tbl", "BPA-winst (€)")
+        _y_kind    = _res_se.get("y_kind", "euro")
 
         _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
         _cmap_se = _plt_se.cm.viridis
@@ -4267,9 +4293,15 @@ with tab_sensitivity:
                            label=f"huidige {_x_lbl.split(' ')[0]} = {_x_cur:{_x_fmt[1:]}}")
         _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
         _ax_se.set_xlabel(_x_lbl, fontsize=11)
-        _ax_se.set_ylabel("totale BPA-winst (€)", fontsize=11)
-        _ax_se.set_title("Sensitivity van de BPA-winst t.o.v. de WTP-elementen", fontsize=12)
-        _ax_se.yaxis.set_major_formatter(_mt_se.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+        _ax_se.set_ylabel(_y_axis, fontsize=11)
+        _ax_se.set_title(f"Sensitivity van {_y_lbl} t.o.v. de WTP-elementen", fontsize=12)
+        if _y_kind == "euro":
+            _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"€{v:,.0f}")
+        elif _y_kind == "pct":
+            _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:.0%}")
+        else:
+            _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:,.0f}")
+        _ax_se.yaxis.set_major_formatter(_yfmt_se)
         _ax_se.grid(True, alpha=0.3)
         if _cv_var != "(geen)" or (_xg and min(_xg) <= _x_cur <= max(_xg)):
             _ax_se.legend(fontsize=9)
@@ -4282,20 +4314,20 @@ with tab_sensitivity:
             _tbl = {_x_lbl.split(" ")[0]: _xg}
             for _ci, _cval in enumerate(_cvals):
                 if _cval is None:
-                    _tbl["Winst (€)"] = _per_curve[_ci]
+                    _tbl[_y_tbl] = _per_curve[_ci]
                 else:
                     _spec_c = _WTP_PARAMS[_cv_var]
-                    _tbl[f"Winst (€) @ {_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"] = _per_curve[_ci]
+                    _tbl[f"{_y_tbl} @ {_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"] = _per_curve[_ci]
             _df_se = pd.DataFrame(_tbl)
             st.dataframe(_df_se, use_container_width=True, height=320)
             st.download_button(
                 "⬇️ Download sensitivity-data (CSV)",
                 data=_df_se.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
-                file_name=f"wtp_winst_sensitivity_{date.today()}.csv",
+                file_name=f"wtp_sensitivity_{date.today()}.csv",
                 mime="text/csv",
             )
     else:
-        st.info("Stel de parameters in en klik op **📊 Bereken winst-sensitivity**.")
+        st.info("Stel de parameters in en klik op **📊 Bereken sensitivity**.")
 
 
 
