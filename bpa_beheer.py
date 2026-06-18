@@ -804,6 +804,98 @@ def pareto_alpha_X(
     return pd.DataFrame(rijen)
 
 
+def winst_voor_wtp_grid(
+    overzicht_df,
+    param_dicts,
+    kappa_bpa: float,
+    kappa_c:   float,
+    excel_file       = None,
+    codes            = None,
+):
+    """Totale BPA-marge (€) voor een lijst WTP-parametercombinaties.
+
+    Generaliseert de keten van ``pareto_alpha_X``: voor elke parameter-dict in
+    ``param_dicts`` worden de twee regionale adoptieparameters p_r berekend
+    (Benelux/overig), daaruit het verwachte aantal subscripties E[Z_i] per
+    component, en vervolgens via het kostenmodel de BPA-marge.
+
+    Elke dict bevat de sleutels: ``p_dichtbij0``, ``p_ver0``, ``alpha``, ``X``,
+    ``alpha0``, ``X0``, ``gamma_alpha``, ``gamma_X``, ``s_alpha`` en optioneel
+    ``alpha_max`` (= κ_c-plafond op α; None = geen plafond).
+
+    De Adoptie-data en het basisoverzicht worden één keer geladen; per dict
+    wordt alleen p_r → E[Z] → kostenmodel doorgerekend.
+
+    Returns een lijst marges (float), parallel aan ``param_dicts`` (NaN bij een
+    niet-doorgerekende combinatie).
+    """
+    if overzicht_df is None or overzicht_df.empty or not param_dicts:
+        return [float('nan') for _ in (param_dicts or [])]
+
+    adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
+    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
+    if codes_set:
+        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
+    if adoptie.empty:
+        return [float('nan') for _ in param_dicts]
+
+    rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
+    h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
+    code_arr = adoptie['Code'].to_numpy()
+    r4       = np.round(rates, 4)
+    _pos     = r4[r4 > 0]
+    if _pos.size == 0:
+        return [float('nan') for _ in param_dicts]
+    _niveaus = sorted(pd.Series(_pos).value_counts().index.tolist()[:2])
+    _laag = _niveaus[0]
+    _hoog = _niveaus[-1]
+    high_mask = r4 == round(_hoog, 4)
+    low_mask  = r4 == round(_laag, 4)
+
+    base      = overzicht_df
+    base_n    = base['n_klanten'].astype(float)
+    base_lam  = base['lambda_jr'].astype(float)
+    lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
+
+    marges = []
+    for p in param_dicts:
+        _a    = float(p['alpha'])
+        _x    = float(p['X'])
+        _amax = p.get('alpha_max', None)
+        _s    = float(p.get('s_alpha', 0.02))
+        _p_d = regionale_adoptie_parameter(
+            p['p_dichtbij0'], _a, _x, p['alpha0'], p['X0'],
+            p['gamma_alpha'], p['gamma_X'], alpha_max=_amax, s_alpha=_s)
+        _p_v = regionale_adoptie_parameter(
+            p['p_ver0'], _a, _x, p['alpha0'], p['X0'],
+            p['gamma_alpha'], p['gamma_X'], alpha_max=_amax, s_alpha=_s)
+        _rate = rates.copy()
+        _rate[high_mask] = _p_d
+        if _hoog != _laag:
+            _rate[low_mask] = _p_v
+        _q  = 1.0 - (1.0 - _rate) ** h
+        _ez = pd.Series(_q).groupby(code_arr).sum()
+        _n_new   = _ez.reindex(base.index)
+        _present = _n_new.notna()
+        _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
+        mod = base.copy()
+        mod['n_klanten'] = _n_int.values
+        mod['lambda_jr'] = np.where(
+            _present.values,
+            _n_int.values.astype(float) * lam_per_cust.values,
+            base_lam.values,
+        )
+        if int(mod['n_klanten'].sum()) <= 0:
+            marges.append(0.0)
+            continue
+        try:
+            _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
+            marges.append(float(_res['bpa_margin']))
+        except Exception:
+            marges.append(float('nan'))
+    return marges
+
+
 def optimale_alpha_bij_X(
     overzicht_df,
     X_fix:         float,
