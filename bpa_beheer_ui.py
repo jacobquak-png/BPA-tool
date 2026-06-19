@@ -131,6 +131,21 @@ def invalidate_caches() -> None:
     _cached_laad_ruwe_dataset.clear()
 
 
+def representatieve_z(default: int = 1) -> int:
+    """Representatief aantal subscripties (Z) uit het huidige overzicht.
+
+    Vervangt de oude globale standaardwaarde: neemt de mediaan van het
+    werkelijke aantal klantlocaties (n_klanten) over alle componenten. Wordt
+    gebruikt als referentie-/startwaarde in de gevoeligheidsgrafieken.
+    """
+    _df = st.session_state.get("overzicht_df")
+    if _df is not None and not _df.empty and "n_klanten" in _df.columns:
+        _med = pd.to_numeric(_df["n_klanten"], errors="coerce").median()
+        if pd.notna(_med) and _med >= 1:
+            return int(round(_med))
+    return default
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  PAGINA-INSTELLINGEN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -203,7 +218,6 @@ with tab_overzicht:
         _excel_mtime = "onbekend"
 
     st.write(
-        f"Standaard Z: **{cfg['standaard_n_klanten']}** · "
         f"Configuratie bijgewerkt: **{cfg['aangepast']}** · "
         f"Excel gewijzigd: **{_excel_mtime}**"
     )
@@ -430,23 +444,15 @@ with tab_overzicht:
 # ─────────────────────────────────────────────────────────────────────────────
 
 with tab_subscripties:
-    st.subheader("Standaard aantal subscripties")
-
-    nieuw_standaard = st.number_input(
-        "Standaard Z (geldt voor alle componenten zonder override)",
-        min_value=1,
-        value=cfg["standaard_n_klanten"],
-        step=1,
+    st.subheader("Subscripties per component")
+    st.info(
+        "Het aantal subscripties (Z) per component komt automatisch uit het "
+        "werkelijke aantal klantlocaties; varieer prijs α en service level X in "
+        "de simulatie-/sensitivity-tabs om het verwachte aantal abonnees te zien. "
+        "Een vaste override per component kun je hieronder bij 'IP / Levertijd / "
+        "Z aanpassen' instellen.",
+        icon="ℹ️",
     )
-    if st.button("Opslaan standaard"):
-        # Bewaar huidige overzicht_df als vorige snapshot vóór recompute
-        if "overzicht_df" in st.session_state:
-            st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
-        cfg["standaard_n_klanten"] = int(nieuw_standaard)
-        sla_config_op(cfg)
-        st.toast(f"Standaard aangepast naar {cfg['standaard_n_klanten']}", icon="✅")
-        st.session_state.pop("overzicht_df", None)
-        st.rerun()
 
     st.divider()
     st.subheader("Overrides per artikelcode")
@@ -535,7 +541,7 @@ with tab_toevoegen:
             )
             f_n = st.number_input(
                 "Aantal subscripties (Z)",
-                min_value=1, value=cfg["standaard_n_klanten"], step=1,
+                min_value=1, value=1, step=1,
             )
             f_ip = st.number_input(
                 "Inkoopprijs (€)", min_value=0.0, value=0.0, step=10.0, format="%.2f",
@@ -655,7 +661,7 @@ with tab_config:
     st.subheader("Huidige configuratie")
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Standaard Z", cfg["standaard_n_klanten"])
+    col1.metric("Mediane Z", representatieve_z())
     col2.metric("Z-overrides", len(cfg.get("n_klanten_overrides", {})))
     col3.metric("IP/LT-overrides",
                 max(len(cfg.get("ip_overrides", {})), len(cfg.get("lt_overrides", {}))))
@@ -955,7 +961,7 @@ with tab_historie:
 
             _nfd   = st.session_state.sens_nfeas
             _nfp   = st.session_state.sens_nfeas_params
-            _n_std = int(cfg['standaard_n_klanten'])
+            _n_std = representatieve_z()
 
             # ── Grafiek 1: marge vs N per α ──────────────────────────────────────────
             _fig_nf, _ax_nf = _plt_nf.subplots(figsize=(11, 6))
@@ -1067,7 +1073,7 @@ with tab_historie:
             _grid   = st.session_state.sens_nsl_grid
             _a_lbl  = st.session_state.sens_nsl_alpha
             _kb_lbl = st.session_state.sens_nsl_kb
-            _n_std_nsl = int(cfg['standaard_n_klanten'])
+            _n_std_nsl = representatieve_z()
 
             _rows_nsl = SERVICE_LEVELS       # y-as
             _cols_nsl = _N_NSL_VALS          # x-as
@@ -1193,7 +1199,7 @@ with tab_historie:
 
             _nsl_d    = st.session_state.sens_nsl
             _nsl_p    = st.session_state.sens_nsl_params
-            _n_std_sl = int(cfg['standaard_n_klanten'])
+            _n_std_sl = representatieve_z()
 
             # ── Grafiek 2: totale S* vs N per service level ─────────────────────────
             _COLORS_SL = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
@@ -1494,7 +1500,7 @@ with tab_historie:
 
             _mc_by_sl = st.session_state.sens_mc
             _mc_p     = st.session_state.sens_mc_params
-            _n_std_mc = int(cfg['standaard_n_klanten'])
+            _n_std_mc = representatieve_z()
             _fmt_mc   = _mt_mc.FuncFormatter(lambda v, _: f'€{v:,.0f}')
 
             # Backward compatibility: oud formaat was een lijst voor één SL
@@ -1851,13 +1857,13 @@ with tab_historie:
         with _col_mt1:
             _N_start_mt = st.number_input(
                 "Z start (jaar 0)", min_value=1,
-                value=int(cfg['standaard_n_klanten']), step=1,
+                value=representatieve_z(), step=1,
                 key="marge_tijd_n_start",
             )
         with _col_mt2:
             _N_end_mt = st.number_input(
                 "Z eind (doelstelling)", min_value=1,
-                value=max(int(cfg['standaard_n_klanten']) * 3, 10), step=1,
+                value=max(representatieve_z() * 3, 10), step=1,
                 key="marge_tijd_n_end",
             )
         with _col_mt3:
@@ -3333,7 +3339,14 @@ with tab_subsim:
         "Monte Carlo simulatie van het **aantal subscripties per component** op "
         "basis van de tab `Adoptie` in de Excel. Alleen de componenten uit de "
         "**classificatie-selectie** worden gesimuleerd.\n\n"
-       "De kans op een subscriptie neemt toe naarmate de klant meer orders "
+        "Per (component, klant) wordt een **binomiale** trekking gedaan over de "
+        "orders van de klant voor dat component (elke order is een trial met "
+        "succeskans = de **adoption rate**). De klant neemt een subscriptie "
+        "(**binair**) als er minstens één succes is:\n\n"
+        "$$K_{klant} \\sim \\text{Binomiaal}\\big(n = \\text{orders voor het "
+        "component},\\; p = \\text{adoption rate}\\big), \\quad "
+        "X_{klant} = \\mathbb{1}[K_{klant} \\ge 1]$$\n\n"
+        "Zo neemt de kans op een subscriptie toe naarmate de klant meer orders "
         "heeft: $P(X_{klant}=1) = 1-(1-p)^{n}$. Het aantal subscripties voor een "
         "component is de som $\\sum_{klanten} X_{klant}$ (maximaal het aantal "
         "klanten)."
