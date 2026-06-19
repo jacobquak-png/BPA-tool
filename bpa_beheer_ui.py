@@ -2415,7 +2415,7 @@ with tab_drempel:
             v = row["Extra Z nodig"]
             if pd.isna(v):
                 bg = "#d4edda"   # groen: geen drempel gevonden in zoekbereik
-            elif int(v) <= 1:
+            elif int(v) <= 2:
                 bg = "#f8d7da"   # rood: 1-2 extra subscripties
             elif int(v) <= 5:
                 bg = "#fff3cd"   # oranje: 3-5 extra subscripties
@@ -2523,10 +2523,34 @@ with tab_classificatie:
     with _c3:
         _w_ord   = st.slider("Gewicht orders",   0.0, 1.0, 1/3, 0.05, key="cls_w_ord")
 
-    st.markdown("**Drempel & niet-lineariteiten**")
-    _c4, _c5, _c6, _c7 = st.columns(4)
-    with _c4:
-        _thr = st.number_input("Drempel (≥ opnemen)", 0.0, 100.0, 55.0, 1.0, key="cls_thr")
+    st.markdown("**Selectiemethode**")
+    _sel_modus = st.radio(
+        "Hoe wordt de selectie bepaald?",
+        options=["top_n", "threshold"],
+        format_func=lambda m: ("Top X componenten (hoogste score)"
+                               if m == "top_n"
+                               else "Drempelwaarde (score ≥ drempel)"),
+        horizontal=True,
+        key="cls_sel_modus",
+        help=("Top X: neem de X componenten met de hoogste gewogen score op "
+              "(ná de harde filters). Drempelwaarde: neem álle componenten met "
+              "een score ≥ de gekozen drempel op."),
+    )
+    _sm1, _sm2 = st.columns(2)
+    with _sm1:
+        if _sel_modus == "top_n":
+            _top_n = st.number_input(
+                "Aantal componenten (top X)", 1, 100_000, 100, 1, key="cls_top_n",
+                help="De X componenten met de hoogste gewogen score (ná de harde "
+                     "filters) worden opgenomen in de lijst.",
+            )
+            _thr = 0.0
+        else:
+            _thr = st.number_input("Drempel (≥ opnemen)", 0.0, 100.0, 55.0, 1.0, key="cls_thr")
+            _top_n = 100
+
+    st.markdown("**Niet-lineariteiten**")
+    _c5, _c6, _c7 = st.columns(3)
     with _c5:
         _pen_thr = st.number_input("Prijs-penalty <  €", 0.0, 1e6, 1000.0, 100.0, key="cls_pen_thr")
     with _c6:
@@ -2548,6 +2572,8 @@ with tab_classificatie:
 
     _params = ClassificatieParams(
         threshold=float(_thr),
+        selectie_modus=_sel_modus,
+        top_n=int(_top_n),
         weight_prijs=float(_w_prijs),
         weight_locaties=float(_w_loc),
         weight_orders=float(_w_ord),
@@ -2592,8 +2618,10 @@ with tab_classificatie:
             st.session_state.cls_result   = _df_filtered
             st.session_state.cls_payload  = _payload
             st.session_state.cls_params   = _params
+            _sel_info = (f"top {_params.top_n}" if _params.selectie_modus == "top_n"
+                         else f"drempel ≥ {_params.threshold}")
             st.toast(f"{_payload['n_items']} componenten geselecteerd "
-                     f"(drempel ≥ {_params.threshold})", icon="✅")
+                     f"({_sel_info})", icon="✅")
         except Exception as e:
             st.error(f"Fout tijdens classificatie: {e}")
 
