@@ -84,6 +84,8 @@ class ClassificatieParams:
     price_penalty_threshold: float = 1_000.0
     price_penalty_factor:    float = 0.4
     orders_power:            float = 2.0
+    selectie_modus:          str = "threshold"   # "threshold" of "top_n"
+    top_n:                   int = 100            # alleen gebruikt bij modus "top_n"
     min_klantlocaties:       int = 5
     article_type_filter:     tuple = ("critical", "onbekend")  # case-insensitief
     lt_default_waarden:      tuple = ("30", "30 dagen", "30,0", "30.0")
@@ -268,11 +270,17 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     for col in ["Score_Prijs", "Score_Locaties", "Score_Orders"]:
         df[col] = df[col].round(1)
 
-    df["Classificatie_Beslissing"] = np.where(
-        df["Gewogen_Score"] >= p.threshold,
-        "Opnemen in lijst",
-        "Niet opnemen",
-    )
+    if p.selectie_modus == "top_n":
+        # Bij top-X wordt de beslissing pas ná de harde filters bepaald
+        # (in pas_harde_filters_toe), zodat de top-X over de daadwerkelijk in
+        # aanmerking komende set gaat. Hier voorlopig alles op "Niet opnemen".
+        df["Classificatie_Beslissing"] = "Niet opnemen"
+    else:
+        df["Classificatie_Beslissing"] = np.where(
+            df["Gewogen_Score"] >= p.threshold,
+            "Opnemen in lijst",
+            "Niet opnemen",
+        )
 
     # λ_i = 1 / MTBF(jaren) — failure rate per individueel component per jaar.
     # MTBF wordt robuust geconverteerd via _mtbf_naar_jaren (tekst/int/float
@@ -296,6 +304,19 @@ def pas_harde_filters_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.D
                 .isin(set(s.lower() for s in params.article_type_filter))]
     if COL_LOCATIONS in df.columns:
         df = df[df[COL_LOCATIONS].fillna(0) >= params.min_klantlocaties]
+    if params.selectie_modus == "top_n" and "Gewogen_Score" in df.columns:
+        # Markeer de X componenten met de hoogste gewogen score — ná de harde
+        # filters — als "Opnemen in lijst". Bij gelijke score beslist de
+        # oorspronkelijke volgorde (stable sort).
+        df = df.copy()
+        df["Classificatie_Beslissing"] = "Niet opnemen"
+        _top_idx = (
+            df["Gewogen_Score"]
+            .sort_values(ascending=False, kind="stable")
+            .head(max(int(params.top_n), 0))
+            .index
+        )
+        df.loc[_top_idx, "Classificatie_Beslissing"] = "Opnemen in lijst"
     return df
 
 
