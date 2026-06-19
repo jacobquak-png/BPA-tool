@@ -58,9 +58,6 @@ FILTER_MIN_KLANTEN   = 5
 # Standaard serviceniveaus voor het overzicht
 SERVICE_LEVELS = [0.980, 0.990, 0.995, 0.999]
 
-# Standaard aantal subscripties (globale fallback)
-DEFAULT_N_KLANTEN = 20
-
 # Default MTBF (jaren) wanneer MTBF onbekend is in zowel Excel als classificatie.
 # λ valt dan terug op n_klanten / DEFAULT_MTBF_JR i.p.v. historische orders.
 DEFAULT_MTBF_JR = 10.0
@@ -74,8 +71,7 @@ def _leeg_config() -> dict:
     return {
         "aangemaakt":          str(date.today()),
         "aangepast":           str(date.today()),
-        "standaard_n_klanten": DEFAULT_N_KLANTEN,
-        # code → aantal subscripties (overschrijft het standaard getal)
+        # code → aantal subscripties (overschrijft het aantal klantlocaties)
         "n_klanten_overrides": {},
         # code → inkoopprijs override (€)
         "ip_overrides": {},
@@ -130,7 +126,7 @@ def _sla_history_snapshot(cfg: dict) -> None:
     sl_cols = [c for c in df.columns if c.startswith('s@')]
     snapshot = {
         'datum':      str(date.today()),
-        'n_klanten':  cfg['standaard_n_klanten'],
+        'n_klanten':  int(df['n_klanten'].median()) if not df.empty else 0,
         'n_actief':   len(df),
         'totalen':    {c: int(df[c].sum()) for c in sl_cols},
         'componenten': {
@@ -227,6 +223,21 @@ def _lambda_voor_rij(row, n_klanten: int) -> float:
     return n_klanten / DEFAULT_MTBF_JR
 
 
+def _n_uit_klantlocaties(raw) -> int:
+    """Aantal subscripties uit het werkelijke aantal klantlocaties (n_cust).
+
+    Vervangt de oude globale standaardwaarde: bij ontbrekende of ongeldige
+    data valt het aantal terug op 1 (minimaal één potentiële klant).
+    """
+    try:
+        if raw is None or pd.isna(raw):
+            return 1
+        n = int(float(raw))
+        return n if n >= 1 else 1
+    except (TypeError, ValueError):
+        return 1
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  CLASSIFICATIE-KOPPELING
 # ══════════════════════════════════════════════════════════════════════════════
@@ -271,7 +282,6 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
     """
     rijen = []
 
-    standaard_n = cfg['standaard_n_klanten']
     uitgesloten = set(cfg.get('uitgesloten_componenten', []))
     ip_ov = cfg.get('ip_overrides', {})
     lt_ov = cfg.get('lt_overrides', {})
@@ -301,7 +311,8 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         # Whitelist: sla over als niet in classificatie-selectie
         if _gebruik_cls_whitelist and str(code) not in _cls_items:
             continue
-        n     = cfg['n_klanten_overrides'].get(str(code), standaard_n)
+        n     = cfg['n_klanten_overrides'].get(str(code),
+                                               _n_uit_klantlocaties(row.get('n_cust')))
         # VP komt uit Excel (standaard verkoopprijs); IP = VP / 2 tenzij override.
         vp    = float(row.get('VP', 0.0) or 0.0)
         ip    = ip_ov.get(str(code), vp / 2)
@@ -354,7 +365,8 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         # "Opnemen in lijst"-codes in het overzicht.
         for code in _missing:
             cls_meta = _cls_items.get(code, {})
-            n   = cfg['n_klanten_overrides'].get(code, standaard_n)
+            n   = cfg['n_klanten_overrides'].get(
+                code, _n_uit_klantlocaties(cls_meta.get('n_cust')))
             # VP komt uit classificatie-metadata; IP = VP/2 (of override).
             vp_meta = cls_meta.get('vp')
             vp  = float(vp_meta) if vp_meta is not None else 0.0
@@ -413,7 +425,7 @@ def bereken_overzicht(cfg: dict, excel_file=None) -> pd.DataFrame:
         lt_d  = hcomp['lt_dagen']
         lt_jr = lt_d / 365
         mu    = lam * lt_jr
-        n     = hcomp.get('n_klanten', standaard_n)
+        n     = hcomp.get('n_klanten', 1)
         ip    = hcomp.get('ip', 0.0)
         stocks = {
             sl: BPAOptimizationModel.inverse_service_level(sl, lam, lt_jr)
@@ -1267,15 +1279,6 @@ def menu_toon_overzicht(cfg: dict) -> None:
 
 
 def menu_pas_subscripties_aan(cfg: dict) -> None:
-    print(f"\nHuidige standaard: {cfg['standaard_n_klanten']} subscripties")
-    antw = input("Nieuw standaard aantal subscripties (Enter = niet wijzigen): ").strip()
-    if antw:
-        try:
-            cfg['standaard_n_klanten'] = int(antw)
-            print(f"  ✓ Standaard aangepast naar {cfg['standaard_n_klanten']}")
-        except ValueError:
-            print("  ✗ Ongeldige invoer.")
-
     cfg.setdefault('ip_overrides', {})
     cfg.setdefault('lt_overrides', {})
 
@@ -1287,7 +1290,7 @@ def menu_pas_subscripties_aan(cfg: dict) -> None:
             break
 
         # N
-        huidig_n = cfg['n_klanten_overrides'].get(code, cfg['standaard_n_klanten'])
+        huidig_n = cfg['n_klanten_overrides'].get(code, '(uit data)')
         antw = input(f"    N subscripties (huidig: {huidig_n}, 'x'=verwijder): ").strip()
         if antw.lower() == 'x':
             cfg['n_klanten_overrides'].pop(code, None)
@@ -1342,8 +1345,7 @@ def menu_voeg_component_toe(cfg: dict) -> None:
     try:
         lam   = float(input("  Lambda (vraag per jaar): ").replace(',', '.'))
         lt    = int(input("  Levertijd leverancier→BPA (dagen): "))
-        n     = int(input(f"  Aantal subscripties [{cfg['standaard_n_klanten']}]: ").strip()
-                   or cfg['standaard_n_klanten'])
+        n     = int(input("  Aantal subscripties [1]: ").strip() or 1)
         ip_raw = input("  Inkoopprijs (optioneel, bijv. 1234.56): ").strip().replace(',', '.')
         ip    = float(ip_raw) if ip_raw else 0.0
     except ValueError:
@@ -1405,7 +1407,6 @@ def menu_toon_config(cfg: dict) -> None:
     print(f"\nConfiguratiebestand: {CONFIG_PATH}")
     print(f"  Aangemaakt   : {cfg['aangemaakt']}")
     print(f"  Aangepast    : {cfg['aangepast']}")
-    print(f"  Standaard N  : {cfg['standaard_n_klanten']}")
     overrides = cfg['n_klanten_overrides']
     if overrides:
         print(f"\n  Overrides ({len(overrides)}):")
@@ -1451,7 +1452,7 @@ MENU = """
 ║         BPA Jaarlijks Beheer Tool                ║
 ╠══════════════════════════════════════════════════╣
 ║  1. Toon overzicht basisvoorraden                ║
-║  2. Pas subscripties aan (standaard of per code) ║
+║  2. Pas subscripties aan (per code)               ║
 ║  3. Voeg nieuw component toe                     ║
 ║  4. Verwijder component uit model                ║
 ║  5. Toon huidige configuratie                    ║
