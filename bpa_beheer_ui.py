@@ -2415,7 +2415,7 @@ with tab_drempel:
             v = row["Extra Z nodig"]
             if pd.isna(v):
                 bg = "#d4edda"   # groen: geen drempel gevonden in zoekbereik
-            elif int(v) <= 2:
+            elif int(v) <= 1:
                 bg = "#f8d7da"   # rood: 1-2 extra subscripties
             elif int(v) <= 5:
                 bg = "#fff3cd"   # oranje: 3-5 extra subscripties
