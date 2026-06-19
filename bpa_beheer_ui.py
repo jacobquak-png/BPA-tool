@@ -2769,7 +2769,7 @@ with tab_classificatie:
                 )
 
                 # ── 3D-scatter: alle drie de criteria tegelijk ──
-                _fig3d = _plt_cls.figure(figsize=(9, 7))
+                _fig3d = _plt_cls.figure(figsize=(10, 8))
                 _ax3d = _fig3d.add_subplot(111, projection="3d")
 
                 for _mask, _kleur, _lbl in [
@@ -2784,9 +2784,9 @@ with tab_classificatie:
                             edgecolors="none", depthshade=True,
                         )
 
-                _ax3d.set_xlabel(_lx, fontsize=10, labelpad=10)
-                _ax3d.set_ylabel(_ly, fontsize=10, labelpad=10)
-                _ax3d.set_zlabel(_lz, fontsize=10, labelpad=10)
+                _ax3d.set_xlabel(_lx, fontsize=10, labelpad=12)
+                _ax3d.set_ylabel(_ly, fontsize=10, labelpad=12)
+                _ax3d.set_zlabel(_lz, fontsize=10, labelpad=12)
                 if _log_schaal:
                     _ax3d.set_xscale("log")
                     _ax3d.set_yscale("log")
@@ -2798,9 +2798,14 @@ with tab_classificatie:
                 _ax3d.legend(fontsize=9, loc="upper left")
                 _ax3d.view_init(elev=22, azim=-58)
                 # tight_layout() knipt de z-as-label (orderfrequentie) van 3D-plots
-                # weg; gebruik handmatige marges zodat alle drie de assen zichtbaar
-                # blijven.
-                _fig3d.subplots_adjust(left=0.02, right=0.94, top=0.94, bottom=0.04)
+                # weg. Zoom de 3D-box iets uit en gebruik ruime, gebalanceerde
+                # marges zodat álle drie de assen + labels zichtbaar blijven
+                # (de z-as 'Orders' staat bij deze kijkhoek aan de linkerkant).
+                try:
+                    _ax3d.set_box_aspect(None, zoom=0.82)
+                except (TypeError, AttributeError):
+                    pass  # oudere matplotlib zonder zoom-parameter
+                _fig3d.subplots_adjust(left=0.06, right=0.96, top=0.95, bottom=0.06)
                 st.pyplot(_fig3d)
                 _plt_cls.close(_fig3d)
 
