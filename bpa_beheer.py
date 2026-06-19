@@ -692,7 +692,8 @@ def pareto_alpha_X(
       1. p_r(α, X) per regio via de logit-specificatie (willingness-to-pay);
       2. Z_i per component: analytisch E[Z_i] = Σ_n q_{in} (default) of —
          als ``gebruik_simulatie=True`` — het Monte-Carlo gemiddelde over
-         ``n_runs`` binomiale trekkingen (zelfde bron als de simulatietab);
+         ``n_runs`` Bernoulli-trekkingen X_{in} ~ Bernoulli(q_{in}) (zelfde
+         keuze-model als de simulatietab);
       3. een overzicht met n_klanten = Z_i (λ proportioneel meegeschaald);
       4. het kostenmodel → BPA-marge en het totale klantsurplus
          Σ_klant (zelf-voorraadkosten − abonnementskosten).
@@ -720,7 +721,6 @@ def pareto_alpha_X(
 
     rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
     h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
-    h_int    = adoptie['Orders_component_klant'].to_numpy(dtype=int)
     code_arr = adoptie['Code'].to_numpy()
     r4       = np.round(rates, 4)
     _pos     = r4[r4 > 0]
@@ -752,14 +752,14 @@ def pareto_alpha_X(
             if _hoog != _laag:
                 _rate[low_mask] = _p_v
             if gebruik_simulatie:
-                # Monte-Carlo: per (component,klant) binomiale trekking over de
-                # orders; klant abonneert (binair) bij ≥ 1 succes. Z_i = gemiddeld
-                # aantal abonnees over de runs. Zelfde seed per (α,X) → gladde curve.
-                _rng = np.random.default_rng(seed)
-                _draws = _rng.binomial(
-                    h_int[None, :], _rate[None, :],
-                    size=(int(n_runs), h_int.shape[0]))
-                _q = (_draws >= 1).mean(axis=0)
+                # Bernoulli-keuze per (component, klant): X_in ~ Bernoulli(q_in)
+                # met q_in = 1 - (1 - p_r)^{h_in} = P(≥ 1 conversie over h_in
+                # orders). Z_i = Σ_n X_in (Poisson-binomiaal over de klanten);
+                # gemiddeld over de runs. Zelfde seed per (α,X) → gladde curve.
+                _q_in  = 1.0 - (1.0 - _rate) ** h
+                _rng   = np.random.default_rng(seed)
+                _draws = _rng.random((int(n_runs), _q_in.shape[0])) < _q_in[None, :]
+                _q = _draws.mean(axis=0)
             else:
                 _q = 1.0 - (1.0 - _rate) ** h
             _ez = pd.Series(_q).groupby(code_arr).sum()
@@ -1113,16 +1113,14 @@ def simuleer_subscripties_per_component(
     """
     Monte Carlo simulatie van het aantal subscripties per component.
 
-    Per run en per (component, klant) wordt een binomiale trekking gedaan over
-    de orders van de klant voor dat component; de klant neemt een subscriptie
-    als er minstens één "succes" is (binaire uitkomst):
+    Per run en per (component, klant) wordt de abonneerkans q_klant bepaald en
+    een Bernoulli-trekking gedaan voor de binaire abonneer-beslissing:
 
-        K_klant   ~ Binomiaal(n = orders van de klant voor het component,
-                              p = adoption rate van de klant)
-        X_klant   = 1 als K_klant >= 1, anders 0
+        q_klant   = 1 - (1 - adoption_rate) ** aantal_orders
+        X_klant   ~ Bernoulli(q_klant)   (1 = abonneert, 0 = niet)
 
-    Hierdoor neemt de kans dat een klant een subscriptie neemt toe naarmate de
-    klant meer orders voor het component heeft:
+    De kans dat een klant een subscriptie neemt stijgt zo met het aantal orders
+    voor het component:
         P(X_klant = 1) = 1 - (1 - adoption_rate) ** aantal_orders.
     Het aantal subscripties voor een component in een run is de som van deze
     binaire beslissingen over alle klanten (maximaal het aantal klanten). Over
@@ -1186,13 +1184,14 @@ def simuleer_subscripties_runs(
     """
     Voer de subscriptie-simulatie uit en geef de ruwe trekkingen terug.
 
-    Per (component, klant) wordt een binomiale trekking gedaan over de orders
-    van de klant voor dat component; de klant neemt een subscriptie als er
-    minstens één succes is:
-        K_klant ~ Binomiaal(n = orders voor het component, p = adoption rate)
-        X_klant = 1 als K_klant >= 1, anders 0.
+    Per klant wordt eerst de abonneerkans q_klant = 1 - (1 - adoption_rate)^{orders}
+    bepaald (= kans op ≥ 1 conversie over de orders). Daarna volgt een
+    Bernoulli-trekking voor de binaire abonneer-beslissing:
+        q_klant = 1 - (1 - adoption_rate) ** orders
+        X_klant ~ Bernoulli(q_klant)   (1 = abonneert, 0 = niet)
     Het aantal subscripties per component is de som van deze binaire
-    beslissingen over de klanten (maximaal het aantal klanten).
+    beslissingen over de klanten (Poisson-binomiaal, maximaal het aantal
+    klanten).
 
     Bij codes=None wordt standaard beperkt tot de classificatie-componenten.
 
@@ -1212,14 +1211,14 @@ def simuleer_subscripties_runs(
     for code, grp in adoptie.groupby('Code', sort=True):
         n_arr = grp['Orders_component_klant'].to_numpy()
         p_arr = grp['Adoption_rate'].to_numpy()
-        # Binomiale trekking per klant over zijn orders voor dit component.
-        # Elke order is een trial met succeskans = adoption rate. De klant neemt
-        # een subscriptie (binair) als er minstens één succes is. Zo stijgt de
-        # kans op een subscriptie met het aantal orders van de klant.
-        # (n_runs, n_klanten) binomiale trekkingen → binariseren → som per run.
-        draws = rng.binomial(n_arr[None, :], p_arr[None, :],
-                             size=(n_runs, n_arr.shape[0]))
-        runs[code] = (draws >= 1).sum(axis=1)
+        # Bernoulli-keuze per klant: X_klant ~ Bernoulli(q_klant) met
+        # q_klant = 1 - (1 - adoption_rate)^{orders} = P(≥ 1 conversie over de
+        # orders van de klant). Zo stijgt de abonneerkans met het aantal orders.
+        # Z_component = Σ_klant X_klant (Poisson-binomiaal over de klanten).
+        # (n_runs, n_klanten) Bernoulli-trekkingen → som per run.
+        q_arr = 1.0 - (1.0 - p_arr) ** n_arr
+        draws = rng.random((n_runs, q_arr.shape[0])) < q_arr[None, :]
+        runs[code] = draws.sum(axis=1)
     return runs
 
 
