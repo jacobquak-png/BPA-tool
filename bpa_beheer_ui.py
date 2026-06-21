@@ -736,9 +736,9 @@ with tab_historie:
                         ax.annotate(str(int(y)), (x, y), textcoords="offset points",
                                     xytext=(0, 6), ha="center", fontsize=8)
 
-                ax.set_xlabel("Datum update", fontsize=11)
-                ax.set_ylabel("Totale basisvoorraad (stuks)", fontsize=11)
-                ax.set_title("Totale basisvoorraad BPA per update-moment", fontsize=12)
+                ax.set_xlabel("Update date", fontsize=11)
+                ax.set_ylabel("Total base stock (units)", fontsize=11)
+                ax.set_title("Total BPA base stock per update moment", fontsize=12)
                 ax.legend(fontsize=9)
                 ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
                 ax.grid(True, alpha=0.3)
@@ -839,9 +839,9 @@ with tab_historie:
                               marker='o', linewidth=2, color=_col, label=f'N = {_n}')
             _ax1.axhline(0, color='grey', linewidth=0.8)
             _ax1.set_xlabel('Service level (%)', fontsize=11)
-            _ax1.set_ylabel('Jaarlijkse marge (€)', fontsize=11)
+            _ax1.set_ylabel('Annual margin (€)', fontsize=11)
             _ax1.set_title(
-                f'Marge vs. service level  '
+                f'Margin vs. service level  '
                 f'(α = {_ALPHA_DEF:.0%}, κ_BPA = {_KAPPA_BPA_DEF:.0%})',
                 fontsize=12,
             )
@@ -861,16 +861,16 @@ with tab_historie:
                      for r in st.session_state.sens_g2 if r['base'] is not None]
             if _pts2:
                 _ax2.plot([p[0] for p in _pts2], [p[1] for p in _pts2],
-                          marker='s', linewidth=2, color='#FF9800', label='Totaal S*')
+                          marker='s', linewidth=2, color='#FF9800', label='Total S*')
                 for _xv, _yv in _pts2:
                     _ax2.annotate(str(int(_yv)), (_xv, _yv),
                                   textcoords='offset points', xytext=(0, 7),
                                   ha='center', fontsize=9)
             _ax2.set_xlabel('Service level (%)', fontsize=11)
-            _ax2.set_ylabel('Totale basisvoorraad (stuks)', fontsize=11)
+            _ax2.set_ylabel('Total base stock (units)', fontsize=11)
             _ax2.set_title(
-                f'Basisvoorraad vs. service level  '
-                f'(α = {_ALPHA_DEF:.0%}, N = standaard)',
+                f'Base stock vs. service level  '
+                f'(α = {_ALPHA_DEF:.0%}, N = standard)',
                 fontsize=12,
             )
             _ax2.xaxis.set_major_formatter(_fmt_sl)
@@ -892,11 +892,11 @@ with tab_historie:
                     _ax3.plot([p[0] for p in _pts3], [p[1] for p in _pts3],
                               marker='o', linewidth=2, color=_col3, label=f'SL = {_sl3:.1%}')
             _ax3.axhline(0, color='grey', linewidth=0.8)
-            _ax3.set_xlabel('Abonnementstarief α (%)', fontsize=11)
-            _ax3.set_ylabel('Jaarlijkse marge (€)', fontsize=11)
+            _ax3.set_xlabel('Subscription rate α (%)', fontsize=11)
+            _ax3.set_ylabel('Annual margin (€)', fontsize=11)
             _ax3.set_title(
-                f'Marge vs. abonnementstarief  '
-                f'(κ_BPA = {_KAPPA_BPA_DEF:.0%}, N = standaard)',
+                f'Margin vs. subscription rate  '
+                f'(κ_BPA = {_KAPPA_BPA_DEF:.0%}, N = standard)',
                 fontsize=12,
             )
             _ax3.yaxis.set_major_formatter(_fmt_eur)
@@ -973,11 +973,11 @@ with tab_historie:
                                 color=_col_f, label=f'α = {_a_f:.0%}')
             _ax_nf.axhline(0, color='grey', linewidth=1.2, linestyle='--', label='Break-even')
             _ax_nf.axvline(_n_std, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z huidig = {_n_std}')
-            _ax_nf.set_xlabel('Aantal subscripties (Z)', fontsize=11)
-            _ax_nf.set_ylabel('Jaarlijkse BPA-marge (€)', fontsize=11)
+                           label=f'Z current = {_n_std}')
+            _ax_nf.set_xlabel('Number of subscriptions (Z)', fontsize=11)
+            _ax_nf.set_ylabel('Annual BPA margin (€)', fontsize=11)
             _ax_nf.set_title(
-                f'BPA-marge vs. Z per α  '
+                f'BPA margin vs. Z per α  '
                 f'(SL = {_nfp["sl"]:.1%}, '
                 f'κ_BPA = {_nfp["kappa_bpa"]:.0%}, '
                 f'κ_c = {_nfp["kappa_c"]:.0%})',
@@ -1005,10 +1005,10 @@ with tab_historie:
             _ax_hm.set_xticklabels(_N_FEAS_VALS, fontsize=9)
             _ax_hm.set_yticks(range(len(_ALPHA_FEAS)))
             _ax_hm.set_yticklabels([f'{a:.0%}' for a in _ALPHA_FEAS], fontsize=9)
-            _ax_hm.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+            _ax_hm.set_xlabel('Number of subscriptions (Z)', fontsize=11)
             _ax_hm.set_ylabel('α', fontsize=12)
             _ax_hm.set_title(
-                'Haalbaarheid BPA per (N, α)  (✓ = haalbaar, ✗ = niet haalbaar)',
+                'BPA feasibility per (N, α)  (✓ = feasible, ✗ = infeasible)',
                 fontsize=12,
             )
             for _i in range(len(_ALPHA_FEAS)):
@@ -1105,7 +1105,7 @@ with tab_historie:
                 cmap='RdYlGn', norm=_norm_nsl,
                 interpolation='nearest',
             )
-            _plt_nsl.colorbar(_im_nsl, ax=_ax_nsl, label='BPA-marge (€)', fraction=0.03, pad=0.02)
+            _plt_nsl.colorbar(_im_nsl, ax=_ax_nsl, label='BPA margin (€)', fraction=0.03, pad=0.02)
 
             # Annotaties per cel
             for _ri, _sl_v in enumerate(_rows_nsl):
@@ -1127,10 +1127,10 @@ with tab_historie:
             _ax_nsl.set_xticklabels([str(n) for n in _cols_nsl], fontsize=9)
             _ax_nsl.set_yticks(range(len(_rows_nsl)))
             _ax_nsl.set_yticklabels([f'{sl:.1%}' for sl in _rows_nsl], fontsize=9)
-            _ax_nsl.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+            _ax_nsl.set_xlabel('Number of subscriptions (Z)', fontsize=11)
             _ax_nsl.set_ylabel('Service level', fontsize=11)
             _ax_nsl.set_title(
-                f'Haalbaarheid BPA per (Z, service level)  '
+                f'BPA feasibility per (Z, service level)  '
                 f'(α = {_a_lbl:.0%}, κ_BPA = {_kb_lbl:.0%})',
                 fontsize=12,
             )
@@ -1217,11 +1217,11 @@ with tab_historie:
                                         textcoords='offset points', xytext=(0, 7),
                                         ha='center', fontsize=8)
             _ax_bs.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z huidig = {_n_std_sl}')
-            _ax_bs.set_xlabel('Aantal subscripties (Z)', fontsize=11)
-            _ax_bs.set_ylabel('Totale basisvoorraad S* (stuks)', fontsize=11)
+                           label=f'Z current = {_n_std_sl}')
+            _ax_bs.set_xlabel('Number of subscriptions (Z)', fontsize=11)
+            _ax_bs.set_ylabel('Total base stock S* (units)', fontsize=11)
             _ax_bs.set_title(
-                f'Totale S* vs. Z per service level  '
+                f'Total S* vs. Z per service level  '
                 f'(α = {_nsl_p["alpha"]:.0%})',
                 fontsize=12,
             )
@@ -1256,11 +1256,11 @@ with tab_historie:
                                         ha='center', fontsize=7)
             _ax_ds.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_ds.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z huidig = {_n_std_sl}')
-            _ax_ds.set_xlabel('Aantal subscripties Z (midden interval)', fontsize=11)
-            _ax_ds.set_ylabel('ΔS* / ΔN  (stuks per extra subscriptie)', fontsize=11)
+                           label=f'Z current = {_n_std_sl}')
+            _ax_ds.set_xlabel('Number of subscriptions Z (interval midpoint)', fontsize=11)
+            _ax_ds.set_ylabel('ΔS* / ΔN  (units per extra subscription)', fontsize=11)
             _ax_ds.set_title(
-                f'Pooling-effect: extra voorraad per extra subscriptie  '
+                f'Pooling effect: extra stock per extra subscription  '
                 f'(α = {_nsl_p["alpha"]:.0%})',
                 fontsize=12,
             )
@@ -1299,11 +1299,11 @@ with tab_historie:
                                     textcoords='offset points', xytext=(0, 7),
                                     ha='center', fontsize=8)
             _ax_cv.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z huidig = {_n_std_sl}')
-            _ax_cv.set_xlabel('Aantal subscripties (Z)', fontsize=11)
+                           label=f'Z current = {_n_std_sl}')
+            _ax_cv.set_xlabel('Number of subscriptions (Z)', fontsize=11)
             _ax_cv.set_ylabel('CV lead-time demand', fontsize=11)
             _ax_cv.set_title(
-                'Relatieve onzekerheid lead-time demand  '
+                'Relative uncertainty lead-time demand  '
                 'CV(Z) = 1 / √(Z · Σ λᵢ · Lᵢ / Zᵢ)',
                 fontsize=12,
             )
@@ -1335,10 +1335,10 @@ with tab_historie:
             _ax_sp.axhline(_mu_per_sub, color='grey', linewidth=1.0,
                            linestyle='--', label=f'μ/Z (lead-time demand per sub., ≈{_mu_per_sub:.3f})')
             _ax_sp.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z huidig = {_n_std_sl}')
-            _ax_sp.set_xlabel('Aantal subscripties (Z)', fontsize=11)
-            _ax_sp.set_ylabel('S*(X,Z) / Z  (voorraad per subscriptie)', fontsize=11)
-            _ax_sp.set_title('Benodigde voorraad per subscriptie  S*(X,Z) / Z',
+                           label=f'Z current = {_n_std_sl}')
+            _ax_sp.set_xlabel('Number of subscriptions (Z)', fontsize=11)
+            _ax_sp.set_ylabel('S*(X,Z) / Z  (stock per subscription)', fontsize=11)
+            _ax_sp.set_title('Required stock per subscription  S*(X,Z) / Z',
                              fontsize=12)
             _ax_sp.set_xticks(_N_FEAS_VALS)
             _plt_sl.setp(_ax_sp.get_xticklabels(), rotation=30, ha='right')
@@ -1398,13 +1398,13 @@ with tab_historie:
                                              textcoords='offset points', xytext=(0, 7),
                                              ha='center', fontsize=7)
                 _ax_det.axhline(_mu_ref, color='grey', linewidth=1.0, linestyle='--',
-                                label=f'μ/Z (ondergrens, ≈{_mu_ref:.3f})')
+                                label=f'μ/Z (lower bound, ≈{_mu_ref:.3f})')
                 _ax_det.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                                label=f'Z huidig = {_n_std_sl}')
-                _ax_det.set_xlabel('Aantal subscripties Z', fontsize=11)
-                _ax_det.set_ylabel('S*(X,Z) / Z  (voorraad per subscriptie)', fontsize=11)
+                                label=f'Z current = {_n_std_sl}')
+                _ax_det.set_xlabel('Number of subscriptions Z', fontsize=11)
+                _ax_det.set_ylabel('S*(X,Z) / Z  (stock per subscription)', fontsize=11)
                 _ax_det.set_title(
-                    'Benodigde voorraad per subscriptie  S*(X,Z) / Z  (Z = 1… 20)',
+                    'Required stock per subscription  S*(X,Z) / Z  (Z = 1… 20)',
                     fontsize=12,
                 )
                 _ax_det.set_xticks(_N_DET_x)
@@ -1434,12 +1434,12 @@ with tab_historie:
                                         ha='center', fontsize=7)
             _ax_ss.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_ss.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z huidig = {_n_std_sl}')
-            _ax_ss.set_xlabel('Aantal subscripties (Z)', fontsize=11)
-            _ax_ss.set_ylabel('(S*(X,Z) − μ(Z)) / Z  (safety stock per subscriptie)',
+                           label=f'Z current = {_n_std_sl}')
+            _ax_ss.set_xlabel('Number of subscriptions (Z)', fontsize=11)
+            _ax_ss.set_ylabel('(S*(X,Z) − μ(Z)) / Z  (safety stock per subscription)',
                               fontsize=11)
             _ax_ss.set_title(
-                'Safety stock per subscriptie  (S*(X,Z) − Z · ΣλᵢLᵢ/Zᵢ) / Z',
+                'Safety stock per subscription  (S*(X,Z) − Z · ΣλᵢLᵢ/Zᵢ) / Z',
                 fontsize=12,
             )
             _ax_ss.set_xticks(_N_FEAS_VALS)
@@ -1529,10 +1529,10 @@ with tab_historie:
                              color=_color, label=_sl_lbl)
 
             _ax_mc1.axvline(_n_std_mc, color='black', linewidth=1.0,
-                            linestyle=':', label=f'Z huidig = {_n_std_mc}')
-            _ax_mc1.set_ylabel('Totale BPA-kosten (€)', fontsize=11)
+                            linestyle=':', label=f'Z current = {_n_std_mc}')
+            _ax_mc1.set_ylabel('Total BPA cost (€)', fontsize=11)
             _ax_mc1.set_title(
-                f'BPA-kosten vs. Z  '
+                f'BPA cost vs. Z  '
                 f'(α = {_mc_p["alpha"]:.0%}, κ_BPA = {_mc_p["kappa_bpa"]:.0%})',
                 fontsize=12,
             )
@@ -1543,12 +1543,12 @@ with tab_historie:
 
             _ax_mc2.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_mc2.axvline(_n_std_mc, color='black', linewidth=1.0,
-                            linestyle=':', label=f'Z huidig = {_n_std_mc}')
-            _ax_mc2.set_xlabel('Aantal subscripties (Z)', fontsize=11)
-            _ax_mc2.set_ylabel('ΔC / ΔZ  (extra kosten per extra subscriptie, €)',
+                            linestyle=':', label=f'Z current = {_n_std_mc}')
+            _ax_mc2.set_xlabel('Number of subscriptions (Z)', fontsize=11)
+            _ax_mc2.set_ylabel('ΔC / ΔZ  (extra cost per extra subscription, €)',
                                fontsize=11)
             _ax_mc2.set_title(
-                'Pooling-effect: marginale inventariskosten per extra subscriptie',
+                'Pooling effect: marginal inventory cost per extra subscription',
                 fontsize=12,
             )
             _ax_mc2.yaxis.set_major_formatter(_fmt_mc)
@@ -1666,11 +1666,11 @@ with tab_historie:
                                  color=_col_inv, label=f'SL = {_sl_inv:.1%}')
 
             _ax_inv.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
-                            label=f'Totaal subs (sim) = {_tot0_inv}')
-            _ax_inv.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
-            _ax_inv.set_ylabel('Totale voorraadwaarde (€)', fontsize=11)
+                            label=f'Total subs (sim) = {_tot0_inv}')
+            _ax_inv.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
+            _ax_inv.set_ylabel('Total inventory value (€)', fontsize=11)
             _ax_inv.set_title(
-                'Vereiste investering in basisvoorraad vs. totaal aantal subscripties',
+                'Required investment in base stock vs. total number of subscriptions',
                 fontsize=12,
             )
             _ax_inv.yaxis.set_major_formatter(_fmt_inv)
@@ -1728,11 +1728,11 @@ with tab_historie:
                                     label=f'SL {_sl_t5:.1%}')
 
                     _ax_t5.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
-                                   label=f'Totaal subs (sim) = {_tot0_inv}')
-                    _ax_t5.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
-                    _ax_t5.set_ylabel('Gesommeerde investeringswaarde top 5 (€)', fontsize=11)
+                                   label=f'Total subs (sim) = {_tot0_inv}')
+                    _ax_t5.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
+                    _ax_t5.set_ylabel('Summed investment value top 5 (€)', fontsize=11)
                     _ax_t5.set_title(
-                        'Top 5 duurste componenten (VP): gesommeerde investering vs. totaal subs per SL',
+                        'Top 5 most expensive components (VP): summed investment vs. total subs per SL',
                         fontsize=12,
                     )
                     _ax_t5.yaxis.set_major_formatter(_fmt_inv)
@@ -1776,11 +1776,11 @@ with tab_historie:
                                       linewidth=2.0, linestyle=_ls_t10s,
                                       label=f'SL {_sl_t10s:.1%}')
                     _ax_t10s.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
-                                     label=f'Totaal subs (sim) = {_tot0_inv}')
-                    _ax_t10s.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
-                    _ax_t10s.set_ylabel('Gesommeerde investeringswaarde top 10 (€)', fontsize=11)
+                                     label=f'Total subs (sim) = {_tot0_inv}')
+                    _ax_t10s.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
+                    _ax_t10s.set_ylabel('Summed investment value top 10 (€)', fontsize=11)
                     _ax_t10s.set_title(
-                        'Top 10 duurste componenten (VP): gesommeerde investering vs. totaal subs per SL',
+                        'Top 10 most expensive components (VP): summed investment vs. total subs per SL',
                         fontsize=12,
                     )
                     _ax_t10s.yaxis.set_major_formatter(_fmt_inv)
@@ -1827,11 +1827,11 @@ with tab_historie:
                             )
 
                     _ax_t10.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
-                                    label=f'Totaal subs (sim) = {_tot0_inv}')
-                    _ax_t10.set_xlabel('Totaal aantal subscripties (alle componenten)', fontsize=11)
-                    _ax_t10.set_ylabel('Investeringswaarde per component (€)', fontsize=11)
+                                    label=f'Total subs (sim) = {_tot0_inv}')
+                    _ax_t10.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
+                    _ax_t10.set_ylabel('Investment value per component (€)', fontsize=11)
                     _ax_t10.set_title(
-                        f'Top 10 duurste componenten — investering vs. totaal subs  ({_sl_sel_t10})',
+                        f'Top 10 most expensive components — investment vs. total subs  ({_sl_sel_t10})',
                         fontsize=12,
                     )
                     _ax_t10.yaxis.set_major_formatter(_fmt_inv)
@@ -2010,26 +2010,26 @@ with tab_historie:
             # ── Grafiek 1: jaarlijkse cashflow ──────────────────────────────────
             _w = 0.55
             _ax_mt1.bar(_x_pos, _rev_arr,  _w,
-                        label='Inkomsten',      color='#388E3C', alpha=0.85)
+                        label='Revenue',      color='#388E3C', alpha=0.85)
             _ax_mt1.bar(_x_pos, _hold_arr, _w,
-                        label='Voorraadkosten', color='#F57C00', alpha=0.85)
+                        label='Inventory cost', color='#F57C00', alpha=0.85)
             _ax_mt1.bar(_x_pos, _inv_arr,  _w, bottom=_hold_arr,
-                        label='Investering',    color='#D32F2F', alpha=0.85)
+                        label='Investment',    color='#D32F2F', alpha=0.85)
             _ax_mt1.plot(_x_pos, _net_arr, color='black', marker='o',
-                         linewidth=1.8, linestyle='--', label='Netto jaar', zorder=5)
+                         linewidth=1.8, linestyle='--', label='Net year', zorder=5)
             _ax_mt1.axhline(0, color='grey', linewidth=0.8)
 
             _ax_mt1b = _ax_mt1.twinx()
             _ax_mt1b.plot(_x_pos, _mtd['N'], color='#1976D2', marker='s',
                           linewidth=1.5, linestyle=':', alpha=0.7, label='Z')
-            _ax_mt1b.set_ylabel('Z (subscripties)', fontsize=10, color='#1976D2')
+            _ax_mt1b.set_ylabel('Z (subscriptions)', fontsize=10, color='#1976D2')
             _ax_mt1b.tick_params(axis='y', labelcolor='#1976D2')
 
             _ax_mt1.set_xticks(_x_pos)
             _ax_mt1.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
-            _ax_mt1.set_ylabel('Cashflow per jaar (€)', fontsize=11)
+            _ax_mt1.set_ylabel('Cash flow per year (€)', fontsize=11)
             _ax_mt1.set_title(
-                f'Jaarlijkse cashflow  (α = {_mtp["alpha"]:.0%}, '
+                f'Annual cash flow  (α = {_mtp["alpha"]:.0%}, '
                 f'κ_BPA = {_mtp["kappa_bpa"]:.0%}, SL = {_mtp["sl"]:.1%}, '
                 f'Z: {_mtp["N_start"]} → {_mtp["N_end"]})',
                 fontsize=12,
@@ -2044,25 +2044,25 @@ with tab_historie:
             _bar_colors_mt = ['#388E3C' if v >= 0 else '#D32F2F' for v in _cum_arr]
             _ax_mt2.bar(_x_pos, _cum_arr, _w, color=_bar_colors_mt, alpha=0.65)
             _ax_mt2.plot(_x_pos, _cum_arr, color='#1976D2', marker='o',
-                         linewidth=2.0, linestyle='-', label='Cumulatieve CF')
+                         linewidth=2.0, linestyle='-', label='Cumulative CF')
             _ax_mt2.axhline(0, color='grey', linewidth=1.0, linestyle='--')
 
-            _be_titel = 'Break-even niet bereikt binnen tijdshorizon'
+            _be_titel = 'Break-even not reached within time horizon'
             for _bi in range(1, len(_cum_arr)):
                 if _cum_arr[_bi - 1] < 0 <= _cum_arr[_bi]:
                     _frac     = -_cum_arr[_bi - 1] / (_cum_arr[_bi] - _cum_arr[_bi - 1])
                     _be_x     = _bi - 1 + _frac
-                    _be_titel = f'Break-even ≈ jaar {_be_x:.1f}'
+                    _be_titel = f'Break-even ≈ year {_be_x:.1f}'
                     _ax_mt2.axvline(_be_x, color='#F57C00', linewidth=1.8,
                                     linestyle=':', label=_be_titel)
                     break
             if _cum_arr[0] >= 0:
-                _be_titel = 'Break-even in jaar 0 (direct winstgevend)'
+                _be_titel = 'Break-even in year 0 (immediately profitable)'
 
             _ax_mt2.set_xticks(_x_pos)
             _ax_mt2.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
-            _ax_mt2.set_ylabel('Cumulatieve cashflow (€)', fontsize=11)
-            _ax_mt2.set_title(f'Cumulatieve cashflow — {_be_titel}', fontsize=12)
+            _ax_mt2.set_ylabel('Cumulative cash flow (€)', fontsize=11)
+            _ax_mt2.set_title(f'Cumulative cash flow — {_be_titel}', fontsize=12)
             _ax_mt2.yaxis.set_major_formatter(_fmt_mt)
             _ax_mt2.legend(fontsize=9)
             _ax_mt2.grid(True, axis='y', alpha=0.3)
@@ -2116,20 +2116,20 @@ with tab_historie:
 
             _fig10s, (_ax10s1, _ax10s2) = _plt_mt10.subplots(2, 1, figsize=(12, 10))
 
-            _ax10s1.bar(_xp10, _sr10, _w10, label='Inkomsten',      color='#388E3C', alpha=0.85)
-            _ax10s1.bar(_xp10, _sh10, _w10, label='Voorraadkosten', color='#F57C00', alpha=0.85)
-            _ax10s1.bar(_xp10, _si10, _w10, bottom=_sh10, label='Investering', color='#D32F2F', alpha=0.85)
-            _ax10s1.plot(_xp10, _net10, color='black', marker='o', linewidth=1.8, linestyle='--', label='Netto jaar', zorder=5)
+            _ax10s1.bar(_xp10, _sr10, _w10, label='Revenue',      color='#388E3C', alpha=0.85)
+            _ax10s1.bar(_xp10, _sh10, _w10, label='Inventory cost', color='#F57C00', alpha=0.85)
+            _ax10s1.bar(_xp10, _si10, _w10, bottom=_sh10, label='Investment', color='#D32F2F', alpha=0.85)
+            _ax10s1.plot(_xp10, _net10, color='black', marker='o', linewidth=1.8, linestyle='--', label='Net year', zorder=5)
             _ax10s1.axhline(0, color='grey', linewidth=0.8)
             _ax10s1b = _ax10s1.twinx()
             _ax10s1b.plot(_xp10, _mt10d['N'], color='#1976D2', marker='s', linewidth=1.5, linestyle=':', alpha=0.7, label='Z')
-            _ax10s1b.set_ylabel('Z (subscripties)', fontsize=10, color='#1976D2')
+            _ax10s1b.set_ylabel('Z (subscriptions)', fontsize=10, color='#1976D2')
             _ax10s1b.tick_params(axis='y', labelcolor='#1976D2')
             _ax10s1.set_xticks(_xp10)
             _ax10s1.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
-            _ax10s1.set_ylabel('Cashflow per jaar (€)', fontsize=11)
+            _ax10s1.set_ylabel('Cash flow per year (€)', fontsize=11)
             _ax10s1.set_title(
-                f'Jaarlijkse cashflow top 10  (α={_mt10p["alpha"]:.0%}, '
+                f'Annual cash flow top 10  (α={_mt10p["alpha"]:.0%}, '
                 f'κ_BPA={_mt10p["kappa_bpa"]:.0%}, SL={_mt10p["sl"]:.1%}, '
                 f'Z: {_mt10p["N_start"]} → {_mt10p["N_end"]})', fontsize=12)
             _ax10s1.yaxis.set_major_formatter(_fmt10)
@@ -2140,22 +2140,22 @@ with tab_historie:
 
             _bc10 = ['#388E3C' if v >= 0 else '#D32F2F' for v in _sc10]
             _ax10s2.bar(_xp10, _sc10, _w10, color=_bc10, alpha=0.65)
-            _ax10s2.plot(_xp10, _sc10, color='#1976D2', marker='o', linewidth=2.0, label='Cumulatieve CF')
+            _ax10s2.plot(_xp10, _sc10, color='#1976D2', marker='o', linewidth=2.0, label='Cumulative CF')
             _ax10s2.axhline(0, color='grey', linewidth=1.0, linestyle='--')
-            _be10t = 'Break-even niet bereikt binnen tijdshorizon'
+            _be10t = 'Break-even not reached within time horizon'
             for _bi10 in range(1, len(_sc10)):
                 if _sc10[_bi10 - 1] < 0 <= _sc10[_bi10]:
                     _f10   = -_sc10[_bi10 - 1] / (_sc10[_bi10] - _sc10[_bi10 - 1])
                     _bex10 = _bi10 - 1 + _f10
-                    _be10t = f'Break-even ≈ jaar {_bex10:.1f}'
+                    _be10t = f'Break-even ≈ year {_bex10:.1f}'
                     _ax10s2.axvline(_bex10, color='#F57C00', linewidth=1.8, linestyle=':', label=_be10t)
                     break
             if _sc10[0] >= 0:
-                _be10t = 'Break-even in jaar 0 (direct winstgevend)'
+                _be10t = 'Break-even in year 0 (immediately profitable)'
             _ax10s2.set_xticks(_xp10)
             _ax10s2.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
-            _ax10s2.set_ylabel('Cumulatieve cashflow (€)', fontsize=11)
-            _ax10s2.set_title(f'Cumulatieve cashflow top 10 — {_be10t}', fontsize=12)
+            _ax10s2.set_ylabel('Cumulative cash flow (€)', fontsize=11)
+            _ax10s2.set_title(f'Cumulative cash flow top 10 — {_be10t}', fontsize=12)
             _ax10s2.yaxis.set_major_formatter(_fmt10)
             _ax10s2.legend(fontsize=9)
             _ax10s2.grid(True, axis='y', alpha=0.3)
@@ -2179,9 +2179,9 @@ with tab_historie:
             _ax10c.axhline(0, color='grey', linewidth=1.0, linestyle='--')
             _ax10c.set_xticks(_xp10)
             _ax10c.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
-            _ax10c.set_ylabel('Cumulatieve cashflow (€)', fontsize=11)
+            _ax10c.set_ylabel('Cumulative cash flow (€)', fontsize=11)
             _ax10c.set_title(
-                f'Cumulatieve cashflow per component — top 10  (SL={_mt10p["sl"]:.1%})',
+                f'Cumulative cash flow per component — top 10  (SL={_mt10p["sl"]:.1%})',
                 fontsize=12,
             )
             _ax10c.yaxis.set_major_formatter(_fmt10)
@@ -2475,9 +2475,9 @@ with tab_drempel:
             _ax_d.set_xticklabels(
                 _plot_d.index, rotation=45, ha="right", fontsize=9
             )
-            _ax_d.set_ylabel("Extra subscripties voor S*+1", fontsize=11)
+            _ax_d.set_ylabel("Extra subscriptions for S*+1", fontsize=11)
             _ax_d.set_title(
-                f"Subscriptiedrempel per component  (SL = {_sl_d:.1%})",
+                f"Subscription threshold per component  (SL = {_sl_d:.1%})",
                 fontsize=12,
             )
             _ax_d.grid(True, axis="y", alpha=0.3)
@@ -2726,16 +2726,16 @@ with tab_classificatie:
             if _viz_bron == "Ruwe componentdata":
                 _viz_cols  = _raw_cols
                 _crit_meta = {
-                    _raw_cols[0]: ("Prijs (€)",      "#1976D2"),
-                    _raw_cols[1]: ("Klantlocaties",  "#388E3C"),
-                    _raw_cols[2]: ("Orders / locatie", "#F57C00"),
+                    _raw_cols[0]: ("Price (€)",      "#1976D2"),
+                    _raw_cols[1]: ("Customer locations",  "#388E3C"),
+                    _raw_cols[2]: ("Orders / location", "#F57C00"),
                 }
-                _eenheid_x = "Waarde"
+                _eenheid_x = "Value"
             else:
                 _viz_cols  = _score_cols
                 _crit_meta = {
-                    "Score_Prijs":    ("Prijs",    "#1976D2"),
-                    "Score_Locaties": ("Locaties", "#388E3C"),
+                    "Score_Prijs":    ("Price",    "#1976D2"),
+                    "Score_Locaties": ("Locations", "#388E3C"),
                     "Score_Orders":   ("Orders",   "#F57C00"),
                 }
                 _eenheid_x = "Score"
@@ -2773,8 +2773,8 @@ with tab_classificatie:
                 _ax3d = _fig3d.add_subplot(111, projection="3d")
 
                 for _mask, _kleur, _lbl in [
-                    (_opnemen_mask,  "#2E7D32", "Opnemen in lijst"),
-                    (~_opnemen_mask, "#C62828", "Niet opnemen"),
+                    (_opnemen_mask,  "#2E7D32", "Include in list"),
+                    (~_opnemen_mask, "#C62828", "Do not include"),
                 ]:
                     _sub = _plot_df[_mask]
                     if not _sub.empty:
@@ -2792,7 +2792,7 @@ with tab_classificatie:
                     _ax3d.set_yscale("log")
                     _ax3d.set_zscale("log")
                 _ax3d.set_title(
-                    f"3D-verdeling — {_viz_bron.lower()} ({len(_plot_df)} componenten)",
+                    f"3D distribution — {_viz_bron.lower()} ({len(_plot_df)} components)",
                     fontsize=12,
                 )
                 _ax3d.legend(fontsize=9, loc="upper left")
@@ -2830,12 +2830,12 @@ with tab_classificatie:
                     _mediaan = float(_vals.median())
                     _gem = float(_vals.mean())
                     _axh.axvline(_gem, color="#212121", linestyle="--",
-                                 linewidth=1.2, label=f"Gem. {_gem:,.1f}")
+                                 linewidth=1.2, label=f"Mean {_gem:,.1f}")
                     _axh.axvline(_mediaan, color="#757575", linestyle=":",
-                                 linewidth=1.2, label=f"Mediaan {_mediaan:,.1f}")
+                                 linewidth=1.2, label=f"Median {_mediaan:,.1f}")
                     _axh.set_title(_lbl, fontsize=11)
                     _axh.set_xlabel(_eenheid_x, fontsize=9)
-                    _axh.set_ylabel("Aantal componenten", fontsize=9)
+                    _axh.set_ylabel("Number of components", fontsize=9)
                     _axh.legend(fontsize=8)
                     _axh.grid(True, axis="y", alpha=0.3)
                     _figh.tight_layout()
@@ -3200,10 +3200,10 @@ with tab_budget:
                 _ax_b.axvline(_budget, color="#c62828", ls="--",
                               label=f"Budget € {_budget:,.0f}")
                 _ax_b.fill_between(_cum_inv, _cum_wrd, where=(_cum_inv <= _budget),
-                                   color="#c8e6c9", alpha=0.4, label="In selectie")
-                _ax_b.set_xlabel("Cumulatieve investering (€)")
-                _ax_b.set_ylabel("Cumulatieve waarde")
-                _ax_b.set_title("Greedy selectie — waarde-opbouw bij toenemende investering")
+                                   color="#c8e6c9", alpha=0.4, label="In selection")
+                _ax_b.set_xlabel("Cumulative investment (€)")
+                _ax_b.set_ylabel("Cumulative value")
+                _ax_b.set_title("Greedy selection — value build-up with increasing investment")
                 _ax_b.grid(True, alpha=0.3)
                 _ax_b.legend()
                 _fig_b.tight_layout()
@@ -3616,14 +3616,14 @@ with tab_subsim:
             _figs, (_axa, _axx) = _plt_sens.subplots(1, 2, figsize=(11, 4))
             _axa.plot(_sens["a_grid"], _sens["z_vs_a"], color="#1f77b4", lw=2)
             _axa.axvline(_sens["alpha"], color="grey", ls="--", lw=1)
-            _axa.set_xlabel("prijspercentage α")
-            _axa.set_ylabel("verwacht totaal subscripties  Σ E[Z]")
+            _axa.set_xlabel("price percentage α")
+            _axa.set_ylabel("expected total subscriptions  Σ E[Z]")
             _axa.set_title(f"Z vs. α  (X = {_sens['X']:.3f})")
             _axa.grid(True, alpha=0.3)
             _axx.plot(_sens["x_grid"], _sens["z_vs_x"], color="#2ca02c", lw=2)
             _axx.axvline(_sens["X"], color="grey", ls="--", lw=1)
             _axx.set_xlabel("service level X")
-            _axx.set_ylabel("verwacht totaal subscripties  Σ E[Z]")
+            _axx.set_ylabel("expected total subscriptions  Σ E[Z]")
             _axx.set_title(f"Z vs. X  (α = {_sens['alpha']:.2f})")
             _axx.grid(True, alpha=0.3)
             _figs.tight_layout()
@@ -3721,7 +3721,7 @@ with tab_subsim:
                     c=_valid["alpha"], cmap="viridis", s=70,
                     edgecolor="white", linewidth=0.6, zorder=3)
                 _cb = _figp.colorbar(_sc, ax=_axp)
-                _cb.set_label("prijspercentage α")
+                _cb.set_label("price percentage α")
                 # Pareto-frontier: niet-gedomineerde punten verbinden.
                 _front = _valid[_eff].sort_values("margin")
                 _axp.plot(
@@ -3735,12 +3735,12 @@ with tab_subsim:
                     _axp.scatter(
                         _infeas["margin"], _infeas["surplus"],
                         facecolors="none", edgecolors="red", s=130,
-                        linewidth=1.2, label="niet haalbaar", zorder=5)
+                        linewidth=1.2, label="infeasible", zorder=5)
                 _axp.axhline(0, color="grey", lw=0.8, ls=":")
                 _axp.axvline(0, color="grey", lw=0.8, ls=":")
-                _axp.set_xlabel("BPA-marge (€)")
-                _axp.set_ylabel("totaal klantsurplus (€)")
-                _axp.set_title("Pareto-efficiëntie over (α, X)")
+                _axp.set_xlabel("BPA margin (€)")
+                _axp.set_ylabel("total customer surplus (€)")
+                _axp.set_title("Pareto efficiency over (α, X)")
                 _axp.grid(True, alpha=0.3)
                 _axp.legend(loc="best", fontsize=9)
                 _figp.tight_layout()
@@ -3870,21 +3870,21 @@ with tab_subsim:
             _figo, _axo = _plt_opt.subplots(figsize=(9, 4.5))
             _axo.plot(_ocurve["alpha"], _ocurve["margin"],
                       color="#1f77b4", lw=2, marker="o", ms=4,
-                      label="BPA-marge")
+                      label="BPA margin")
             _axo.axvline(_obest["alpha"], color="#d62728", ls="--", lw=1.5,
-                         label=f"optimale α = {_obest['alpha']:.1%}")
+                         label=f"optimal α = {_obest['alpha']:.1%}")
             _axo.axhline(0, color="grey", lw=0.8, ls=":")
-            _axo.set_xlabel("prijspercentage α")
-            _axo.set_ylabel("BPA-marge (€)")
-            _z_src = "Monte-Carlo Z" if _o_mc else "analytische E[Z]"
-            _axo.set_title(f"Marge vs. α bij vast X = {_oX:.3f}  ({_z_src})")
+            _axo.set_xlabel("price percentage α")
+            _axo.set_ylabel("BPA margin (€)")
+            _z_src = "Monte-Carlo Z" if _o_mc else "analytical E[Z]"
+            _axo.set_title(f"Margin vs. α at fixed X = {_oX:.3f}  ({_z_src})")
             _axo.grid(True, alpha=0.3)
             # Tweede as: totale adoptie Σ Z om de trade-off te tonen.
             _axo2 = _axo.twinx()
             _axo2.plot(_ocurve["alpha"], _ocurve["total_Z"],
                        color="#2ca02c", lw=1.5, ls="-.", alpha=0.7,
                        label=_z_lbl)
-            _axo2.set_ylabel(f"totaal subscripties  {_z_lbl}", color="#2ca02c")
+            _axo2.set_ylabel(f"total subscriptions  {_z_lbl}", color="#2ca02c")
             _axo2.tick_params(axis="y", labelcolor="#2ca02c")
             _l1, _lab1 = _axo.get_legend_handles_labels()
             _l2, _lab2 = _axo2.get_legend_handles_labels()
@@ -4012,10 +4012,10 @@ with tab_subsim:
                 _ax_ss.hist(_runs_arr, bins=_bins, color="#4C78A8",
                             edgecolor="white", align="left")
                 _ax_ss.axvline(_runs_arr.mean(), color="#E45756", linestyle="--",
-                               label=f"gemiddelde = {_runs_arr.mean():.1f}")
-                _ax_ss.set_xlabel("Aantal subscripties")
-                _ax_ss.set_ylabel("Frequentie (runs)")
-                _ax_ss.set_title(f"Verdeling subscripties — {_sel_code}")
+                               label=f"mean = {_runs_arr.mean():.1f}")
+                _ax_ss.set_xlabel("Number of subscriptions")
+                _ax_ss.set_ylabel("Frequency (runs)")
+                _ax_ss.set_title(f"Subscription distribution — {_sel_code}")
                 _ax_ss.legend()
                 _fig_ss.tight_layout()
                 st.pyplot(_fig_ss)
@@ -4080,15 +4080,15 @@ with tab_sensitivity:
 
     # ── Registry van WTP-elementen (label, grenzen, stap, default) ─────────
     _WTP_PARAMS = {
-        "p_dichtbij0": {"label": "p₀ dichtbij — baseline Benelux", "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
-        "p_ver0":      {"label": "p₀ ver — baseline overig",       "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
-        "alpha":       {"label": "α — prijspercentage",            "min": 0.0,    "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X":           {"label": "X — service level",              "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "alpha0":      {"label": "α₀ — referentieprijs",           "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X0":          {"label": "X₀ — referentie service",        "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "gamma_alpha": {"label": "γ_α — prijsgevoeligheid",        "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "gamma_X":     {"label": "γ_X — servicegevoeligheid",      "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "s_alpha":     {"label": "s — scherpte WTP-plafond",       "min": 0.005,  "max": 0.10,   "step": 0.005, "fmt": "%.3f"},
+        "p_dichtbij0": {"label": "p₀ dichtbij — baseline Benelux", "axis": "p₀ near — baseline Benelux",  "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
+        "p_ver0":      {"label": "p₀ ver — baseline overig",       "axis": "p₀ far — baseline other",      "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
+        "alpha":       {"label": "α — prijspercentage",            "axis": "α — price percentage",         "min": 0.0,    "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X":           {"label": "X — service level",              "axis": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "alpha0":      {"label": "α₀ — referentieprijs",           "axis": "α₀ — reference price",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X0":          {"label": "X₀ — referentie service",        "axis": "X₀ — reference service",       "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "gamma_alpha": {"label": "γ_α — prijsgevoeligheid",        "axis": "γ_α — price sensitivity",      "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "gamma_X":     {"label": "γ_X — servicegevoeligheid",      "axis": "γ_X — service sensitivity",    "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "s_alpha":     {"label": "s — scherpte WTP-plafond",       "axis": "s — sharpness WTP ceiling",    "min": 0.005,  "max": 0.10,   "step": 0.005, "fmt": "%.3f"},
     }
 
     # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
@@ -4113,11 +4113,11 @@ with tab_sensitivity:
 
     # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
     _Y_METRICS = {
-        "bpa_margin": {"label": "Totale BPA-winst (€)",            "axis": "totale BPA-winst (€)",            "tbl": "BPA-winst (€)",   "kind": "euro"},
-        "surplus":    {"label": "Totaal klantsurplus (€)",        "axis": "totaal klantsurplus (€)",        "tbl": "Klantsurplus (€)", "kind": "euro"},
-        "total_Z":    {"label": "Verwacht aantal subscripties E[Z]", "axis": "verwacht aantal subscripties E[Z]", "tbl": "E[Z]",          "kind": "num"},
-        "p_dichtbij": {"label": "Adoptie p_r — Benelux",          "axis": "adoptieparameter p_r (Benelux)",   "tbl": "p_r Benelux",    "kind": "pct"},
-        "p_ver":      {"label": "Adoptie p_r — overig",           "axis": "adoptieparameter p_r (overig)",    "tbl": "p_r overig",     "kind": "pct"},
+        "bpa_margin": {"label": "Totale BPA-winst (€)",            "axis": "total BPA profit (€)",            "tbl": "BPA-winst (€)",   "kind": "euro"},
+        "surplus":    {"label": "Totaal klantsurplus (€)",        "axis": "total customer surplus (€)",        "tbl": "Klantsurplus (€)", "kind": "euro"},
+        "total_Z":    {"label": "Verwacht aantal subscripties E[Z]", "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",          "kind": "num"},
+        "p_dichtbij": {"label": "Adoptie p_r — Benelux",          "axis": "adoption parameter p_r (Benelux)",   "tbl": "p_r Benelux",    "kind": "pct"},
+        "p_ver":      {"label": "Adoptie p_r — overig",           "axis": "adoption parameter p_r (other)",    "tbl": "p_r overig",     "kind": "pct"},
     }
 
     # ── Afhankelijke (y-as) variabele ─────────────────────────────────────
@@ -4285,11 +4285,11 @@ with tab_sensitivity:
                         "x_var":      _x_var,
                         "curve_var":  _curve_var,
                         "curve_vals": _curve_vals,
-                        "x_label":    _spec_x["label"],
+                        "x_label":    _spec_x["axis"],
                         "x_fmt":      _spec_x["fmt"],
                         "x_cur":      _clip_se(_x_var, _seed_se[_x_var]),
                         "y_axis":     _y_spec["axis"],
-                        "y_label":    _y_spec["label"],
+                        "y_label":    _y_spec["axis"],
                         "y_tbl":      _y_spec["tbl"],
                         "y_kind":     _y_spec["kind"],
                     }
@@ -4312,8 +4312,8 @@ with tab_sensitivity:
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
         _x_fmt     = _res_se["x_fmt"]
-        _y_axis    = _res_se.get("y_axis", "totale BPA-winst (€)")
-        _y_lbl     = _res_se.get("y_label", "Totale BPA-winst (€)")
+        _y_axis    = _res_se.get("y_axis", "total BPA profit (€)")
+        _y_lbl     = _res_se.get("y_label", "total BPA profit (€)")
         _y_tbl     = _res_se.get("y_tbl", "BPA-winst (€)")
         _y_kind    = _res_se.get("y_kind", "euro")
 
@@ -4332,11 +4332,11 @@ with tab_sensitivity:
         _x_cur = _res_se["x_cur"]
         if _xg and min(_xg) <= _x_cur <= max(_xg):
             _ax_se.axvline(_x_cur, color="grey", ls="--", lw=1,
-                           label=f"huidige {_x_lbl.split(' ')[0]} = {_x_cur:{_x_fmt[1:]}}")
+                           label=f"current {_x_lbl.split(' ')[0]} = {_x_cur:{_x_fmt[1:]}}")
         _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
         _ax_se.set_xlabel(_x_lbl, fontsize=11)
         _ax_se.set_ylabel(_y_axis, fontsize=11)
-        _ax_se.set_title(f"Sensitivity van {_y_lbl} t.o.v. de WTP-elementen", fontsize=12)
+        _ax_se.set_title(f"Sensitivity of {_y_lbl} w.r.t. the WTP elements", fontsize=12)
         if _y_kind == "euro":
             _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"€{v:,.0f}")
         elif _y_kind == "pct":
