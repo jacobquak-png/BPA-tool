@@ -482,6 +482,26 @@ def _selectie_codes_voor_gewichten(
     return set(sel[code_col].astype(str))
 
 
+def _rbo(lijst_a: list, lijst_b: list, p_decay: float = 0.9) -> float:
+    """Rank-Biased Overlap (Webber e.a., 2010).
+
+    Meet hoe sterk twee ranglijsten overeenkomen, met meer gewicht voor de
+    *top* van de lijst. p_decay < 1: hoe lager, hoe sterker de top meetelt
+    (p=0.9 → ±86% van het gewicht in de top-10). 1.0 = identieke volgorde.
+    """
+    if not lijst_a or not lijst_b:
+        return 0.0
+    k = min(len(lijst_a), len(lijst_b))
+    sa: set = set()
+    sb: set = set()
+    som = 0.0
+    for d in range(k):
+        sa.add(lijst_a[d])
+        sb.add(lijst_b[d])
+        som += (len(sa & sb) / (d + 1)) * (p_decay ** d)
+    return (1 - p_decay) * som
+
+
 def weight_sensitivity(
     df: pd.DataFrame,
     params: ClassificatieParams,
@@ -524,8 +544,13 @@ def weight_sensitivity(
           - In_baseline          : zat het in de selectie bij `params`
           - Stabiliteit          : 'altijd' / 'soms' / 'nooit'
     combos : DataFrame   (alleen als return_combos=True)
-        Per gewicht-combinatie: gewichten, #opnemen en overlap/Jaccard t.o.v.
-        de baseline-set.
+        Per gewicht-combinatie: gewichten, #opnemen, overlap/Jaccard t.o.v.
+        de baseline-set, én rangorde-robuustheid t.o.v. de baseline-rangorde:
+          - spearman   : rangcorrelatie over de hele kandidaat-set (−1..1)
+          - kendall    : Kendall's tau over de hele kandidaat-set (−1..1)
+          - rbo        : rank-biased overlap (top-zwaar, 0..1)
+          - max_rank_shift / mean_rank_shift : grootste/gemiddelde
+                         positieverschuiving in de rangorde
     """
     if "Score_Prijs" in df.columns and "Score_Orders" in df.columns \
             and "Score_Locaties" in df.columns:
@@ -551,6 +576,26 @@ def weight_sensitivity(
     )
     kandidaat_codes = set(kandidaten[code_col].astype(str))
 
+    # Baseline-set + baseline-rangorde (voor rang-robuustheid). De rangorde
+    # gaat over de volledige kandidaat-set, gesorteerd op gewogen score.
+    pb = params.normaliseer_weights()
+    _kand_codes_ser = kandidaten[code_col].astype(str)
+
+    def _gewogen_op_kandidaten(wp: float, wl: float, wo: float) -> pd.Series:
+        return (
+            kandidaten["Score_Prijs"]    * wp
+            + kandidaten["Score_Locaties"] * wl
+            + kandidaten["Score_Orders"]   * wo
+        )
+
+    baseline_score = _gewogen_op_kandidaten(
+        pb.weight_prijs, pb.weight_locaties, pb.weight_orders
+    )
+    baseline_rank = baseline_score.rank(ascending=False, method="min")
+    baseline_ranked = (
+        _kand_codes_ser[baseline_score.sort_values(ascending=False).index].tolist()
+    )
+
     baseline_codes = _selectie_codes_voor_gewichten(df_scored, params, code_col)
 
     teller: Counter = Counter()
@@ -564,6 +609,16 @@ def weight_sensitivity(
         if return_combos:
             overlap = len(codes & baseline_codes)
             union   = len(codes | baseline_codes) or 1
+            # Rangorde-robuustheid over de volledige kandidaat-set
+            scen_score = _gewogen_op_kandidaten(wp, wl, wo)
+            spear = baseline_score.corr(scen_score, method="spearman")
+            kend  = baseline_score.corr(scen_score, method="kendall")
+            scen_rank = scen_score.rank(ascending=False, method="min")
+            _shift = (baseline_rank - scen_rank).abs()
+            scen_ranked = (
+                _kand_codes_ser[scen_score.sort_values(ascending=False).index]
+                .tolist()
+            )
             combo_rows.append({
                 "weight_prijs":    wp,
                 "weight_locaties": wl,
@@ -573,6 +628,11 @@ def weight_sensitivity(
                 "alleen_scenario": len(codes - baseline_codes),
                 "alleen_baseline": len(baseline_codes - codes),
                 "jaccard":         round(overlap / union, 3),
+                "spearman":        round(float(spear), 3) if pd.notna(spear) else None,
+                "kendall":         round(float(kend), 3) if pd.notna(kend) else None,
+                "rbo":             round(_rbo(baseline_ranked, scen_ranked), 3),
+                "max_rank_shift":  int(_shift.max()) if len(_shift) else 0,
+                "mean_rank_shift": round(float(_shift.mean()), 1) if len(_shift) else 0.0,
             })
 
     alle_codes = kandidaat_codes | set(teller)
