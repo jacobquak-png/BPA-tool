@@ -51,6 +51,7 @@ from classificatie import (
     bereken_scores,
     pas_harde_filters_toe,
     bouw_selectie_payload,
+    weight_sensitivity,
 )
 from model import BPAOptimizationModel
 
@@ -129,6 +130,30 @@ def invalidate_caches() -> None:
     _cached_bereken_overzicht.clear()
     _cached_laad_classificatie_selectie.clear()
     _cached_laad_ruwe_dataset.clear()
+
+
+@st.cache_data(show_spinner="Gewichten-sweep berekenen…", max_entries=8)
+def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float):
+    """Cached gewicht-sweep. `_df_scored` (leidende underscore) wordt NIET
+    gehasht; de cache-sleutel is `params_json` + `step`. Dat is veilig omdat
+    `cls_result` alleen bij een nieuwe classificatie-berekening vervangen wordt
+    (en dan ook de params/JSON-sleutel verandert).
+    """
+    p = json.loads(params_json)
+    params = ClassificatieParams(
+        threshold=p["threshold"],
+        selectie_modus=p["selectie_modus"],
+        top_n=p["top_n"],
+        weight_prijs=p["weight_prijs"],
+        weight_locaties=p["weight_locaties"],
+        weight_orders=p["weight_orders"],
+        price_penalty_threshold=p["price_penalty_threshold"],
+        price_penalty_factor=p["price_penalty_factor"],
+        orders_power=p["orders_power"],
+        min_klantlocaties=p["min_klantlocaties"],
+        article_type_filter=tuple(p["article_type_filter"]),
+    )
+    return weight_sensitivity(_df_scored, params, step=step, return_combos=True)
 
 
 def representatieve_z(default: int = 1) -> int:
@@ -2861,6 +2886,162 @@ with tab_classificatie:
                     "< 0 = links-scheef; ≈ 0 = symmetrisch."
                 )
                 st.dataframe(_skew_df, use_container_width=True)
+
+    # ── Gewichten-sensitivity sweep ──────────────────────────────────────
+    if "cls_result" in st.session_state:
+        st.divider()
+        st.markdown("### ⚖️ Gewichten-sensitivity")
+        st.caption(
+            "Varieer de drie criteria-gewichten (prijs / locaties / orders) over "
+            "een simplex-raster en zie hoe stabiel de selectie is. Alle overige "
+            "parameters (drempel/top-N, penalty's, harde filters) blijven gelijk. "
+            "De huidige gewichten vormen de *baseline*."
+        )
+
+        _sw1, _sw2 = st.columns([1, 1])
+        with _sw1:
+            _sweep_step = st.select_slider(
+                "Rasterresolutie (stap)",
+                options=[0.5, 0.25, 0.2, 0.1, 0.05],
+                value=0.1,
+                key="cls_sweep_step",
+                help="Kleiner = fijner raster en meer combinaties (langzamer). "
+                     "0.1 ≈ 66 combinaties, 0.05 ≈ 231.",
+            )
+        with _sw2:
+            _run_sweep = st.button("⚖️ Bereken gewichten-sweep", key="cls_run_sweep")
+
+        if _run_sweep:
+            st.session_state.cls_sweep_on = True
+
+        if st.session_state.get("cls_sweep_on"):
+            try:
+                _params_json = json.dumps({
+                    "threshold":               _params.threshold,
+                    "selectie_modus":          _params.selectie_modus,
+                    "top_n":                   _params.top_n,
+                    "weight_prijs":            _params.weight_prijs,
+                    "weight_locaties":         _params.weight_locaties,
+                    "weight_orders":           _params.weight_orders,
+                    "price_penalty_threshold": _params.price_penalty_threshold,
+                    "price_penalty_factor":    _params.price_penalty_factor,
+                    "orders_power":            _params.orders_power,
+                    "min_klantlocaties":       _params.min_klantlocaties,
+                    "article_type_filter":     list(_params.article_type_filter),
+                }, sort_keys=True)
+                _per_artikel, _per_combo = _cached_weight_sweep(
+                    st.session_state.cls_result, _params_json, float(_sweep_step)
+                )
+            except Exception as e:
+                st.error(f"Fout tijdens gewichten-sweep: {e}")
+                _per_artikel = _per_combo = None
+
+            if _per_artikel is not None and not _per_artikel.empty:
+                _n_combos = len(_per_combo)
+                _altijd = int((_per_artikel["Stabiliteit"] == "altijd").sum())
+                _soms   = int((_per_artikel["Stabiliteit"] == "soms").sum())
+                _nooit  = int((_per_artikel["Stabiliteit"] == "nooit").sum())
+                _base_n = int(_per_artikel["In_baseline"].sum())
+
+                _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
+                _sm1.metric("Combinaties", _n_combos)
+                _sm2.metric("In baseline", _base_n)
+                _sm3.metric("Altijd geselecteerd", _altijd)
+                _sm4.metric("Soms (gevoelig)", _soms)
+                _sm5.metric("Gem. selectiegrootte",
+                            f"{_per_combo['n_opnemen'].mean():.0f}")
+
+                import matplotlib.pyplot as _plt_sw
+
+                _cc1, _cc2 = st.columns(2)
+
+                # (a) Simplex-scatter: kleur = aantal opnemen per combinatie
+                with _cc1:
+                    st.markdown("**Selectiegrootte per gewicht-combinatie**")
+                    _fig1, _ax1 = _plt_sw.subplots(figsize=(5, 4))
+                    _sc = _ax1.scatter(
+                        _per_combo["weight_prijs"], _per_combo["weight_orders"],
+                        c=_per_combo["n_opnemen"], cmap="viridis", s=90,
+                        edgecolor="white", linewidth=0.5,
+                    )
+                    _ax1.set_xlabel("gewicht prijs")
+                    _ax1.set_ylabel("gewicht orders")
+                    _ax1.set_title("# opnemen (locaties = rest)", fontsize=10)
+                    _ax1.grid(True, alpha=0.3)
+                    _fig1.colorbar(_sc, ax=_ax1, label="# opnemen")
+                    _fig1.tight_layout()
+                    st.pyplot(_fig1)
+                    _plt_sw.close(_fig1)
+                    st.caption("gewicht locaties = 1 − prijs − orders.")
+
+                # (b) Stabiliteitsverdeling
+                with _cc2:
+                    st.markdown("**Stabiliteit van artikelen**")
+                    _fig2, _ax2 = _plt_sw.subplots(figsize=(5, 4))
+                    _ax2.bar(
+                        ["altijd", "soms", "nooit"],
+                        [_altijd, _soms, _nooit],
+                        color=["#2ca02c", "#ff7f0e", "#d62728"],
+                        edgecolor="white",
+                    )
+                    for _i, _v in enumerate([_altijd, _soms, _nooit]):
+                        _ax2.text(_i, _v, str(_v), ha="center", va="bottom",
+                                  fontsize=9)
+                    _ax2.set_ylabel("aantal artikelen")
+                    _ax2.set_title("'soms' = selectie hangt af van de weging",
+                                   fontsize=10)
+                    _ax2.grid(True, axis="y", alpha=0.3)
+                    _fig2.tight_layout()
+                    st.pyplot(_fig2)
+                    _plt_sw.close(_fig2)
+
+                # (c) Histogram van selectie-frequentie
+                st.markdown("**Verdeling van de selectie-frequentie**")
+                _fig3, _ax3 = _plt_sw.subplots(figsize=(9, 2.6))
+                _ax3.hist(
+                    _per_artikel["Selectie_frequentie"], bins=20,
+                    range=(0, 1), color="#1f77b4", edgecolor="white", alpha=0.85,
+                )
+                _ax3.set_xlabel("fractie combinaties waarin geselecteerd")
+                _ax3.set_ylabel("aantal artikelen")
+                _ax3.grid(True, axis="y", alpha=0.3)
+                _fig3.tight_layout()
+                st.pyplot(_fig3)
+                _plt_sw.close(_fig3)
+
+                # (d) Resultatentabel per artikel
+                st.markdown("**Resultaten per artikel** "
+                            "_(gesorteerd op selectie-frequentie)_")
+                _only_soms = st.checkbox(
+                    "Toon alleen gevoelige artikelen (Stabiliteit = 'soms')",
+                    value=False, key="cls_sweep_only_soms",
+                )
+                _tabel = (_per_artikel[_per_artikel["Stabiliteit"] == "soms"]
+                          if _only_soms else _per_artikel)
+                st.dataframe(
+                    _tabel, use_container_width=True, height=420, hide_index=True,
+                    column_config={
+                        "Selectie_frequentie": st.column_config.ProgressColumn(
+                            "Selectie_frequentie", min_value=0.0, max_value=1.0,
+                            format="%.2f",
+                        ),
+                    },
+                )
+
+                with st.expander("Detail per gewicht-combinatie"):
+                    st.dataframe(_per_combo, use_container_width=True,
+                                 hide_index=True)
+
+                _sweep_csv = _per_artikel.to_csv(
+                    sep=";", decimal=",", index=False
+                ).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download sweep-resultaten (CSV)",
+                    data=_sweep_csv,
+                    file_name=f"gewichten_sweep_{date.today()}.csv",
+                    mime="text/csv",
+                    key="cls_sweep_dl",
+                )
 
     # ── Apply: schrijf bpa_selectie.json + invalideer overzicht ──
     if _apply_cls and "cls_payload" in st.session_state:
