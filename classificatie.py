@@ -11,13 +11,15 @@ Belangrijkste functies:
     pas_harde_filters_toe(df, params)    → DataFrame
     bouw_selectie_payload(df, params)    → dict (klaar voor json.dump)
     schrijf_selectie_json(payload, path) → None
+    weight_sensitivity(df, params, step) → (per-artikel DataFrame[, combo DataFrame])
 """
 
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field, asdict
+from collections import Counter
+from dataclasses import dataclass, field, asdict, replace
 from typing import Iterable
 
 import numpy as np
@@ -426,3 +428,175 @@ def voer_classificatie_uit(
     payload     = bouw_selectie_payload(df_filtered, params,
                                         bron_excel=str(bron) if isinstance(bron, str) else None)
     return df_filtered, payload
+
+
+# ── Gewicht-sensitivity ─────────────────────────────────────────────────
+
+def genereer_gewicht_grid(step: float = 0.1, min_weight: float = 0.0) -> list[tuple]:
+    """Genereer alle (w_prijs, w_locaties, w_orders)-combinaties op een simplex.
+
+    De drie gewichten lopen in stappen van `step` van 0 t/m 1 en sommeren per
+    combinatie exact naar 1. Met `min_weight > 0` worden degeneratie-combinaties
+    (waar een gewicht onder de drempel ligt, bv. exact 0) overgeslagen.
+
+    Voorbeeld: step=0.5 → combinaties als (1,0,0), (0.5,0.5,0), (0,0,1), …
+    """
+    if not 0 < step <= 1:
+        raise ValueError("step moet in (0, 1] liggen.")
+    n = round(1.0 / step)
+    grid: list[tuple] = []
+    for i in range(n + 1):
+        for j in range(n + 1 - i):
+            k = n - i - j
+            wp, wl, wo = i / n, j / n, k / n
+            if min(wp, wl, wo) < min_weight:
+                continue
+            grid.append((round(wp, 6), round(wl, 6), round(wo, 6)))
+    return grid
+
+
+def _selectie_codes_voor_gewichten(
+    df_scored_full: pd.DataFrame, params: ClassificatieParams, code_col: str
+) -> set[str]:
+    """Bepaal de set artikelcodes die met de gegeven gewichten 'Opnemen in lijst'
+    krijgt. Hergebruikt de bestaande selectie-logica (threshold of top_n) en de
+    harde filters; alleen de gewogen score wordt opnieuw berekend.
+    """
+    p = params.normaliseer_weights()
+    gewogen = (
+        df_scored_full["Score_Prijs"]    * p.weight_prijs
+        + df_scored_full["Score_Locaties"] * p.weight_locaties
+        + df_scored_full["Score_Orders"]   * p.weight_orders
+    ).round(1)
+    work = df_scored_full.copy()
+    work["Gewogen_Score"] = gewogen
+    if p.selectie_modus == "top_n":
+        # Beslissing wordt in pas_harde_filters_toe (na de filters) bepaald.
+        work["Classificatie_Beslissing"] = "Niet opnemen"
+    else:
+        work["Classificatie_Beslissing"] = np.where(
+            gewogen >= p.threshold, "Opnemen in lijst", "Niet opnemen"
+        )
+    work = pas_harde_filters_toe(work, p)
+    sel = work[work["Classificatie_Beslissing"] == "Opnemen in lijst"]
+    return set(sel[code_col].astype(str))
+
+
+def weight_sensitivity(
+    df: pd.DataFrame,
+    params: ClassificatieParams,
+    step: float = 0.1,
+    min_weight: float = 0.0,
+    return_combos: bool = False,
+):
+    """Meet hoe gevoelig de classificatie-set is voor de criteria-gewichten.
+
+    Alleen de drie criteria-gewichten (`weight_prijs`, `weight_locaties`,
+    `weight_orders`) worden gevarieerd over een simplex-grid; alle overige
+    parameters (drempel/top_n, penalty's, orders_power, harde filters) blijven
+    gelijk aan `params`. Omdat de component-scores gewicht-onafhankelijk zijn,
+    worden ze één keer berekend en is de sweep daarna goedkoop.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Ruwe dataset óf een reeds gescoorde DataFrame (met Score_Prijs/
+        Score_Locaties/Score_Orders). In het eerste geval wordt eenmalig
+        `bereken_scores` aangeroepen.
+    params : ClassificatieParams
+        Basisinstellingen; de gewichten hierin bepalen de baseline-set.
+    step : float
+        Rasterresolutie van de gewichten (0.1 = stappen van 0,1 → 66 combinaties).
+    min_weight : float
+        Sla combinaties over waarin een gewicht onder deze drempel ligt
+        (0.0 = ook extremen zoals 100% één criterium meenemen).
+    return_combos : bool
+        Geef ook een DataFrame per gewicht-combinatie terug.
+
+    Returns
+    -------
+    per_artikel : DataFrame
+        Per kandidaat-artikel (na harde filters) gesorteerd op selectie-
+        frequentie:
+          - Artikelcode
+          - Selectie_count       : aantal combinaties waarin geselecteerd
+          - Selectie_frequentie  : fractie 0..1 van alle combinaties
+          - In_baseline          : zat het in de selectie bij `params`
+          - Stabiliteit          : 'altijd' / 'soms' / 'nooit'
+    combos : DataFrame   (alleen als return_combos=True)
+        Per gewicht-combinatie: gewichten, #opnemen en overlap/Jaccard t.o.v.
+        de baseline-set.
+    """
+    if "Score_Prijs" in df.columns and "Score_Orders" in df.columns \
+            and "Score_Locaties" in df.columns:
+        df_scored = df.copy()
+    else:
+        df_scored = bereken_scores(df, params)
+
+    code_col = _find_col(df_scored, CODE_COL_CANDIDATES)
+    if code_col is None:
+        raise ValueError(
+            f"Geen artikelcode-kolom gevonden ({CODE_COL_CANDIDATES})."
+        )
+
+    grid = genereer_gewicht_grid(step, min_weight)
+    if not grid:
+        raise ValueError("Lege gewicht-grid; verlaag min_weight of step.")
+    n_combos = len(grid)
+
+    # Kandidaat-universum = artikelen die door de harde filters komen
+    # (gewicht-onafhankelijk). Threshold-modus voorkomt top_n-markering hier.
+    kandidaten = pas_harde_filters_toe(
+        df_scored, replace(params, selectie_modus="threshold")
+    )
+    kandidaat_codes = set(kandidaten[code_col].astype(str))
+
+    baseline_codes = _selectie_codes_voor_gewichten(df_scored, params, code_col)
+
+    teller: Counter = Counter()
+    combo_rows = []
+    for wp, wl, wo in grid:
+        p = replace(
+            params, weight_prijs=wp, weight_locaties=wl, weight_orders=wo
+        )
+        codes = _selectie_codes_voor_gewichten(df_scored, p, code_col)
+        teller.update(codes)
+        if return_combos:
+            overlap = len(codes & baseline_codes)
+            union   = len(codes | baseline_codes) or 1
+            combo_rows.append({
+                "weight_prijs":    wp,
+                "weight_locaties": wl,
+                "weight_orders":   wo,
+                "n_opnemen":       len(codes),
+                "overlap_baseline": overlap,
+                "alleen_scenario": len(codes - baseline_codes),
+                "alleen_baseline": len(baseline_codes - codes),
+                "jaccard":         round(overlap / union, 3),
+            })
+
+    alle_codes = kandidaat_codes | set(teller)
+    rows = []
+    for code in alle_codes:
+        cnt = teller.get(code, 0)
+        freq = cnt / n_combos
+        rows.append({
+            "Artikelcode":        code,
+            "Selectie_count":     cnt,
+            "Selectie_frequentie": round(freq, 4),
+            "In_baseline":        code in baseline_codes,
+            "Stabiliteit":        ("altijd" if cnt == n_combos
+                                    else "nooit" if cnt == 0
+                                    else "soms"),
+        })
+    per_artikel = (
+        pd.DataFrame(rows)
+        .sort_values(["Selectie_frequentie", "Artikelcode"],
+                     ascending=[False, True])
+        .reset_index(drop=True)
+    )
+
+    if return_combos:
+        combos = pd.DataFrame(combo_rows)
+        return per_artikel, combos
+    return per_artikel
