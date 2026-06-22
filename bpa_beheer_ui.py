@@ -3009,6 +3009,95 @@ with tab_classificatie:
                 st.pyplot(_fig3)
                 _plt_sw.close(_fig3)
 
+                # ── Rangorde-robuustheid ──────────────────────────────────
+                if "spearman" in _per_combo.columns:
+                    st.markdown("#### 🔢 Effect op de volgorde (rangorde)")
+                    st.caption(
+                        "Naast wél/niet in de set (Jaccard) telt ook de volgorde. "
+                        "Spearman/Kendall = rangcorrelatie over de hele kandidaat-set "
+                        "(1 = identieke volgorde). RBO weegt de **top** zwaar — "
+                        "relevant voor top-N-prioritering. 'Rank-shift' = aantal "
+                        "posities dat een artikel opschuift t.o.v. de baseline."
+                    )
+
+                    _cm = _per_combo.copy()
+                    _rk1, _rk2, _rk3, _rk4 = st.columns(4)
+                    _rk1.metric("Laagste Spearman",
+                                f"{_cm['spearman'].min():.2f}",
+                                help="Worst-case rangcorrelatie over alle wegingen.")
+                    _rk2.metric("Laagste RBO (top-zwaar)",
+                                f"{_cm['rbo'].min():.2f}")
+                    _rk3.metric("Grootste rank-shift",
+                                f"{int(_cm['max_rank_shift'].max())}")
+                    _rk4.metric("Gem. rank-shift",
+                                f"{_cm['mean_rank_shift'].mean():.1f}")
+
+                    # Per dominant criterium: welk criterium verstoort de
+                    # volgorde het meest als het zwaarder weegt?
+                    _crit_naam = {0: "prijs", 1: "locaties", 2: "orders"}
+                    _wcols = ["weight_prijs", "weight_locaties", "weight_orders"]
+                    _cm["_dominant"] = (
+                        _cm[_wcols].values.argmax(axis=1)
+                    )
+                    _cm["Dominant criterium"] = _cm["_dominant"].map(_crit_naam)
+                    _grp = (
+                        _cm.groupby("Dominant criterium")[
+                            ["spearman", "kendall", "rbo", "mean_rank_shift"]
+                        ].mean().reindex(["prijs", "locaties", "orders"])
+                    )
+
+                    _rc1, _rc2 = st.columns(2)
+                    with _rc1:
+                        st.markdown("**Rang-stabiliteit per dominant criterium**")
+                        _fig4, _ax4 = _plt_sw.subplots(figsize=(5, 4))
+                        _xpos = np.arange(len(_grp))
+                        _bw = 0.4
+                        _ax4.bar(_xpos - _bw/2, _grp["spearman"], _bw,
+                                 label="Spearman", color="#1f77b4")
+                        _ax4.bar(_xpos + _bw/2, _grp["rbo"], _bw,
+                                 label="RBO (top)", color="#ff7f0e")
+                        _ax4.set_xticks(_xpos)
+                        _ax4.set_xticklabels(_grp.index)
+                        _ax4.set_ylim(0, 1)
+                        _ax4.set_ylabel("gem. correlatie t.o.v. baseline")
+                        _ax4.set_title("Hoger = volgorde blijft stabieler",
+                                       fontsize=10)
+                        _ax4.legend(fontsize=8)
+                        _ax4.grid(True, axis="y", alpha=0.3)
+                        _fig4.tight_layout()
+                        st.pyplot(_fig4)
+                        _plt_sw.close(_fig4)
+                        st.caption("Het criterium met de **laagste** balken "
+                                   "verstoort de volgorde het sterkst.")
+
+                    with _rc2:
+                        st.markdown("**Gem. rank-shift per dominant criterium**")
+                        _fig5, _ax5 = _plt_sw.subplots(figsize=(5, 4))
+                        _ax5.bar(_grp.index, _grp["mean_rank_shift"],
+                                 color=["#2ca02c", "#9467bd", "#d62728"],
+                                 edgecolor="white")
+                        for _i, _v in enumerate(_grp["mean_rank_shift"]):
+                            _ax5.text(_i, _v, f"{_v:.0f}", ha="center",
+                                      va="bottom", fontsize=9)
+                        _ax5.set_ylabel("gem. positieverschuiving")
+                        _ax5.set_title("Hoger = volgorde schuift meer op",
+                                       fontsize=10)
+                        _ax5.grid(True, axis="y", alpha=0.3)
+                        _fig5.tight_layout()
+                        st.pyplot(_fig5)
+                        _plt_sw.close(_fig5)
+                        st.caption("Grotere verschuiving = minder robuuste "
+                                   "prioritering.")
+
+                    _worst = _grp["spearman"].idxmin()
+                    _best = _grp["spearman"].idxmax()
+                    st.info(
+                        f"➡️ De volgorde is het **gevoeligst** voor het gewicht van "
+                        f"**{_worst}** (laagste rangcorrelatie) en het **robuustst** "
+                        f"voor **{_best}**. Onderbouw het gewicht van *{_worst}* het "
+                        f"zorgvuldigst; daar bepaalt je keuze de prioritering."
+                    )
+
                 # (d) Resultatentabel per artikel
                 st.markdown("**Resultaten per artikel** "
                             "_(gesorteerd op selectie-frequentie)_")
