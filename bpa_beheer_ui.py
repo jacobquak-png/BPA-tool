@@ -499,17 +499,18 @@ with tab_subscripties:
             if "Code" in _df_bulk.columns:
                 _code_vals = _df_bulk["Code"]
             else:
-                cfg.setdefault("n_klanten_overrides", {})
-                _codes = [str(c) for c in _code_vals.dropna().unique()]
-                _z = int(_bulk_z)
-                cfg["n_klanten_overrides"] = {c: _z for c in _codes}
-                # Snapshot vóór recompute (zelfde patroon als bij 'Opslaan overrides')
-                if "overzicht_df" in st.session_state:
-                    st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
-                sla_config_op(cfg)
-                st.toast(f"Z = {_z} gezet voor {len(_codes)} componenten.", icon="✅")
-                st.session_state.pop("overzicht_df", None)
-                st.rerun()
+                _code_vals = _df_bulk.index.to_series()
+            cfg.setdefault("n_klanten_overrides", {})
+            _codes = [str(c) for c in _code_vals.dropna().unique()]
+            _z = int(_bulk_z)
+            cfg["n_klanten_overrides"] = {c: _z for c in _codes}
+            # Snapshot vóór recompute (zelfde patroon als bij 'Opslaan overrides')
+            if "overzicht_df" in st.session_state:
+                st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
+            sla_config_op(cfg)
+            st.toast(f"Z = {_z} gezet voor {len(_codes)} componenten.", icon="✅")
+            st.session_state.pop("overzicht_df", None)
+            st.rerun()
 
     st.divider()
     st.subheader("Overrides per artikelcode")
