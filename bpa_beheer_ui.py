@@ -133,11 +133,12 @@ def invalidate_caches() -> None:
 
 
 @st.cache_data(show_spinner="Gewichten-sweep berekenen…", max_entries=8)
-def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float):
+def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float,
+                         versie: int = 2):
     """Cached gewicht-sweep. `_df_scored` (leidende underscore) wordt NIET
-    gehasht; de cache-sleutel is `params_json` + `step`. Dat is veilig omdat
-    `cls_result` alleen bij een nieuwe classificatie-berekening vervangen wordt
-    (en dan ook de params/JSON-sleutel verandert).
+    gehasht; de cache-sleutel is `params_json` + `step` + `versie`. De
+    versie-token wordt opgehoogd wanneer de output-vorm wijzigt (bv. nieuwe
+    rangorde-kolommen), zodat oude cache-resultaten automatisch verlopen.
     """
     p = json.loads(params_json)
     params = ClassificatieParams(
@@ -478,6 +479,33 @@ with tab_subscripties:
         "Z aanpassen' instellen.",
         icon="ℹ️",
     )
+
+    st.divider()
+    st.subheader("Snelle actie — alle componenten in één keer")
+    _bulk_col1, _bulk_col2 = st.columns([1, 2])
+    with _bulk_col1:
+        _bulk_z = st.number_input(
+            "Z voor alle componenten", min_value=1, value=1, step=1, key="bulk_z_value",
+        )
+    with _bulk_col2:
+        st.caption("Zet het aantal subscripties (Z) in één keer gelijk voor "
+                   "alle componenten uit het huidige overzicht.")
+    if st.button(f"🔁 Zet Z = {int(st.session_state.get('bulk_z_value', 1))} voor alle componenten"):
+        _df_bulk = st.session_state.get("overzicht_df")
+        if _df_bulk is None or _df_bulk.empty or "Code" not in _df_bulk.columns:
+            st.warning("Geen overzicht beschikbaar — bereken eerst het overzicht in de tab 'Overzicht'.")
+        else:
+            cfg.setdefault("n_klanten_overrides", {})
+            _codes = [str(c) for c in _df_bulk["Code"].dropna().unique()]
+            _z = int(_bulk_z)
+            cfg["n_klanten_overrides"] = {c: _z for c in _codes}
+            # Snapshot vóór recompute (zelfde patroon als bij 'Opslaan overrides')
+            if "overzicht_df" in st.session_state:
+                st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
+            sla_config_op(cfg)
+            st.toast(f"Z = {_z} gezet voor {len(_codes)} componenten.", icon="✅")
+            st.session_state.pop("overzicht_df", None)
+            st.rerun()
 
     st.divider()
     st.subheader("Overrides per artikelcode")
@@ -2930,7 +2958,8 @@ with tab_classificatie:
                     "article_type_filter":     list(_params.article_type_filter),
                 }, sort_keys=True)
                 _per_artikel, _per_combo = _cached_weight_sweep(
-                    st.session_state.cls_result, _params_json, float(_sweep_step)
+                    st.session_state.cls_result, _params_json, float(_sweep_step),
+                    versie=2,
                 )
             except Exception as e:
                 st.error(f"Fout tijdens gewichten-sweep: {e}")
@@ -4640,6 +4669,7 @@ with tab_sensitivity:
             )
     else:
         st.info("Stel de parameters in en klik op **📊 Bereken sensitivity**.")
+
 
 
 
