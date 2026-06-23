@@ -492,11 +492,15 @@ with tab_subscripties:
                    "alle componenten uit het huidige overzicht.")
     if st.button(f"🔁 Zet Z = {int(st.session_state.get('bulk_z_value', 1))} voor alle componenten"):
         _df_bulk = st.session_state.get("overzicht_df")
-        if _df_bulk is None or _df_bulk.empty or "Code" not in _df_bulk.columns:
+        if _df_bulk is None or _df_bulk.empty:
             st.warning("Geen overzicht beschikbaar — bereken eerst het overzicht in de tab 'Overzicht'.")
         else:
+            # De artikelcode staat in de index van het overzicht (of in een 'Code'-kolom)
+            if "Code" in _df_bulk.columns:
+                _code_vals = _df_bulk["Code"]
+            else:
             cfg.setdefault("n_klanten_overrides", {})
-            _codes = [str(c) for c in _df_bulk["Code"].dropna().unique()]
+            _codes = [str(c) for c in _code_vals.dropna().unique()]
             _z = int(_bulk_z)
             cfg["n_klanten_overrides"] = {c: _z for c in _codes}
             # Snapshot vóór recompute (zelfde patroon als bij 'Opslaan overrides')
@@ -4669,7 +4673,6 @@ with tab_sensitivity:
             )
     else:
         st.info("Stel de parameters in en klik op **📊 Bereken sensitivity**.")
-
 
 
 
