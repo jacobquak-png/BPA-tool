@@ -3357,12 +3357,16 @@ with tab_budget:
 
             # Probeer optioneel nog kleinere items toe te voegen die nog wel passen
             # (na de eerste die niet meer past — kan totale waarde verhogen).
+            # Positie-gebaseerd zodat dubbele Code-indexwaarden geen Series geven.
             _resterend = _budget - _df_sorted.loc[_df_sorted["In_selectie"], "Inv"].sum()
-            for _idx in _df_sorted.index[~_df_sorted["In_selectie"]]:
-                _kost = _df_sorted.at[_idx, "Inv"]
+            _sel_arr = _df_sorted["In_selectie"].to_numpy().copy()
+            _inv_arr = _df_sorted["Inv"].to_numpy()
+            for _pos in np.where(~_sel_arr)[0]:
+                _kost = float(_inv_arr[_pos])
                 if _kost <= _resterend:
-                    _df_sorted.at[_idx, "In_selectie"] = True
+                    _sel_arr[_pos] = True
                     _resterend -= _kost
+            _df_sorted["In_selectie"] = _sel_arr
 
             # ── Afgeleide marge- en ROI-kolommen ──
             # Marge_stuk, Omzet_jr, C_BPA en Winst_jr zijn al in _df_b berekend
