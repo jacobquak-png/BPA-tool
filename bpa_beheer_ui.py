@@ -3339,7 +3339,14 @@ with tab_budget:
             )
 
             # ── Greedy ──
-            _df_sorted = _df_b.sort_values("Ratio", ascending=False).copy()
+            # Primair op Ratio (waarde/€); bij gelijke ratio kiest de greedy
+            # het component met de laagste investering. mergesort houdt de
+            # volgorde stabiel en daarmee deterministisch.
+            _df_sorted = _df_b.sort_values(
+                ["Ratio", "Inv"],
+                ascending=[False, True],
+                kind="mergesort",
+            ).copy()
             _cum = _df_sorted["Inv"].cumsum()
             _df_sorted["In_selectie"] = _cum <= _budget
 
