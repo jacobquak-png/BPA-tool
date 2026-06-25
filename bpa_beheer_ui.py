@@ -149,8 +149,6 @@ def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float
         weight_prijs=p["weight_prijs"],
         weight_locaties=p["weight_locaties"],
         weight_orders=p["weight_orders"],
-        price_penalty_threshold=p["price_penalty_threshold"],
-        price_penalty_factor=p["price_penalty_factor"],
         orders_power=p["orders_power"],
         min_klantlocaties=p["min_klantlocaties"],
         article_type_filter=tuple(p["article_type_filter"]),
@@ -2619,13 +2617,7 @@ with tab_classificatie:
             _top_n = 100
 
     st.markdown("**Niet-lineariteiten**")
-    _c5, _c6, _c7 = st.columns(3)
-    with _c5:
-        _pen_thr = st.number_input("Prijs-penalty <  €", 0.0, 1e6, 1000.0, 100.0, key="cls_pen_thr")
-    with _c6:
-        _pen_fac = st.slider("Prijs-penalty factor", 0.0, 1.0, 0.4, 0.05, key="cls_pen_fac")
-    with _c7:
-        _ord_pow = st.slider("Orders-power",    1.0, 4.0, 2.0, 0.1, key="cls_ord_pow")
+    _ord_pow = st.slider("Orders-power", 1.0, 4.0, 2.0, 0.1, key="cls_ord_pow")
 
     st.markdown("**Harde filters**")
     _c8, _c9 = st.columns(2)
@@ -2646,8 +2638,6 @@ with tab_classificatie:
         weight_prijs=float(_w_prijs),
         weight_locaties=float(_w_loc),
         weight_orders=float(_w_ord),
-        price_penalty_threshold=float(_pen_thr),
-        price_penalty_factor=float(_pen_fac),
         orders_power=float(_ord_pow),
         min_klantlocaties=int(_min_loc),
         article_type_filter=_art_types,
@@ -2965,8 +2955,6 @@ with tab_classificatie:
                     "weight_prijs":            _params.weight_prijs,
                     "weight_locaties":         _params.weight_locaties,
                     "weight_orders":           _params.weight_orders,
-                    "price_penalty_threshold": _params.price_penalty_threshold,
-                    "price_penalty_factor":    _params.price_penalty_factor,
                     "orders_power":            _params.orders_power,
                     "min_klantlocaties":       _params.min_klantlocaties,
                     "article_type_filter":     list(_params.article_type_filter),
