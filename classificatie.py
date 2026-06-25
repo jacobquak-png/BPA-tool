@@ -83,8 +83,6 @@ class ClassificatieParams:
     weight_prijs:            float = 1 / 3
     weight_locaties:         float = 1 / 3
     weight_orders:           float = 1 / 3
-    price_penalty_threshold: float = 1_000.0
-    price_penalty_factor:    float = 0.4
     orders_power:            float = 2.0
     selectie_modus:          str = "threshold"   # "threshold" of "top_n"
     top_n:                   int = 100            # alleen gebruikt bij modus "top_n"
@@ -235,15 +233,13 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     p = params.normaliseer_weights()
     df = df.copy()
 
-    # Score_Prijs: log + min-max (outlier-robust) + penalty onder threshold
+    # Score_Prijs: log + min-max (outlier-robust). Lagere prijs = lagere score.
     _price_log = np.log1p(df[COL_PRICE].clip(lower=0).fillna(0))
     _p_min, _p_max = _price_log.min(), _price_log.max()
     if _p_max > _p_min:
         df["Score_Prijs"] = ((_price_log - _p_min) / (_p_max - _p_min)) * 100
     else:
         df["Score_Prijs"] = 100.0
-    below = df[COL_PRICE].fillna(0) < p.price_penalty_threshold
-    df.loc[below, "Score_Prijs"] *= p.price_penalty_factor
 
     # Score_Locaties: log + min-max (outlier-robust), meer = beter
     _loc_log = np.log1p(df[COL_LOCATIONS].clip(lower=0).fillna(0))
