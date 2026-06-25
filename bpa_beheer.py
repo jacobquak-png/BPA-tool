@@ -171,6 +171,35 @@ def _parse_dutch_price(val):
         return 0.0
 
 
+def _parse_lt_dagen(val) -> int:
+    """Parseer levertijd in dagen, robuust voor int/float/strings.
+
+    Spiegelt classificatie._parse_lt_dagen zodat de tool exact dezelfde
+    levertijd overneemt als de classificatie. Accepteert numerieke cellen
+    (30.0), '30', '30 dagen', NL-decimalen ('30,0') en waarden met een
+    leidende spatie. Geeft 0 bij leeg/onparseerbaar; 0 wordt downstream
+    aangevuld tot de default van 30 dagen (LT_bron 'nul→30').
+
+    De oude implementatie (``int(str(v).split()[0])`` met
+    ``str(v)[0].isdigit()``) faalde op float-cellen ('30.0' → ValueError,
+    waardoor de héle Excel-load afbrak) en op NL-decimalen of een leidende
+    spatie (→ stil 0), waardoor de juiste levertijd vaak niet meekwam.
+    """
+    if pd.isna(val):
+        return 0
+    if isinstance(val, (int, float)):
+        return int(val) if val > 0 else 0
+    s = str(val).strip()
+    if not s:
+        return 0
+    head = s.split()[0].replace(',', '.')
+    try:
+        n = int(float(head))
+        return n if n > 0 else 0
+    except ValueError:
+        return 0
+
+
 def laad_excel_onderdelen(excel_file=None, *, skip_hard_filter: bool = True) -> pd.DataFrame:
     """Laad onderdelen uit de Excel-spreadsheet.
     excel_file: bestandspad (str) of file-like object (BytesIO / UploadedFile).
@@ -191,9 +220,7 @@ def laad_excel_onderdelen(excel_file=None, *, skip_hard_filter: bool = True) -> 
         'MTBF(years)':                                  'MTBF',
     })
     df['IP']      = df['_IP_raw'].apply(_parse_dutch_price)
-    df['LT_days'] = df['_LT_raw'].apply(
-        lambda v: int(str(v).split()[0]) if pd.notna(v) and str(v)[0].isdigit() else 0
-    )
+    df['LT_days'] = df['_LT_raw'].apply(_parse_lt_dagen)
     df['MTBF'] = pd.to_numeric(
         df.get('MTBF', pd.Series(np.nan, index=df.index)), errors='coerce'
     )
