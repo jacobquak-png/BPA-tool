@@ -226,8 +226,11 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     Voegt de kolommen Score_Prijs, Score_Locaties, Score_Orders,
     Gewogen_Score en Classificatie_Beslissing toe.
 
-    Berekent op de volledige dataset (percentielrangs!). Filteren gebeurt
-    daarna via pas_harde_filters_toe.
+    De min-max-normalisatie gebeurt over de rijen die in `df` worden
+    aangeboden. Roep daarom eerst `pas_basis_filters_toe` aan, zodat de
+    scores genormaliseerd worden over de artikelenset NÁ de harde basis-
+    filters (ArticleType + minimum klantlocaties). De top-n-markering volgt
+    daarna via `pas_topn_selectie_toe`.
     """
     p = params.normaliseer_weights()
     df = df.copy()
@@ -299,17 +302,30 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     return df
 
 
-def pas_harde_filters_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
-    """ArticleType-filter (case-insensitief) + minimum klantlocaties."""
+def pas_basis_filters_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
+    """Score-ONAFHANKELIJKE harde filters: ArticleType (case-insensitief) +
+    minimum klantlocaties.
+
+    Pas dit toe vóór `bereken_scores`, zodat de min-max-normalisatie over de
+    daadwerkelijk in aanmerking komende artikelenset gaat in plaats van over
+    de volledige ruwe dataset (incl. items die straks toch weggefilterd
+    worden).
+    """
     if COL_ARTICLE_TYPE in df.columns:
         df = df[df[COL_ARTICLE_TYPE].astype(str).str.strip().str.lower()
                 .isin(set(s.lower() for s in params.article_type_filter))]
     if COL_LOCATIONS in df.columns:
         df = df[df[COL_LOCATIONS].fillna(0) >= params.min_klantlocaties]
+    return df
+
+
+def pas_topn_selectie_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
+    """Score-AFHANKELIJKE stap: markeer in top_n-modus de X componenten met de
+    hoogste gewogen score als "Opnemen in lijst". Vereist een reeds gescoorde
+    DataFrame (kolom Gewogen_Score).
+    """
     if params.selectie_modus == "top_n" and "Gewogen_Score" in df.columns:
-        # Markeer de X componenten met de hoogste gewogen score — ná de harde
-        # filters — als "Opnemen in lijst". Bij gelijke score beslist de
-        # oorspronkelijke volgorde (stable sort).
+        # Bij gelijke score beslist de oorspronkelijke volgorde (stable sort).
         df = df.copy()
         df["Classificatie_Beslissing"] = "Niet opnemen"
         _top_idx = (
@@ -320,6 +336,17 @@ def pas_harde_filters_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.D
         )
         df.loc[_top_idx, "Classificatie_Beslissing"] = "Opnemen in lijst"
     return df
+
+
+def pas_harde_filters_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
+    """Backwards-compat wrapper: basis-filters + top-n-selectie in één stap.
+
+    Let op: deze functie normaliseert NIET opnieuw. Voor de correcte volgorde
+    (basis-filteren → scoren → top-n) gebruik je
+    `pas_basis_filters_toe` → `bereken_scores` → `pas_topn_selectie_toe`.
+    """
+    df = pas_basis_filters_toe(df, params)
+    return pas_topn_selectie_toe(df, params)
 
 
 # ── Selectie-payload ──────────────────────────────────────────────────────────
@@ -423,8 +450,11 @@ def voer_classificatie_uit(
     miss = controleer_kolommen(df_raw)
     if miss:
         raise ValueError(f"Ontbrekende kolommen: {miss}")
-    df_scored   = bereken_scores(df_raw, params)
-    df_filtered = pas_harde_filters_toe(df_scored, params)
+    # Eerst basis-filteren, daarna scoren: de normalisatie gaat zo over de
+    # artikelenset NÁ de harde filters. Top-n volgt op de gescoorde set.
+    df_basis    = pas_basis_filters_toe(df_raw, params)
+    df_scored   = bereken_scores(df_basis, params)
+    df_filtered = pas_topn_selectie_toe(df_scored, params)
     payload     = bouw_selectie_payload(df_filtered, params,
                                         bron_excel=str(bron) if isinstance(bron, str) else None)
     return df_filtered, payload
@@ -556,7 +586,9 @@ def weight_sensitivity(
             and "Score_Locaties" in df.columns:
         df_scored = df.copy()
     else:
-        df_scored = bereken_scores(df, params)
+        # Eerst basis-filteren, dan scoren: normalisatie over de set ná de
+        # harde filters (consistent met de hoofd-flow).
+        df_scored = bereken_scores(pas_basis_filters_toe(df, params), params)
 
     code_col = _find_col(df_scored, CODE_COL_CANDIDATES)
     if code_col is None:
