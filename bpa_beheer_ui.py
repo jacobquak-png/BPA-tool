@@ -2474,6 +2474,10 @@ with tab_drempel:
 
         _tbl_d = pd.DataFrame(_drempel_rows).set_index("Code")
         _tbl_d_sorted = _tbl_d.sort_values("Extra Z nodig", na_position="last")
+        # Styler.apply werkt niet met een niet-unieke index (dubbele 'Code').
+        # Reset naar een unieke RangeIndex en verberg die in de weergave.
+        if not _tbl_d_sorted.index.is_unique:
+            _tbl_d_sorted = _tbl_d_sorted.reset_index()
 
         # Tabel weergeven met kleurcodering op basis van drempel
         def _kleur_drempel(row):
