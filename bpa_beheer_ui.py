@@ -49,7 +49,8 @@ from classificatie import (
     controleer_kolommen,
     laad_ruwe_dataset,
     bereken_scores,
-    pas_harde_filters_toe,
+    pas_basis_filters_toe,
+    pas_topn_selectie_toe,
     bouw_selectie_payload,
     weight_sensitivity,
 )
@@ -2674,8 +2675,12 @@ with tab_classificatie:
                 _miss = controleer_kolommen(_df_raw)
                 if _miss:
                     raise ValueError(f"Ontbrekende kolommen: {_miss}")
-                _df_scored   = bereken_scores(_df_raw, _params)
-                _df_filtered = pas_harde_filters_toe(_df_scored, _params)
+                # Eerst basis-filteren, daarna scoren: de min-max-normalisatie
+                # gaat zo over de artikelenset NÁ de harde filters. Top-n volgt
+                # op de gescoorde set.
+                _df_basis    = pas_basis_filters_toe(_df_raw, _params)
+                _df_scored   = bereken_scores(_df_basis, _params)
+                _df_filtered = pas_topn_selectie_toe(_df_scored, _params)
                 _payload     = bouw_selectie_payload(
                     _df_filtered, _params, bron_excel=_bron_excel
                 )
