@@ -620,10 +620,11 @@ def verwacht_subscripties_per_component(
 ) -> pd.Series:
     """Analytisch verwacht aantal subscripties E[Z_i] per component.
 
-    Gebruikt de gesloten vorm E[Z_i] = Σ_n q_{in} met
-    q_{in} = 1 − (1 − p_r)^{h_{in}}, zonder Monte Carlo. Handig om de
-    verwachte Z snel (en deterministisch) door te zetten naar de andere
-    tabs bij wijziging van α, X of de adoptie-parameters.
+    E[Z_i] = adoption rate × het aantal verschillende historische klanten
+    van het component, oftewel Σ_klant p_r over de rijen van de Adoptie-tab
+    (één rij = één unieke klant), zonder Monte Carlo. Handig om de verwachte
+    Z snel (en deterministisch) door te zetten naar de andere tabs bij
+    wijziging van α, X of de adoptie-parameters.
 
     Returns een Series geïndexeerd op Code met het verwachte aantal subs.
     """
@@ -633,8 +634,9 @@ def verwacht_subscripties_per_component(
         adoptie = adoptie[adoptie['Code'].isin(codes_set)]
     if adoptie.empty:
         return pd.Series(dtype=float)
-    _q = 1.0 - (1.0 - adoptie['Adoption_rate']) ** adoptie['Orders_component_klant']
-    _ez = _q.groupby(adoptie['Code']).sum()
+    # E[Z_i] = adoption rate × aantal verschillende historische klanten van het
+    # component = Σ_klant p_r (één rij in de Adoptie-tab = één unieke klant).
+    _ez = adoptie['Adoption_rate'].groupby(adoptie['Code']).sum()
     _ez.index.name = 'Code'
     return _ez.sort_values(ascending=False)
 
@@ -661,7 +663,8 @@ def gevoeligheid_verwachte_z(
     (``parameter='alpha'``) of het service level X (``parameter='X'``)
     gevarieerd, terwijl de andere op zijn vaste waarde blijft. De Adoptie-data
     wordt één keer geladen; per gridpunt worden de regionale adoptieparameters
-    p_r(α,X) opnieuw berekend en het totaal Σ_i Σ_n q_{in} bepaald.
+    p_r(α,X) opnieuw berekend en het totaal Σ_i E[Z_i] = Σ_i Σ_klant p_r
+    bepaald (adoption rate × aantal historische klanten per component).
 
     Returns een lijst totalen, parallel aan ``waarden``.
     """
@@ -699,8 +702,8 @@ def gevoeligheid_verwachte_z(
         _rate[high_mask] = _p_d
         if _hoog != _laag:
             _rate[low_mask] = _p_v
-        _q = 1.0 - (1.0 - _rate) ** h
-        totalen.append(float(_q.sum()))
+        # E[Z_i] = adoption rate × aantal historische klanten = Σ_klant p_r.
+        totalen.append(float(_rate.sum()))
     return totalen
 
 
@@ -729,7 +732,8 @@ def pareto_alpha_X(
     ``X_waarden`` wordt de volledige keten doorgerekend:
 
       1. p_r(α, X) per regio via de logit-specificatie (willingness-to-pay);
-      2. Z_i per component: analytisch E[Z_i] = Σ_n q_{in} (default) of —
+      2. Z_i per component: analytisch E[Z_i] = adoption rate × aantal
+         historische klanten (Σ_klant p_r) (default) of —
          als ``gebruik_simulatie=True`` — het Monte-Carlo gemiddelde over
          ``n_runs`` Bernoulli-trekkingen X_{in} ~ Bernoulli(q_{in}) (zelfde
          keuze-model als de simulatietab);
@@ -800,7 +804,8 @@ def pareto_alpha_X(
                 _draws = _rng.random((int(n_runs), _q_in.shape[0])) < _q_in[None, :]
                 _q = _draws.mean(axis=0)
             else:
-                _q = 1.0 - (1.0 - _rate) ** h
+                # E[Z_i] = adoption rate × aantal historische klanten = p_r.
+                _q = _rate
             _ez = pd.Series(_q).groupby(code_arr).sum()
 
             # Overzicht met n_klanten = Z_i (λ meegeschaald); componenten
@@ -926,7 +931,8 @@ def metrieken_voor_wtp_grid(
         _rate[high_mask] = _p_d
         if _hoog != _laag:
             _rate[low_mask] = _p_v
-        _q  = 1.0 - (1.0 - _rate) ** h
+        # E[Z_i] = adoption rate × aantal historische klanten = p_r.
+        _q  = _rate
         _ez = pd.Series(_q).groupby(code_arr).sum()
         _total_z = float(_ez.sum())
         _n_new   = _ez.reindex(base.index)
