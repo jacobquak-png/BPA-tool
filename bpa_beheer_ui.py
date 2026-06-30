@@ -26,8 +26,6 @@ from bpa_beheer import (
     bouw_model_kosten,
     laad_excel_onderdelen,
     laad_classificatie_selectie,
-    simuleer_subscripties_per_component,
-    simuleer_subscripties_runs,
     regionale_adoptie_parameter,
     verwacht_subscripties_per_component,
     gevoeligheid_verwachte_z,
@@ -150,6 +148,8 @@ def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float
         weight_locaties=p["weight_locaties"],
         weight_orders=p["weight_orders"],
         orders_power=p["orders_power"],
+        prijs_drempel=p.get("prijs_drempel", 0.0),
+        prijs_penalty=p.get("prijs_penalty", 0.0),
         min_klantlocaties=p["min_klantlocaties"],
         article_type_filter=tuple(p["article_type_filter"]),
     )
@@ -224,7 +224,7 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
     "🔢 Subscriptiedrempel",
     "🏷️ Classificatie",
     "💼 Budget-scenario",
-    "🎲 Subscriptie-simulatie",
+    "📈 Verwachte subscripties",
     "📐 Sensitivity (WTP)",
 ])
 
@@ -473,7 +473,7 @@ with tab_subscripties:
     st.info(
         "Het aantal subscripties (Z) per component komt automatisch uit het "
         "werkelijke aantal klantlocaties; varieer prijs α en service level X in "
-        "de simulatie-/sensitivity-tabs om het verwachte aantal abonnees te zien. "
+        "de tabs Verwachte subscripties / Sensitivity om het verwachte aantal abonnees te zien. "
         "Een vaste override per component kun je hieronder bij 'IP / Levertijd / "
         "Z aanpassen' instellen.",
         icon="ℹ️",
@@ -1625,22 +1625,16 @@ with tab_historie:
             "subscripties per service level. Toont hoeveel kapitaal BPA in voorraad "
             "moet investeren naarmate het klantenbestand groeit. De x-as toont het "
             "TOTALE aantal subscripties over alle componenten en start bij de som van "
-            "de gesimuleerde sub-aantallen; alle componenten schalen van daaruit "
+            "de verwachte sub-aantallen (E[Z]); alle componenten schalen van daaruit "
             "proportioneel mee omhoog."
         )
 
-        # Baseline per component = verwacht aantal subs uit de simulatie (per
-        # code), met terugval op de geconfigureerde n_klanten. De x-as toont het
-        # TOTAAL aantal subscripties over alle componenten (= som van de
-        # baselines bij factor 1.0); alle componenten schalen proportioneel mee.
-        _sim_df_inv = st.session_state.get("subsim_df")
+        # Baseline per component = het geconfigureerde n_klanten, dat de
+        # verwachte E[Z_i(α,X)] weergeeft zodra die via de tab Verwachte
+        # subscripties is doorgezet. De x-as toont het TOTAAL aantal
+        # subscripties over alle componenten (= som van de baselines bij
+        # factor 1.0); alle componenten schalen proportioneel mee.
         _sim_base_inv = {}
-        if (_sim_df_inv is not None and not _sim_df_inv.empty
-                and "gem_subs" in _sim_df_inv.columns):
-            _sim_base_inv = {
-                str(_c): max(1, int(round(float(_v))))
-                for _c, _v in _sim_df_inv["gem_subs"].items()
-            }
         # Groeifactoren: 20 punten van 1.0x (huidig totaal) tot 2.9x in stappen van 0.1.
         _INV_FACTORS = [round(1.0 + 0.1 * _k, 1) for _k in range(20)]
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
@@ -1667,7 +1661,7 @@ with tab_historie:
                         'vp':          _vp,
                     })
 
-            # Totaal subs bij factor 1.0 = som van de (gesimuleerde) baselines.
+            # Totaal subs bij factor 1.0 = som van de (verwachte) baselines.
             _T0_inv = sum(_c['n_base'] for _c in _comp_inv)
 
             _inv_results = {sl: [] for sl in SERVICE_LEVELS}
@@ -2619,6 +2613,23 @@ with tab_classificatie:
     st.markdown("**Niet-lineariteiten**")
     _ord_pow = st.slider("Orders-power", 1.0, 4.0, 2.0, 0.1, key="cls_ord_pow")
 
+    st.markdown("**Prijsdrempel-penalty**")
+    _pp1, _pp2 = st.columns(2)
+    with _pp1:
+        _prijs_drempel = st.number_input(
+            "Prijsdrempel (€)", 0.0, 1_000_000.0, 0.0, 10.0,
+            key="cls_prijs_drempel",
+            help="Componenten met een verkoopprijs ONDER deze drempel krijgen "
+                 "een penalty op hun gewogen score. 0 = penalty uit.",
+        )
+    with _pp2:
+        _prijs_penalty = st.number_input(
+            "Penalty (scorepunten)", 0.0, 100.0, 0.0, 1.0,
+            key="cls_prijs_penalty",
+            help="Aantal scorepunten dat van de gewogen score wordt afgetrokken "
+                 "voor componenten onder de prijsdrempel.",
+        )
+
     st.markdown("**Harde filters**")
     _c8, _c9 = st.columns(2)
     with _c8:
@@ -2639,6 +2650,8 @@ with tab_classificatie:
         weight_locaties=float(_w_loc),
         weight_orders=float(_w_ord),
         orders_power=float(_ord_pow),
+        prijs_drempel=float(_prijs_drempel),
+        prijs_penalty=float(_prijs_penalty),
         min_klantlocaties=int(_min_loc),
         article_type_filter=_art_types,
     )
@@ -2956,6 +2969,8 @@ with tab_classificatie:
                     "weight_locaties":         _params.weight_locaties,
                     "weight_orders":           _params.weight_orders,
                     "orders_power":            _params.orders_power,
+                    "prijs_drempel":           _params.prijs_drempel,
+                    "prijs_penalty":           _params.prijs_penalty,
                     "min_klantlocaties":       _params.min_klantlocaties,
                     "article_type_filter":     list(_params.article_type_filter),
                 }, sort_keys=True)
@@ -3650,26 +3665,21 @@ with tab_budget:
             )
 
 # ─────────────────────────────────────────────────────────────────────────────────
-#  TAB 11 – SUBSCRIPTIE-SIMULATIE  (binomiale adoptie per component)
+#  TAB 11 – VERWACHTE SUBSCRIPTIES  (E[Z_i(α,X)] uit adoption rate × historie)
 # ─────────────────────────────────────────────────────────────────────────────────
 
 with tab_subsim:
-    st.subheader("Subscriptie-simulatie per component")
+    st.subheader("Verwachte subscripties per component")
     st.markdown(
-        "Monte Carlo simulatie van het **aantal subscripties per component** op "
-        "basis van de tab `Adoptie` in de Excel. Alleen de componenten uit de "
-        "**classificatie-selectie** worden gesimuleerd.\n\n"
-        "Per (component, klant) wordt een **binomiale** trekking gedaan over de "
-        "orders van de klant voor dat component (elke order is een trial met "
-        "succeskans = de **adoption rate**). De klant neemt een subscriptie "
-        "(**binair**) als er minstens één succes is:\n\n"
-        "$$K_{klant} \\sim \\text{Binomiaal}\\big(n = \\text{orders voor het "
-        "component},\\; p = \\text{adoption rate}\\big), \\quad "
-        "X_{klant} = \\mathbb{1}[K_{klant} \\ge 1]$$\n\n"
-        "Zo neemt de kans op een subscriptie toe naarmate de klant meer orders "
-        "heeft: $P(X_{klant}=1) = 1-(1-p)^{n}$. Het aantal subscripties voor een "
-        "component is de som $\\sum_{klanten} X_{klant}$ (maximaal het aantal "
-        "klanten)."
+        "Het verwachte aantal subscripties per component "
+        "$E[Z_i(α,X)]$ wordt **analytisch** bepaald uit de tab `Adoptie` in "
+        "de Excel — zonder Monte Carlo. Alleen de componenten uit de "
+        "**classificatie-selectie** tellen mee.\n\n"
+        "Het verwachte aantal subscripties is de **adoption rate** $p_r$ "
+        "vermenigvuldigd met het **aantal verschillende historische "
+        "klanten** $N_i$ van het component: $E[Z_i]$ = $p_r$ × $N_i$. "
+        "De adoption rate $p_r$ hangt af van prijspercentage α en service "
+        "level X."
     )
 
     _cls_codes = sorted(get_classificatie_info().get("items", {}).keys())
@@ -3706,23 +3716,12 @@ with tab_subsim:
             pass
         return _excel_bron
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        _sim_runs = st.number_input(
-            "Aantal Monte Carlo runs", min_value=10, max_value=50000,
-            value=1000, step=100, key="subsim_runs",
-        )
-    with col_b:
-        _sim_seed = st.number_input(
-            "Seed (reproduceerbaar)", min_value=0, max_value=10_000_000,
-            value=42, step=1, key="subsim_seed",
-        )
-
     # ── Adoptiemodel: regionale baseline + logit-effect van α en X ────────
     st.markdown("**Adoptiemodel (willingness-to-pay)**")
     st.caption(
-        "De adoptiekans per klant volgt $q_{in}=1-(1-p_r)^{h_{in}}$ met $h_{in}$ "
-        "= historische orders. De regionale adoptieparameter $p_r$ hangt af van "
+        "Het verwachte aantal abonnees per component is $p_r$ × het aantal "
+        "verschillende historische klanten. De regionale adoptieparameter "
+        "$p_r$ hangt af van "
         "prijspercentage α en service level X via een logit-specificatie: "
         "$p_r(α,X)=σ(\\,\\mathrm{logit}(p_{r,0})-γ_α\\frac{α-α_0}{α_0}+γ_X[g(X)-g(X_0)]\\,)$ "
         "met $g(X)=-\\ln(1-X)$. De twee baselines $p_{r,0}$ gelden bij de "
@@ -4112,23 +4111,6 @@ with tab_subsim:
         _opt_feas = st.checkbox(
             "Alleen haalbare combinaties meenemen (marge ≥ 0 én alle klanten profiteren)",
             value=False, key="subsim_opt_feas")
-        _opt_mc = st.checkbox(
-            "Monte-Carlo gesimuleerde Z gebruiken (zelfde bron als de simulatietab)",
-            value=False, key="subsim_opt_mc",
-            help="Aan: Z = gemiddelde over trekkingen per α (met seed). "
-                 "Uit: Z = analytische verwachtingswaarde E[Z] (sneller, ruisvrij).")
-        if _opt_mc:
-            _co3, _co4 = st.columns(2)
-            with _co3:
-                _opt_runs = st.number_input(
-                    "Aantal runs", min_value=50, max_value=5000, value=500,
-                    step=50, key="subsim_opt_runs")
-            with _co4:
-                _opt_seed = st.number_input(
-                    "Seed", min_value=0, max_value=10_000, value=42,
-                    step=1, key="subsim_opt_seed")
-        else:
-            _opt_runs, _opt_seed = 500, 42
 
         if st.button("🎯 Bereken optimale α", key="subsim_opt_btn",
                      disabled=not _cls_codes):
@@ -4146,8 +4128,6 @@ with tab_subsim:
                             _gamma_alpha, _gamma_X,
                             excel_file=_excel_arg(), codes=_cls_codes,
                             alleen_haalbaar=bool(_opt_feas),
-                            gebruik_simulatie=bool(_opt_mc),
-                            n_runs=int(_opt_runs), seed=int(_opt_seed),
                             s_alpha=_s_alpha)
                     if _opt_curve is None or _opt_curve.empty or _opt_best is None:
                         st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
@@ -4157,7 +4137,6 @@ with tab_subsim:
                             "curve": _opt_curve,
                             "best": _opt_best.to_dict(),
                             "X": float(_X_opt),
-                            "mc": bool(_opt_mc),
                         }
             except ValueError as _opt_err:
                 st.warning(
@@ -4172,8 +4151,7 @@ with tab_subsim:
             _ocurve = _opt_data["curve"].dropna(subset=["margin"]).sort_values("alpha")
             _obest  = _opt_data["best"]
             _oX     = _opt_data["X"]
-            _o_mc   = _opt_data.get("mc", False)
-            _z_lbl  = "Σ Z (Monte-Carlo)" if _o_mc else "Σ E[Z] (analytisch)"
+            _z_lbl  = "Σ E[Z] (analytisch)"
             _cm1, _cm2, _cm3 = st.columns(3)
             _cm1.metric("Optimale α", f"{_obest['alpha']:.1%}")
             _cm2.metric("BPA-marge", f"€ {_obest['margin']:,.0f}")
@@ -4188,8 +4166,7 @@ with tab_subsim:
             _axo.axhline(0, color="grey", lw=0.8, ls=":")
             _axo.set_xlabel("price percentage α")
             _axo.set_ylabel("BPA margin (€)")
-            _z_src = "Monte-Carlo Z" if _o_mc else "analytical E[Z]"
-            _axo.set_title(f"Margin vs. α at fixed X = {_oX:.3f}  ({_z_src})")
+            _axo.set_title(f"Margin vs. α at fixed X = {_oX:.3f}  (analytical E[Z])")
             _axo.grid(True, alpha=0.3)
             # Tweede as: totale adoptie Σ Z om de trade-off te tonen.
             _axo2 = _axo.twinx()
@@ -4209,166 +4186,6 @@ with tab_subsim:
                 _opt_data["curve"].to_csv(index=False).encode("utf-8"),
                 file_name="optimale_alpha_bij_X.csv", mime="text/csv",
                 key="subsim_opt_dl")
-
-    if st.button("🎲 Simulatie draaien", type="primary", key="subsim_run_btn",
-                 disabled=not _cls_codes):
-        _codes = _cls_codes if _cls_codes else None
-        try:
-            with st.spinner("Trekkingen uitvoeren…"):
-                _sim_df = simuleer_subscripties_per_component(
-                    n_runs=int(_sim_runs),
-                    seed=int(_sim_seed),
-                    excel_file=_excel_arg(),
-                    codes=_codes,
-                    rate_overrides=_rate_overrides,
-                )
-            if _sim_df.empty:
-                st.warning(
-                    "Geen data gevonden in de Adoptie-tab voor de geselecteerde "
-                    "componenten. Controleer de Excel-tabs."
-                )
-                st.session_state.pop("subsim_df", None)
-            else:
-                st.session_state["subsim_df"]   = _sim_df
-                st.session_state["subsim_runs_used"] = int(_sim_runs)
-                st.session_state["subsim_seed_used"] = int(_sim_seed)
-                st.session_state["subsim_rates_used"] = _rate_overrides
-        except Exception as e:
-            st.error(f"Simulatie mislukt: {e}")
-
-    _sim_df = st.session_state.get("subsim_df")
-    if _sim_df is not None and not _sim_df.empty:
-        st.divider()
-        st.markdown(
-            f"**Resultaat** — {len(_sim_df)} componenten · "
-            f"{st.session_state.get('subsim_runs_used')} runs · "
-            f"seed {st.session_state.get('subsim_seed_used')}"
-        )
-
-        # Voeg omschrijving en huidige N toe vanuit het overzicht (indien aanwezig).
-        _tbl = _sim_df.copy()
-        _ov = st.session_state.get("overzicht_df")
-        if _ov is not None and not _ov.empty:
-            _descr = _ov["Descr"].astype(str) if "Descr" in _ov.columns else None
-            _ncur  = _ov["n_klanten"] if "n_klanten" in _ov.columns else None
-            if _descr is not None:
-                _tbl.insert(0, "Descr", _tbl.index.map(_descr.to_dict()).fillna(""))
-            if _ncur is not None:
-                _tbl["Z_huidig"] = _tbl.index.map(_ncur.to_dict())
-
-        # Integer-Z die toegepast wordt op de berekeningen in de andere tabs,
-        # op basis van de gekozen statistiek (zie radioknop hieronder).
-        _stat_kol_tbl = {"Gemiddelde": "gem_subs", "Mediaan (P50)": "p50",
-                         "P95 (conservatief)": "p95"}.get(
-                             st.session_state.get("subsim_stat", "Gemiddelde"),
-                             "gem_subs")
-        if _stat_kol_tbl in _tbl.columns:
-            _tbl["Z (toe te passen)"] = _tbl[_stat_kol_tbl].apply(
-                lambda v: max(1, int(round(float(v)))) if pd.notna(v) else None
-            )
-
-        _toon = _tbl.rename(columns={
-            "gem_subs":  "Gem. subs",
-            "std_subs":  "Std",
-            "p05":       "P05",
-            "p50":       "P50 (mediaan)",
-            "p95":       "P95",
-            "min_subs":  "Min",
-            "max_subs":  "Max",
-            "n_klanten": "Klanten",
-            "n_orders":  "Orders component (Σ)",
-            "runs":      "Runs",
-        })
-        st.dataframe(
-            _toon.style.format({
-                "Gem. subs": "{:.1f}", "Std": "{:.1f}", "P05": "{:.0f}",
-                "P50 (mediaan)": "{:.0f}", "P95": "{:.0f}",
-                "Z (toe te passen)": "{:.0f}",
-            }, na_rep="—"),
-            use_container_width=True,
-        )
-
-        _csv = _tbl.to_csv(sep=";", decimal=",").encode("utf-8")
-        st.download_button(
-            "⬇️ Download simulatie-resultaat (CSV)",
-            data=_csv,
-            file_name=f"subscriptie_simulatie_{date.today()}.csv",
-            mime="text/csv",
-        )
-
-        # ── Verdeling per component (histogram) ───────────────────────────
-        st.divider()
-        st.subheader("Verdeling per component")
-        _sel_code = st.selectbox(
-            "Kies een component", options=list(_sim_df.index), key="subsim_sel",
-        )
-        if _sel_code:
-            try:
-                _runs_arr = simuleer_subscripties_runs(
-                    n_runs=int(st.session_state.get("subsim_runs_used", 1000)),
-                    seed=int(st.session_state.get("subsim_seed_used", 42)),
-                    excel_file=_excel_arg(),
-                    codes=[_sel_code],
-                    rate_overrides=st.session_state.get("subsim_rates_used"),
-                ).get(_sel_code)
-            except ValueError as _hist_err:
-                _runs_arr = None
-                st.warning(
-                    "Histogram kan niet worden gemaakt: de bron-Excel bevat geen "
-                    f"tab 'Adoptie'. Upload hierboven een Excel met die tab. ({_hist_err})"
-                )
-            if _runs_arr is not None and len(_runs_arr) > 0:
-                import matplotlib.pyplot as _plt_ss
-                _fig_ss, _ax_ss = _plt_ss.subplots(figsize=(7, 3.2))
-                _bins = range(int(_runs_arr.min()), int(_runs_arr.max()) + 2)
-                _ax_ss.hist(_runs_arr, bins=_bins, color="#4C78A8",
-                            edgecolor="white", align="left")
-                _ax_ss.axvline(_runs_arr.mean(), color="#E45756", linestyle="--",
-                               label=f"mean = {_runs_arr.mean():.1f}")
-                _ax_ss.set_xlabel("Number of subscriptions")
-                _ax_ss.set_ylabel("Frequency (runs)")
-                _ax_ss.set_title(f"Subscription distribution — {_sel_code}")
-                _ax_ss.legend()
-                _fig_ss.tight_layout()
-                st.pyplot(_fig_ss)
-
-        # ── Toepassen als N-overrides ─────────────────────────────────────
-        st.divider()
-        st.subheader("Resultaat toepassen op subscripties (Z)")
-        st.caption(
-            "Zet het gesimuleerde aantal subscripties per component als "
-            "Z-override in de configuratie. Dit vervangt het statische Z "
-            "voor de geselecteerde componenten in alle berekeningen."
-        )
-        _stat_keuze = st.radio(
-            "Welke statistiek toepassen als Z?",
-            options=["Gemiddelde", "Mediaan (P50)", "P95 (conservatief)"],
-            index=0, horizontal=True, key="subsim_stat",
-        )
-        _stat_kol = {"Gemiddelde": "gem_subs", "Mediaan (P50)": "p50",
-                     "P95 (conservatief)": "p95"}[_stat_keuze]
-
-        if st.button("💾 Toepassen als Z-overrides", key="subsim_apply"):
-            _n_ov = dict(cfg.get("n_klanten_overrides", {}))
-            _aantal = 0
-            for _code, _row in _sim_df.iterrows():
-                _n_val = max(1, int(round(float(_row[_stat_kol]))))
-                _n_ov[str(_code)] = _n_val
-                _aantal += 1
-            cfg["n_klanten_overrides"] = _n_ov
-            if "overzicht_df" in st.session_state:
-                st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
-            sla_config_op(cfg)
-            invalidate_caches()
-            st.session_state.pop("overzicht_df", None)
-            st.success(
-                f"✅ {_aantal} Z-overrides bijgewerkt op basis van "
-                f"'{_stat_keuze}'. Tab 📊 Overzicht en de kostenmodellen "
-                f"gebruiken nu de gesimuleerde subscripties."
-            )
-            st.rerun()
-    else:
-        st.info("Stel de parameters in en klik op **🎲 Simulatie draaien**.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────────
