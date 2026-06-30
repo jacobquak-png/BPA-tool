@@ -84,6 +84,8 @@ class ClassificatieParams:
     weight_locaties:         float = 1 / 3
     weight_orders:           float = 1 / 3
     orders_power:            float = 2.0
+    prijs_drempel:           float = 0.0   # verkoopprijs-grens (EUR); 0 = penalty uit
+    prijs_penalty:           float = 0.0   # scorepunten-penalty onder de drempel; 0 = uit
     selectie_modus:          str = "threshold"   # "threshold" of "top_n"
     top_n:                   int = 100            # alleen gebruikt bij modus "top_n"
     min_klantlocaties:       int = 5
@@ -219,6 +221,26 @@ def _mtbf_naar_jaren(raw, col_name: str | None) -> float | None:
 
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
+def pas_prijs_penalty_toe(
+    gewogen: pd.Series, df: pd.DataFrame, params: ClassificatieParams
+) -> pd.Series:
+    """Prijsdrempel-penalty: componenten met een verkoopprijs onder
+    ``params.prijs_drempel`` krijgen ``params.prijs_penalty`` scorepunten van
+    hun gewogen score afgetrokken (geclipt op 0). Bij drempel of penalty <= 0
+    wordt de score ongewijzigd teruggegeven.
+    """
+    if params.prijs_penalty <= 0 or params.prijs_drempel <= 0 \
+            or COL_PRICE not in df.columns:
+        return gewogen
+    onder = (
+        pd.to_numeric(df[COL_PRICE], errors="coerce").fillna(0.0)
+        < params.prijs_drempel
+    )
+    out = gewogen.copy()
+    out.loc[onder] = (out.loc[onder] - params.prijs_penalty).clip(lower=0.0)
+    return out.round(1)
+
+
 def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
     """
     Voegt de kolommen Score_Prijs, Score_Locaties, Score_Orders,
@@ -267,6 +289,9 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
         + df["Score_Locaties"] * p.weight_locaties
         + df["Score_Orders"]   * p.weight_orders
     ).round(1)
+
+    # Prijsdrempel-penalty: trek scorepunten af voor goedkope componenten.
+    df["Gewogen_Score"] = pas_prijs_penalty_toe(df["Gewogen_Score"], df, p)
 
     for col in ["Score_Prijs", "Score_Locaties", "Score_Orders"]:
         df[col] = df[col].round(1)
@@ -494,6 +519,7 @@ def _selectie_codes_voor_gewichten(
         + df_scored_full["Score_Locaties"] * p.weight_locaties
         + df_scored_full["Score_Orders"]   * p.weight_orders
     ).round(1)
+    gewogen = pas_prijs_penalty_toe(gewogen, df_scored_full, p)
     work = df_scored_full.copy()
     work["Gewogen_Score"] = gewogen
     if p.selectie_modus == "top_n":
@@ -610,11 +636,12 @@ def weight_sensitivity(
     _kand_codes_ser = kandidaten[code_col].astype(str)
 
     def _gewogen_op_kandidaten(wp: float, wl: float, wo: float) -> pd.Series:
-        return (
+        _gw = (
             kandidaten["Score_Prijs"]    * wp
             + kandidaten["Score_Locaties"] * wl
             + kandidaten["Score_Orders"]   * wo
         )
+        return pas_prijs_penalty_toe(_gw, kandidaten, params)
 
     baseline_score = _gewogen_op_kandidaten(
         pb.weight_prijs, pb.weight_locaties, pb.weight_orders
