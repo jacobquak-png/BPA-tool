@@ -704,10 +704,10 @@ def gevoeligheid_verwachte_z(
         _x = float(_v) if parameter == 'X' else float(X)
         _p_d = regionale_adoptie_parameter(
             p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-            alpha_max=kappa_c, s_alpha=s_alpha)
+            alpha_max=None, s_alpha=s_alpha)
         _p_v = regionale_adoptie_parameter(
             p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-            alpha_max=kappa_c, s_alpha=s_alpha)
+            alpha_max=None, s_alpha=s_alpha)
         _rate = rates.copy()
         _rate[high_mask] = _p_d
         if _hoog != _laag:
@@ -796,10 +796,10 @@ def pareto_alpha_X(
         for _x in X_waarden:
             _p_d = regionale_adoptie_parameter(
                 p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-                alpha_max=kappa_c, s_alpha=s_alpha)
+                alpha_max=None, s_alpha=s_alpha)
             _p_v = regionale_adoptie_parameter(
                 p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-                alpha_max=kappa_c, s_alpha=s_alpha)
+                alpha_max=None, s_alpha=s_alpha)
             _rate = rates.copy()
             _rate[high_mask] = _p_d
             if _hoog != _laag:
