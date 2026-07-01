@@ -40,8 +40,18 @@ EXCEL_PATH  = os.path.join(SCRIPT_DIR,
                            'annual_use_abc_met_artikeldata_complete_europa.xlsx')
 SHEET_NAME  = 'Filtered '
 
+# Subscriptie-dataset (zonder 231-AS: RSPL). Bevat per component het aantal
+# klantlocaties (Aantal_klantlocaties_5jr) en per (component, klant) de
+# regionale adoption rate. Standaardbron voor de tab 'Verwachte subscripties'.
+SUBSCRIPTIES_PATH = os.path.join(
+    SCRIPT_DIR,
+    'annual_use_abc_met_artikeldata_subscripties_europa_zonder_rspl.xlsx')
+
 # Tabs voor de subscriptie-simulatie (binomiale adoptie per component/klant).
 SHEET_ADOPTIE      = 'Adoptie'
+# Naamvarianten van de adoptie-tab; de subscriptie-dataset gebruikt
+# 'Adoption_rate_per_klant', de oude complete-Excel gebruikt 'Adoptie'.
+ADOPTIE_SHEET_CANDIDATES = ('Adoptie', 'Adoption_rate_per_klant')
 SHEET_BESTELLINGEN = 'bestellingen_per_klant'
 
 # Selectiebestand geproduceerd door classificatie_scoring.py.
@@ -1110,7 +1120,15 @@ def laad_adoptie_data(excel_file=None, rate_overrides=None) -> pd.DataFrame:
             bron.seek(0)
         except (AttributeError, ValueError):
             pass
-    df = pd.read_excel(bron, sheet_name=SHEET_ADOPTIE)
+    # Zoek de adoptie-tab onder de bekende naamvarianten (nieuwe subscriptie-
+    # dataset: 'Adoption_rate_per_klant'; oude complete-Excel: 'Adoptie').
+    _xls = pd.ExcelFile(bron)
+    _sheet = next((s for s in ADOPTIE_SHEET_CANDIDATES if s in _xls.sheet_names), None)
+    if _sheet is None:
+        raise ValueError(
+            f"Geen adoptie-tab gevonden (gezocht: {ADOPTIE_SHEET_CANDIDATES}; "
+            f"aanwezig: {_xls.sheet_names})")
+    df = _xls.parse(_sheet)
     df = df.rename(columns={
         'Verkooporderregel artikel.Artikel.Artikelcode': 'Code',
         'Order.Relatie':                                 'Klant',
