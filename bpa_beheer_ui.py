@@ -39,6 +39,7 @@ from bpa_beheer import (
     SCRIPT_DIR,
     SELECTIE_PATH,
     EXCEL_PATH,
+    SUBSCRIPTIES_PATH,
 )
 from classificatie import (
     ClassificatieParams,
@@ -3672,12 +3673,14 @@ with tab_subsim:
     st.subheader("Verwachte subscripties per component")
     st.markdown(
         "Het verwachte aantal subscripties per component "
-        "$E[Z_i(α,X)]$ wordt **analytisch** bepaald uit de tab `Adoptie` in "
-        "de Excel — zonder Monte Carlo. Alleen de componenten uit de "
+        "$E[Z_i(α,X)]$ wordt **analytisch** bepaald uit de subscriptie-dataset "
+        "(zonder 231-AS: RSPL) — zonder Monte Carlo. Alleen de componenten uit de "
         "**classificatie-selectie** tellen mee.\n\n"
         "Het verwachte aantal subscripties is de **adoption rate** $p_r$ "
-        "vermenigvuldigd met het **aantal verschillende historische "
-        "klanten** $N_i$ van het component: $E[Z_i]$ = $p_r$ × $N_i$. "
+        "vermenigvuldigd met het **aantal historische klantlocaties** $N_i$ "
+        "(`Aantal_klantlocaties_5jr`) van het component: $E[Z_i]$ = $p_r$ × $N_i$. "
+        "De kolom `Aantal_klantlocaties_5jr` wordt per component gekoppeld aan de "
+        "artikelen die door de classificatie zijn gekomen. "
         "De adoption rate $p_r$ hangt af van prijspercentage α en service "
         "level X."
     )
@@ -3691,20 +3694,21 @@ with tab_subsim:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    # ── Bron-Excel met de tab 'Adoptie' ──────────────────────────────────
-    # Standaard de Excel die in de classificatie-tab is geüpload; anders een
-    # eigen upload; anders de repo-Excel (EXCEL_PATH).
+    # ── Bron-Excel met de subscriptie-dataset ────────────────────────────
+    # Standaard de subscriptie-dataset (zonder 231-AS: RSPL) uit de repo; de
+    # kolom Aantal_klantlocaties_5jr wordt gekoppeld aan de classificatie-codes.
+    # Een expliciete upload wint.
     _subsim_upload = st.file_uploader(
-        "Bron-Excel met de tab 'Adoptie' (leeg = Excel uit classificatie-tab of repo-Excel)",
+        "Bron-Excel met de subscriptie-dataset (leeg = standaard dataset zonder RSPL)",
         type=["xlsx"],
         key="subsim_upload",
     )
-    _excel_bron = _subsim_upload or st.session_state.get("cls_upload")
-    if _excel_bron is not None:
+    _excel_bron = _subsim_upload or SUBSCRIPTIES_PATH
+    if _subsim_upload is not None:
         _bron_naam = getattr(_excel_bron, "name", "geüploade Excel")
         st.caption(f"Bron-Excel: **{_bron_naam}**")
     else:
-        st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(EXCEL_PATH)}`)")
+        st.caption(f"Bron-Excel: subscriptie-dataset (`{os.path.basename(SUBSCRIPTIES_PATH)}`)")
 
     def _excel_arg():
         """Geef een leesbare bron terug; reset de upload-buffer naar het begin."""
