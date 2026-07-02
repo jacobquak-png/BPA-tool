@@ -760,7 +760,8 @@ def pareto_alpha_X(
                         random numbers) zodat de marge-curve glad blijft.
 
     Returns een DataFrame met kolommen:
-        alpha, X, margin, surplus, total_Z, feasible.
+        alpha, X, margin, surplus, total_Z, feasible, revenue, costs,
+        stock_level (totale base-stock, Σ_i S_i*, over alle componenten).
     """
     if overzicht_df is None or overzicht_df.empty:
         return pd.DataFrame()
@@ -837,6 +838,9 @@ def pareto_alpha_X(
                 _margin  = 0.0
                 _surplus = 0.0
                 _feas    = False
+                _revenue = 0.0
+                _costs   = 0.0
+                _stock   = 0.0
             else:
                 try:
                     _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
@@ -844,16 +848,23 @@ def pareto_alpha_X(
                     _surplus = float(sum(
                         v['savings'] for v in _res['customer_benefits'].values()))
                     _feas    = bool(_res['feasible'])
+                    _revenue = float(_res['total_revenue'])
+                    _costs   = float(_res['bpa_costs'])
+                    _stock   = float(sum(_model.calculate_base_stock_levels().values()))
                 except Exception:
                     _margin = _surplus = float('nan')
                     _feas   = False
+                    _revenue = _costs = _stock = float('nan')
             rijen.append({
-                'alpha':    float(_a),
-                'X':        float(_x),
-                'margin':   _margin,
-                'surplus':  _surplus,
-                'total_Z':  float(_ez.sum()),
-                'feasible': _feas,
+                'alpha':       float(_a),
+                'X':           float(_x),
+                'margin':      _margin,
+                'surplus':     _surplus,
+                'total_Z':     float(_ez.sum()),
+                'feasible':    _feas,
+                'revenue':     _revenue,
+                'costs':       _costs,
+                'stock_level': _stock,
             })
     return pd.DataFrame(rijen)
 
@@ -1037,7 +1048,8 @@ def optimale_alpha_bij_X(
     -------
     (curve_df, best_row) waarbij:
         curve_df : DataFrame met kolommen alpha, X, margin, surplus,
-                   total_Z, feasible (de volledige α-sweep bij X_fix);
+                   total_Z, feasible, revenue, costs, stock_level (de
+                   volledige α-sweep bij X_fix);
         best_row : de rij (pd.Series) met de gekozen optimale α, of None
                    als er geen geldige marge berekend kon worden.
     """
