@@ -4191,6 +4191,21 @@ with tab_subsim:
             _figo.tight_layout()
             st.pyplot(_figo)
             _plt_opt.close(_figo)
+
+            # Tabel met revenue, costs en stocklevels per α (naast de marge).
+            st.markdown("**Revenue, costs en stocklevels per α** (bij vast X)")
+            _tab_opt = _ocurve.copy()
+            _tab_opt["α"]              = _tab_opt["alpha"].map(lambda v: f"{v:.1%}")
+            _tab_opt["BPA-marge (€)"]  = _tab_opt["margin"].map(lambda v: f"{v:,.0f}")
+            _tab_opt["Revenue (€)"]    = _tab_opt["revenue"].map(lambda v: f"{v:,.0f}")
+            _tab_opt["Costs (€)"]      = _tab_opt["costs"].map(lambda v: f"{v:,.0f}")
+            _tab_opt["Stocklevel (units)"] = _tab_opt["stock_level"].map(
+                lambda v: f"{v:,.0f}" if pd.notna(v) else "—")
+            st.dataframe(
+                _tab_opt[["α", "BPA-marge (€)", "Revenue (€)", "Costs (€)",
+                          "Stocklevel (units)"]],
+                hide_index=True, use_container_width=True)
+
             st.download_button(
                 "⬇️ Download marge-vs-α curve (CSV)",
                 _opt_data["curve"].to_csv(index=False).encode("utf-8"),
