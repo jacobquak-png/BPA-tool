@@ -28,6 +28,8 @@ from bpa_beheer import (
     laad_classificatie_selectie,
     regionale_adoptie_parameter,
     adoptie_kans,
+    aantal_klanten_per_component,
+    binomiale_verdeling,
     verwacht_subscripties_per_component,
     gevoeligheid_verwachte_z,
     pareto_alpha_X,
@@ -3762,6 +3764,74 @@ with tab_subsim:
     _c_q1.metric("q(α) — adoptiekans", f"{_q_ad:.3f}",
                  delta=f"{_q_ad - _q_eq:+.3f} vs q_eq")
     _c_q2.metric("κ_c / α — kostenratio", f"{_kappa_c_sim / max(_alpha_sim, 1e-9):.2f}")
+
+    # ── Verdeling van Z (binomiale verdeling) ─────────────────────────────
+    with st.expander("📊 Verdeling van Z (binomiale verdeling)"):
+        st.caption(
+            "Achter de verwachtingswaarde $E[Z_i]=N_i\\cdot q(α)$ zit een echte "
+            "kansverdeling: $Z_i(α)\\sim\\mathrm{Binomiaal}(N_i, q(α))$. Omdat "
+            "alle klanten dezelfde globale adoptiekans $q(α)$ delen, is het "
+            "**totaal** $Z_{tot}=\\sum_i Z_i\\sim\\mathrm{Binomiaal}(\\sum_i N_i, q(α))$. "
+            "Hieronder de kansverdeling (PMF) bij de huidige α, q_eq en β_r."
+        )
+        try:
+            _n_series = aantal_klanten_per_component(_excel_arg(), _cls_codes)
+        except (ValueError, FileNotFoundError, OSError) as _dist_err:
+            _n_series = None
+            st.info(
+                "Verdeling niet beschikbaar: de bron-Excel bevat geen tab "
+                f"'Adoptie' of is niet bereikbaar. ({_dist_err})"
+            )
+        if _n_series is not None and not _n_series.empty:
+            import matplotlib.pyplot as _plt_bin
+            _N_tot = int(round(float(_n_series.sum())))
+            _mu    = _N_tot * _q_ad
+            _sd    = (_N_tot * _q_ad * (1.0 - _q_ad)) ** 0.5
+
+            # Totale verdeling Z_tot ~ Binomiaal(Σ N_i, q).
+            _cB1, _cB2, _cB3 = st.columns(3)
+            _cB1.metric("N totaal (klanten)", f"{_N_tot:,}")
+            _cB2.metric("E[Z_tot] = N·q", f"{_mu:,.0f}")
+            _cB3.metric("Std. dev. √(N·q·(1−q))", f"{_sd:,.1f}")
+            _kt, _pt = binomiale_verdeling(_N_tot, _q_ad)
+            _figb, _axb = _plt_bin.subplots(figsize=(10, 4))
+            _axb.bar(_kt, _pt, width=1.0, color="#1f77b4", alpha=0.75,
+                     edgecolor="none")
+            _axb.axvline(_mu, color="#d62728", ls="--", lw=1.5,
+                         label=f"E[Z] = {_mu:,.0f}")
+            _axb.set_xlabel("total subscriptions  Z_tot")
+            _axb.set_ylabel("probability  P(Z_tot = k)")
+            _axb.set_title(f"Binomial(N={_N_tot:,}, q={_q_ad:.3f})")
+            _axb.legend(fontsize=9)
+            _axb.grid(True, alpha=0.3)
+            _figb.tight_layout()
+            st.pyplot(_figb)
+            _plt_bin.close(_figb)
+
+            # Verdeling voor één gekozen component Z_i ~ Binomiaal(N_i, q).
+            st.markdown("**Verdeling voor één component**")
+            _n_sorted = _n_series.sort_values(ascending=False)
+            _codes_sorted = [str(c) for c in _n_sorted.index]
+            _sel_code = st.selectbox(
+                "Component (Code)", options=_codes_sorted,
+                format_func=lambda c: f"{c}  (N={int(_n_series.get(c, 0))})",
+                key="subsim_bin_code")
+            _Ni   = int(round(float(_n_series.get(_sel_code, 0))))
+            _mu_i = _Ni * _q_ad
+            _ki, _pi = binomiale_verdeling(_Ni, _q_ad)
+            _figc, _axc = _plt_bin.subplots(figsize=(10, 4))
+            _axc.bar(_ki, _pi, width=1.0, color="#2ca02c", alpha=0.75,
+                     edgecolor="none")
+            _axc.axvline(_mu_i, color="#d62728", ls="--", lw=1.5,
+                         label=f"E[Z_i] = {_mu_i:,.1f}")
+            _axc.set_xlabel(f"subscriptions  Z_i  (component {_sel_code})")
+            _axc.set_ylabel("probability  P(Z_i = k)")
+            _axc.set_title(f"Binomial(N_i={_Ni}, q={_q_ad:.3f})")
+            _axc.legend(fontsize=9)
+            _axc.grid(True, alpha=0.3)
+            _figc.tight_layout()
+            st.pyplot(_figc)
+            _plt_bin.close(_figc)
 
     # ── Automatische doorwerking naar alle tabs ───────────────────────────
     # E[Z_i(α)] = N_i · q(α) wordt analytisch (deterministisch) bepaald en als
