@@ -623,168 +623,150 @@ def regionale_adoptie_parameter(
     return float(p)
 
 
-def verwacht_subscripties_per_component(
-    excel_file     = None,
-    codes          = None,
-    rate_overrides = None,
-) -> pd.Series:
-    """Analytisch verwacht aantal subscripties E[Z_i] per component.
+def adoptie_kans(alpha, kappa_c, q_eq, beta_r) -> float:
+    """Globale logit-adoptiekans q(α) = σ(logit(q_eq) + β_r·ln(κ_c/α)).
 
-    E[Z_i] = adoption rate × het aantal verschillende historische klanten
-    van het component, oftewel Σ_klant p_r over de rijen van de Adoptie-tab
-    (één rij = één unieke klant), zonder Monte Carlo. Handig om de verwachte
-    Z snel (en deterministisch) door te zetten naar de andere tabs bij
-    wijziging van α, X of de adoptie-parameters.
+    Discrete-keuze (logit) specificatie: een klant abonneert met kans
+    q(α) = 1/(1+e^(-y)) waarin y = β_0 + β_r·ln(κ_c/α) en de intercept
+    β_0 = logit(q_eq) = ln(q_eq/(1-q_eq)) geijkt is op kostenpariteit
+    (bij α = κ_c geldt ln(κ_c/α) = 0 ⇒ q = q_eq). De kostenratio
+    C_i^c/(α·v_i^c) ≈ κ_c/α (zelf-voorraadkosten ≈ κ_c·v_i^c). Eén globale q
+    voor alle klanten (geen regio-onderscheid); het service level X zit in het
+    onwaargenomen nut/β_0 en beïnvloedt q niet direct.
 
-    Returns een Series geïndexeerd op Code met het verwachte aantal subs.
+    Parameters
+    ----------
+    alpha   : prijspercentage α (> 0).
+    kappa_c : bovengrens/kostenpariteit κ_c (uit de kostenanalyse).
+    q_eq    : adoptiekans bij kostenpariteit (0 < q_eq < 1).
+    beta_r  : gevoeligheid voor de kostenratio ln(κ_c/α).
     """
-    adoptie = laad_adoptie_data(excel_file, rate_overrides=rate_overrides)
+    eps = 1e-9
+    q_eq    = float(min(max(q_eq, eps), 1.0 - eps))
+    alpha   = max(float(alpha), eps)
+    kappa_c = max(float(kappa_c), eps)
+    beta_0  = np.log(q_eq / (1.0 - q_eq))
+    y       = beta_0 + float(beta_r) * np.log(kappa_c / alpha)
+    return float(1.0 / (1.0 + np.exp(-y)))
+
+
+def aantal_klanten_per_component(excel_file=None, codes=None) -> pd.Series:
+    """N_i = aantal verschillende historische klanten per component.
+
+    Telt de unieke klanten per Code in de Adoptie-tab (één rij = één
+    (component, klant)-combinatie). Beperkt tot ``codes`` of, bij None, tot de
+    classificatie-selectie.
+
+    Returns een Series geïndexeerd op Code met N_i (float).
+    """
+    adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
     codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
     if codes_set:
         adoptie = adoptie[adoptie['Code'].isin(codes_set)]
     if adoptie.empty:
         return pd.Series(dtype=float)
-    # E[Z_i] = adoption rate × aantal verschillende historische klanten van het
-    # component = Σ_klant p_r (één rij in de Adoptie-tab = één unieke klant).
-    _ez = adoptie['Adoption_rate'].groupby(adoptie['Code']).sum()
+    _n = adoptie.groupby('Code')['Klant'].nunique().astype(float)
+    _n.index.name = 'Code'
+    return _n
+
+
+def verwacht_subscripties_per_component(
+    excel_file = None,
+    codes      = None,
+    alpha:   float = 0.15,
+    kappa_c: float = 0.25,
+    q_eq:    float = 0.5,
+    beta_r:  float = 1.0,
+) -> pd.Series:
+    """Verwacht aantal subscripties E[Z_i(α)] per component.
+
+    Z_i(α) ~ Binomiaal(N_i, q(α)) met N_i = aantal verschillende historische
+    klanten van component i en q(α) de globale logit-adoptiekans
+    (:func:`adoptie_kans`). Dus E[Z_i(α)] = N_i · q(α). Eén globale q voor alle
+    klanten (geen regio-onderscheid); q hangt alleen van α af via κ_c/α. Het
+    service level X beïnvloedt de adoptie niet, alleen de voorraad/kostenkant.
+
+    Returns een Series geïndexeerd op Code met het verwachte aantal subs.
+    """
+    _n = aantal_klanten_per_component(excel_file, codes)
+    if _n.empty:
+        return pd.Series(dtype=float)
+    _q  = adoptie_kans(alpha, kappa_c, q_eq, beta_r)
+    _ez = _n * _q
     _ez.index.name = 'Code'
     return _ez.sort_values(ascending=False)
 
 
 def gevoeligheid_verwachte_z(
     waarden,
-    parameter:     str,
-    p_dichtbij0:   float,
-    p_ver0:        float,
-    alpha:         float,
-    X:             float,
-    alpha0:        float,
-    X0:            float,
-    gamma_alpha:   float = 1.0,
-    gamma_X:       float = 0.5,
-    excel_file           = None,
-    codes                = None,
-    kappa_c:       float = None,
-    s_alpha:       float = 0.02,
+    parameter: str,
+    alpha:   float,
+    kappa_c: float,
+    q_eq:    float,
+    beta_r:  float,
+    excel_file = None,
+    codes      = None,
 ):
-    """Totaal verwacht aantal subscripties Σ_i E[Z_i] als functie van α of X.
+    """Totaal verwacht aantal subscripties Σ_i E[Z_i] als functie van één parameter.
 
-    Voor elke waarde in ``waarden`` wordt het prijspercentage α
-    (``parameter='alpha'``) of het service level X (``parameter='X'``)
-    gevarieerd, terwijl de andere op zijn vaste waarde blijft. De Adoptie-data
-    wordt één keer geladen; per gridpunt worden de regionale adoptieparameters
-    p_r(α,X) opnieuw berekend en het totaal Σ_i E[Z_i] = Σ_i Σ_klant p_r
-    bepaald (adoption rate × aantal historische klanten per component).
+    ``parameter`` ∈ {'alpha', 'kappa_c', 'q_eq', 'beta_r'}. Voor elke waarde in
+    ``waarden`` wordt die parameter gevarieerd (de overige blijven vast) en het
+    totaal Σ_i E[Z_i] = q(·) · Σ_i N_i berekend, met N_i het aantal historische
+    klanten per component en q de globale logit-adoptiekans. De Adoptie-data
+    wordt één keer geladen.
 
     Returns een lijst totalen, parallel aan ``waarden``.
     """
-    if parameter not in ('alpha', 'X'):
-        raise ValueError("parameter moet 'alpha' of 'X' zijn")
-    # Originele (ongewijzigde) rates laden om de twee niveaus te detecteren.
-    adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
-    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
-    if codes_set:
-        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
-    if adoptie.empty:
+    _toegestaan = ('alpha', 'kappa_c', 'q_eq', 'beta_r')
+    if parameter not in _toegestaan:
+        raise ValueError(f"parameter moet een van {_toegestaan} zijn")
+    _n = aantal_klanten_per_component(excel_file, codes)
+    _n_tot = float(_n.sum())
+    if _n_tot <= 0:
         return [0.0 for _ in waarden]
-    rates = adoptie['Adoption_rate'].to_numpy(dtype=float)
-    h     = adoptie['Orders_component_klant'].to_numpy(dtype=float)
-    r4    = np.round(rates, 4)
-    _pos  = r4[r4 > 0]
-    totalen = []
-    if _pos.size == 0:
-        return [0.0 for _ in waarden]
-    _niveaus = sorted(pd.Series(_pos).value_counts().index.tolist()[:2])
-    _laag = _niveaus[0]
-    _hoog = _niveaus[-1]
-    high_mask = r4 == round(_hoog, 4)
-    low_mask  = r4 == round(_laag, 4)
+    _out = []
     for _v in waarden:
-        _a = float(_v) if parameter == 'alpha' else float(alpha)
-        _x = float(_v) if parameter == 'X' else float(X)
-        _p_d = regionale_adoptie_parameter(
-            p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-            alpha_max=None, s_alpha=s_alpha)
-        _p_v = regionale_adoptie_parameter(
-            p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-            alpha_max=None, s_alpha=s_alpha)
-        _rate = rates.copy()
-        _rate[high_mask] = _p_d
-        if _hoog != _laag:
-            _rate[low_mask] = _p_v
-        # E[Z_i] = adoption rate × aantal historische klanten = Σ_klant p_r.
-        totalen.append(float(_rate.sum()))
-    return totalen
+        _a  = float(_v) if parameter == 'alpha'   else float(alpha)
+        _kc = float(_v) if parameter == 'kappa_c' else float(kappa_c)
+        _qe = float(_v) if parameter == 'q_eq'    else float(q_eq)
+        _br = float(_v) if parameter == 'beta_r'  else float(beta_r)
+        _out.append(adoptie_kans(_a, _kc, _qe, _br) * _n_tot)
+    return _out
 
 
 def pareto_alpha_X(
     overzicht_df,
     alpha_waarden,
     X_waarden,
-    p_dichtbij0:   float,
-    p_ver0:        float,
-    alpha0:        float,
-    X0:            float,
-    kappa_bpa:     float,
-    kappa_c:       float,
-    gamma_alpha:   float = 1.0,
-    gamma_X:       float = 0.5,
-    excel_file           = None,
-    codes                = None,
-    gebruik_simulatie: bool = False,
-    n_runs:        int = 500,
-    seed:          int = 42,
-    s_alpha:       float = 0.02,
+    q_eq:      float,
+    beta_r:    float,
+    kappa_bpa: float,
+    kappa_c:   float,
+    excel_file       = None,
+    codes            = None,
 ) -> pd.DataFrame:
     """Pareto-analyse over (α, X): BPA-marge vs. totaal klantsurplus.
 
     Voor elk paar (α, X) uit het cartesisch product van ``alpha_waarden`` en
-    ``X_waarden`` wordt de volledige keten doorgerekend:
+    ``X_waarden`` wordt de keten doorgerekend:
 
-      1. p_r(α, X) per regio via de logit-specificatie (willingness-to-pay);
-      2. Z_i per component: analytisch E[Z_i] = adoption rate × aantal
-         historische klanten (Σ_klant p_r) (default) of —
-         als ``gebruik_simulatie=True`` — het Monte-Carlo gemiddelde over
-         ``n_runs`` Bernoulli-trekkingen X_{in} ~ Bernoulli(q_{in}) (zelfde
-         keuze-model als de simulatietab);
+      1. globale logit-adoptiekans q(α) = σ(logit(q_eq) + β_r·ln(κ_c/α));
+      2. E[Z_i(α)] = N_i · q(α) per component (N_i = aantal historische
+         klanten). X beïnvloedt de adoptie niet, alleen de voorraad/kosten;
       3. een overzicht met n_klanten = Z_i (λ proportioneel meegeschaald);
       4. het kostenmodel → BPA-marge en het totale klantsurplus
          Σ_klant (zelf-voorraadkosten − abonnementskosten).
 
-    Parameters
-    ----------
-    gebruik_simulatie : gebruik Monte-Carlo gesimuleerde Z i.p.v. de
-                        analytische verwachtingswaarde.
-    n_runs, seed      : aantal trekkingen en seed voor de Monte-Carlo modus.
-                        Dezelfde seed wordt per (α,X) hergebruikt (common
-                        random numbers) zodat de marge-curve glad blijft.
-
     Returns een DataFrame met kolommen:
         alpha, X, margin, surplus, total_Z, feasible, revenue, costs,
-        stock_level (totale base-stock, Σ_i S_i*, over alle componenten).
+        stock_level (totale base-stock Σ_i S_i* over alle componenten).
     """
     if overzicht_df is None or overzicht_df.empty:
         return pd.DataFrame()
 
-    adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
-    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
-    if codes_set:
-        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
-    if adoptie.empty:
+    _n = aantal_klanten_per_component(excel_file, codes)
+    if _n.empty:
         return pd.DataFrame()
-
-    rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
-    h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
-    code_arr = adoptie['Code'].to_numpy()
-    r4       = np.round(rates, 4)
-    _pos     = r4[r4 > 0]
-    if _pos.size == 0:
-        return pd.DataFrame()
-    _niveaus = sorted(pd.Series(_pos).value_counts().index.tolist()[:2])
-    _laag = _niveaus[0]
-    _hoog = _niveaus[-1]
-    high_mask = r4 == round(_hoog, 4)
-    low_mask  = r4 == round(_laag, 4)
 
     # Per-component λ per klant uit het basisoverzicht (λ/n is invariant in n).
     base      = overzicht_df
@@ -794,38 +776,16 @@ def pareto_alpha_X(
 
     rijen = []
     for _a in alpha_waarden:
+        # E[Z_i(α)] = N_i · q(α); q hangt alleen van α af (niet van X).
+        _q  = adoptie_kans(_a, kappa_c, q_eq, beta_r)
+        _ez = _n * _q
+        _total_z = float(_ez.sum())
+        _n_new   = _ez.reindex(base.index)
+        _present = _n_new.notna()
+        # Aanwezige componenten mogen naar 0 abonnees zakken; niet-aanwezige
+        # componenten behouden hun basiswaarde.
+        _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
         for _x in X_waarden:
-            _p_d = regionale_adoptie_parameter(
-                p_dichtbij0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-                alpha_max=None, s_alpha=s_alpha)
-            _p_v = regionale_adoptie_parameter(
-                p_ver0, _a, _x, alpha0, X0, gamma_alpha, gamma_X,
-                alpha_max=None, s_alpha=s_alpha)
-            _rate = rates.copy()
-            _rate[high_mask] = _p_d
-            if _hoog != _laag:
-                _rate[low_mask] = _p_v
-            if gebruik_simulatie:
-                # Bernoulli-keuze per (component, klant): X_in ~ Bernoulli(q_in)
-                # met q_in = 1 - (1 - p_r)^{h_in} = P(≥ 1 conversie over h_in
-                # orders). Z_i = Σ_n X_in (Poisson-binomiaal over de klanten);
-                # gemiddeld over de runs. Zelfde seed per (α,X) → gladde curve.
-                _q_in  = 1.0 - (1.0 - _rate) ** h
-                _rng   = np.random.default_rng(seed)
-                _draws = _rng.random((int(n_runs), _q_in.shape[0])) < _q_in[None, :]
-                _q = _draws.mean(axis=0)
-            else:
-                # E[Z_i] = adoption rate × aantal historische klanten = p_r.
-                _q = _rate
-            _ez = pd.Series(_q).groupby(code_arr).sum()
-
-            # Overzicht met n_klanten = Z_i (λ meegeschaald); componenten
-            # zonder adoptie-data behouden hun basiswaarden.
-            _n_new   = _ez.reindex(base.index)
-            _present = _n_new.notna()
-            # Aanwezige componenten mogen naar 0 abonnees zakken (Z_i = 0 bij
-            # α ≥ κ_c); niet-aanwezige componenten behouden hun basiswaarde.
-            _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
             mod = base.copy()
             mod['n_klanten'] = _n_int.values
             mod['lambda_jr'] = np.where(
@@ -834,7 +794,6 @@ def pareto_alpha_X(
                 base_lam.values,
             )
             if int(mod['n_klanten'].sum()) <= 0:
-                # Geen enkele abonnee → geen omzet en geen kosten: marge = 0.
                 _margin  = 0.0
                 _surplus = 0.0
                 _feas    = False
@@ -860,7 +819,7 @@ def pareto_alpha_X(
                 'X':           float(_x),
                 'margin':      _margin,
                 'surplus':     _surplus,
-                'total_Z':     float(_ez.sum()),
+                'total_Z':     _total_z,
                 'feasible':    _feas,
                 'revenue':     _revenue,
                 'costs':       _costs,
@@ -877,59 +836,34 @@ def metrieken_voor_wtp_grid(
     excel_file       = None,
     codes            = None,
 ):
-    """Meerdere keten-uitkomsten per WTP-parametercombinatie.
+    """Meerdere keten-uitkomsten per parametercombinatie (α, X, q_eq, β_r).
 
-    Generaliseert de keten van ``pareto_alpha_X``: voor elke parameter-dict in
-    ``param_dicts`` worden de twee regionale adoptieparameters p_r berekend
-    (Benelux/overig), daaruit het verwachte aantal subscripties E[Z_i] per
-    component, en vervolgens via het kostenmodel de BPA-marge en het totale
-    klantsurplus.
-
-    Elke dict bevat de sleutels: ``p_dichtbij0``, ``p_ver0``, ``alpha``, ``X``,
-    ``alpha0``, ``X0``, ``gamma_alpha``, ``gamma_X``, ``s_alpha`` en optioneel
-    ``alpha_max`` (= κ_c-plafond op α; None = geen plafond).
-
-    De Adoptie-data en het basisoverzicht worden één keer geladen; per dict
-    wordt alleen p_r → E[Z] → kostenmodel doorgerekend.
+    Generaliseert de keten van ``pareto_alpha_X``: elke dict in ``param_dicts``
+    bevat de sleutels ``alpha``, ``X``, ``q_eq``, ``beta_r`` en optioneel
+    ``kappa_c`` (anders de meegegeven ``kappa_c``). Per combinatie wordt de
+    globale logit-adoptiekans q(α), daaruit E[Z_i] = N_i·q(α), en via het
+    kostenmodel de BPA-marge en het totale klantsurplus berekend.
 
     Returns een lijst dicts (parallel aan ``param_dicts``), elk met sleutels:
         ``bpa_margin``  – totale BPA-marge (€);
         ``surplus``     – totaal klantsurplus (€);
         ``total_Z``     – verwacht totaal aantal subscripties E[Z];
-        ``p_dichtbij``  – adoptieparameter p_r (Benelux);
-        ``p_ver``       – adoptieparameter p_r (overig);
+        ``q``           – globale adoptiekans q(α);
         ``feasible``    – of het kostenmodel haalbaar was.
     NaN bij een niet-doorgerekende combinatie.
     """
     def _leeg():
         return {
             'bpa_margin': float('nan'), 'surplus': float('nan'),
-            'total_Z': float('nan'), 'p_dichtbij': float('nan'),
-            'p_ver': float('nan'), 'feasible': False,
+            'total_Z': float('nan'), 'q': float('nan'), 'feasible': False,
         }
 
     if overzicht_df is None or overzicht_df.empty or not param_dicts:
         return [_leeg() for _ in (param_dicts or [])]
 
-    adoptie = laad_adoptie_data(excel_file, rate_overrides=None)
-    codes_set = {str(c).strip() for c in codes} if codes is not None else classificatie_codes()
-    if codes_set:
-        adoptie = adoptie[adoptie['Code'].isin(codes_set)]
-    if adoptie.empty:
+    _n = aantal_klanten_per_component(excel_file, codes)
+    if _n.empty:
         return [_leeg() for _ in param_dicts]
-
-    rates    = adoptie['Adoption_rate'].to_numpy(dtype=float)
-    h        = adoptie['Orders_component_klant'].to_numpy(dtype=float)
-    code_arr = adoptie['Code'].to_numpy()
-    r4       = np.round(rates, 4)
-    _pos     = r4[r4 > 0]
-    if _pos.size == 0:
-        return [_leeg() for _ in param_dicts]
-    _niveaus = sorted(pd.Series(_pos).value_counts().index.tolist()[:2])
-    _laag = _niveaus[0]
-    _hoog = _niveaus[-1]
-    high_mask = r4 == round(_hoog, 4)
-    low_mask  = r4 == round(_laag, 4)
 
     base      = overzicht_df
     base_n    = base['n_klanten'].astype(float)
@@ -938,23 +872,13 @@ def metrieken_voor_wtp_grid(
 
     resultaten = []
     for p in param_dicts:
-        _a    = float(p['alpha'])
-        _x    = float(p['X'])
-        _amax = p.get('alpha_max', None)
-        _s    = float(p.get('s_alpha', 0.02))
-        _p_d = regionale_adoptie_parameter(
-            p['p_dichtbij0'], _a, _x, p['alpha0'], p['X0'],
-            p['gamma_alpha'], p['gamma_X'], alpha_max=_amax, s_alpha=_s)
-        _p_v = regionale_adoptie_parameter(
-            p['p_ver0'], _a, _x, p['alpha0'], p['X0'],
-            p['gamma_alpha'], p['gamma_X'], alpha_max=_amax, s_alpha=_s)
-        _rate = rates.copy()
-        _rate[high_mask] = _p_d
-        if _hoog != _laag:
-            _rate[low_mask] = _p_v
-        # E[Z_i] = adoption rate × aantal historische klanten = p_r.
-        _q  = _rate
-        _ez = pd.Series(_q).groupby(code_arr).sum()
+        _a  = float(p['alpha'])
+        _x  = float(p['X'])
+        _qe = float(p['q_eq'])
+        _br = float(p['beta_r'])
+        _kc = float(p.get('kappa_c', kappa_c))
+        _q  = adoptie_kans(_a, _kc, _qe, _br)
+        _ez = _n * _q
         _total_z = float(_ez.sum())
         _n_new   = _ez.reindex(base.index)
         _present = _n_new.notna()
@@ -966,16 +890,12 @@ def metrieken_voor_wtp_grid(
             _n_int.values.astype(float) * lam_per_cust.values,
             base_lam.values,
         )
-        _rec = {
-            'total_Z':    _total_z,
-            'p_dichtbij': float(_p_d),
-            'p_ver':      float(_p_v),
-        }
+        _rec = {'total_Z': _total_z, 'q': float(_q)}
         if int(mod['n_klanten'].sum()) <= 0:
             _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False})
         else:
             try:
-                _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, kappa_c, _x)
+                _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, _kc, _x)
                 _rec.update({
                     'bpa_margin': float(_res['bpa_margin']),
                     'surplus':    float(sum(
@@ -1012,30 +932,22 @@ def winst_voor_wtp_grid(
 
 def optimale_alpha_bij_X(
     overzicht_df,
-    X_fix:         float,
+    X_fix:     float,
     alpha_grid,
-    p_dichtbij0:   float,
-    p_ver0:        float,
-    alpha0:        float,
-    X0:            float,
-    kappa_bpa:     float,
-    kappa_c:       float,
-    gamma_alpha:   float = 1.0,
-    gamma_X:       float = 0.5,
-    excel_file           = None,
-    codes                = None,
-    alleen_haalbaar:     bool = False,
-    gebruik_simulatie: bool = False,
-    n_runs:        int = 500,
-    seed:          int = 42,
-    s_alpha:       float = 0.02,
+    q_eq:      float,
+    beta_r:    float,
+    kappa_bpa: float,
+    kappa_c:   float,
+    excel_file       = None,
+    codes            = None,
+    alleen_haalbaar: bool = False,
 ):
     """Zoek het prijspercentage α dat de BPA-marge maximaliseert bij vast X.
 
-    Houdt het service level X vast op ``X_fix`` en evalueert de volledige
-    keten (α,X) → p_r → E[Z_i] → kostenmodel voor elke α in ``alpha_grid``.
-    Omdat een hogere α de omzet per klant verhoogt maar de adoptie verlaagt,
-    bestaat doorgaans een inwendig marge-optimum.
+    Houdt het service level X vast op ``X_fix`` en evalueert de keten
+    α → q(α) → E[Z_i] → kostenmodel voor elke α in ``alpha_grid``. Omdat een
+    hogere α de omzet per klant verhoogt maar de adoptie q(α) verlaagt, bestaat
+    doorgaans een inwendig marge-optimum.
 
     Parameters
     ----------
@@ -1044,21 +956,12 @@ def optimale_alpha_bij_X(
                       profiteren); bij geen enkele haalbare α valt de functie
                       terug op de marge-maximalisatie over alle α.
 
-    Returns
-    -------
-    (curve_df, best_row) waarbij:
-        curve_df : DataFrame met kolommen alpha, X, margin, surplus,
-                   total_Z, feasible, revenue, costs, stock_level (de
-                   volledige α-sweep bij X_fix);
-        best_row : de rij (pd.Series) met de gekozen optimale α, of None
-                   als er geen geldige marge berekend kon worden.
+    Returns (curve_df, best_row).
     """
     curve = pareto_alpha_X(
         overzicht_df, list(alpha_grid), [float(X_fix)],
-        p_dichtbij0, p_ver0, alpha0, X0, kappa_bpa, kappa_c,
-        gamma_alpha, gamma_X, excel_file=excel_file, codes=codes,
-        gebruik_simulatie=gebruik_simulatie, n_runs=n_runs, seed=seed,
-        s_alpha=s_alpha,
+        q_eq, beta_r, kappa_bpa, kappa_c,
+        excel_file=excel_file, codes=codes,
     )
     if curve.empty:
         return curve, None
