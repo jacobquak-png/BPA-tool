@@ -826,20 +826,21 @@ def pareto_alpha_X(
     rijen = []
     for _a in alpha_waarden:
         # E[Z_i(α)] = N_i · q(α); q hangt alleen van α af (niet van X).
-        _q  = adoptie_kans(_a, kappa_c, q_eq, beta_r)
-        _ez = _n * _q
-        _total_z = float(_ez.sum())
-        _n_new   = _ez.reindex(base.index)
-        _present = _n_new.notna()
-        # Aanwezige componenten mogen naar 0 abonnees zakken; niet-aanwezige
-        # componenten behouden hun basiswaarde.
-        _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
+        _q    = adoptie_kans(_a, kappa_c, q_eq, beta_r)
+        _ez   = _n * _q                          # continu: N_i · q(α)
+        _total_z  = float(_ez.sum())
+        _ez_re    = _ez.reindex(base.index)       # uitgelijnd op overzicht
+        _present  = _ez_re.notna()
+        # n_klanten afgerond (discrete klantenpool); lambda_jr CONTINU zodat de
+        # marge-curve glad verloopt (geen trapsgewijze sprongen door afronden).
+        _ez_cont  = _ez_re.where(_present, base_n)          # float Z_i of fallback
+        _n_int    = _ez_cont.round().clip(lower=0).astype(int)
         for _x in X_waarden:
             mod = base.copy()
             mod['n_klanten'] = _n_int.values
             mod['lambda_jr'] = np.where(
                 _present.values,
-                _n_int.values.astype(float) * lam_per_cust.values,
+                _ez_cont.values * lam_per_cust.values,  # continu: Z_i(α) · λ/N
                 base_lam.values,
             )
             if int(mod['n_klanten'].sum()) <= 0:
@@ -926,17 +927,18 @@ def metrieken_voor_wtp_grid(
         _qe = float(p['q_eq'])
         _br = float(p['beta_r'])
         _kc = float(p.get('kappa_c', kappa_c))
-        _q  = adoptie_kans(_a, _kc, _qe, _br)
-        _ez = _n * _q
+        _q       = adoptie_kans(_a, _kc, _qe, _br)
+        _ez      = _n * _q                              # continu: N_i · q(α)
         _total_z = float(_ez.sum())
-        _n_new   = _ez.reindex(base.index)
-        _present = _n_new.notna()
-        _n_int   = _n_new.where(_present, base_n).round().clip(lower=0).astype(int)
+        _ez_re   = _ez.reindex(base.index)
+        _present = _ez_re.notna()
+        _ez_cont = _ez_re.where(_present, base_n)       # float Z_i of fallback
+        _n_int   = _ez_cont.round().clip(lower=0).astype(int)
         mod = base.copy()
         mod['n_klanten'] = _n_int.values
         mod['lambda_jr'] = np.where(
             _present.values,
-            _n_int.values.astype(float) * lam_per_cust.values,
+            _ez_cont.values * lam_per_cust.values,      # continu: Z_i(α) · λ/N
             base_lam.values,
         )
         _rec = {'total_Z': _total_z, 'q': float(_q)}
