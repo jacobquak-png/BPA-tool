@@ -670,6 +670,55 @@ def aantal_klanten_per_component(excel_file=None, codes=None) -> pd.Series:
     return _n
 
 
+def binomiale_verdeling(N, q, k_min=None, k_max=None):
+    """Kansverdeling (PMF) van de binomiale verdeling Binomiaal(N, q).
+
+    Berekent P(Z = k) = C(N, k)·q^k·(1-q)^(N-k) numeriek stabiel via log-gamma
+    (zonder externe afhankelijkheden zoals scipy). Standaard wordt alleen een
+    relevant venster rond het gemiddelde (μ ± ~5σ) berekend zodat het ook voor
+    grote N snel blijft.
+
+    Dit is de verdeling achter de analytische verwachtingswaarde: per component
+    geldt Z_i ~ Binomiaal(N_i, q(α)); omdat alle klanten dezelfde globale
+    adoptiekans q delen is het totaal Z_tot ~ Binomiaal(Σ N_i, q).
+
+    Parameters
+    ----------
+    N : aantal trials (historische klanten N_i, of Σ N_i voor het totaal).
+    q : slaagkans per klant (de globale adoptiekans q(α)).
+    k_min, k_max : optioneel expliciet k-bereik; anders automatisch (μ ± ~5σ).
+
+    Returns (k_array (int), pmf_array (float)).
+    """
+    import math
+    N = int(round(float(N)))
+    q = float(min(max(float(q), 0.0), 1.0))
+    if N <= 0:
+        return np.array([0]), np.array([1.0])
+    mean = N * q
+    sd   = math.sqrt(max(N * q * (1.0 - q), 0.0))
+    if k_min is None:
+        k_min = max(0, int(math.floor(mean - 5.0 * sd - 1)))
+    if k_max is None:
+        k_max = min(N, int(math.ceil(mean + 5.0 * sd + 1)))
+    if k_min > k_max:
+        k_min, k_max = 0, N
+    ks = np.arange(int(k_min), int(k_max) + 1)
+    if q <= 0.0:
+        return ks, np.where(ks == 0, 1.0, 0.0)
+    if q >= 1.0:
+        return ks, np.where(ks == N, 1.0, 0.0)
+    _lg   = math.lgamma
+    _lnq  = math.log(q)
+    _ln1q = math.log(1.0 - q)
+    _logc = _lg(N + 1)
+    logpmf = np.array([
+        _logc - _lg(k + 1) - _lg(N - k + 1) + k * _lnq + (N - k) * _ln1q
+        for k in ks
+    ], dtype=float)
+    return ks, np.exp(logpmf)
+
+
 def verwacht_subscripties_per_component(
     excel_file = None,
     codes      = None,
