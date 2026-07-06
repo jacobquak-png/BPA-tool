@@ -27,6 +27,7 @@ from bpa_beheer import (
     laad_excel_onderdelen,
     laad_classificatie_selectie,
     regionale_adoptie_parameter,
+    adoptie_kans,
     verwacht_subscripties_per_component,
     gevoeligheid_verwachte_z,
     pareto_alpha_X,
@@ -3672,17 +3673,20 @@ with tab_budget:
 with tab_subsim:
     st.subheader("Verwachte subscripties per component")
     st.markdown(
-        "Het verwachte aantal subscripties per component "
-        "$E[Z_i(α,X)]$ wordt **analytisch** bepaald uit de subscriptie-dataset "
-        "(zonder 231-AS: RSPL) — zonder Monte Carlo. Alleen de componenten uit de "
+        "Het verwachte aantal subscripties per component $E[Z_i(α)]$ wordt "
+        "**analytisch** bepaald uit de subscriptie-dataset (zonder 231-AS: RSPL) "
+        "— zonder Monte Carlo. Alleen de componenten uit de "
         "**classificatie-selectie** tellen mee.\n\n"
-        "Het verwachte aantal subscripties is de **adoption rate** $p_r$ "
-        "vermenigvuldigd met het **aantal historische klantlocaties** $N_i$ "
-        "(`Aantal_klantlocaties_5jr`) van het component: $E[Z_i]$ = $p_r$ × $N_i$. "
-        "De kolom `Aantal_klantlocaties_5jr` wordt per component gekoppeld aan de "
-        "artikelen die door de classificatie zijn gekomen. "
-        "De adoption rate $p_r$ hangt af van prijspercentage α en service "
-        "level X."
+        "Elk van de $N_i$ historische klanten van een component abonneert "
+        "onafhankelijk met de globale **logit-adoptiekans** $q(α)$, dus "
+        "$Z_i(α)\\sim\\mathrm{Binomiaal}(N_i,\\,q(α))$ en "
+        "$E[Z_i(α)]=N_i\\cdot q(α)$. De adoptiekans volgt een "
+        "discrete-keuzemodel op basis van de kostenratio $κ_c/α$:\n\n"
+        "$$q(α)=σ\\!\\big(β_0+β_r\\ln(κ_c/α)\\big),\\qquad "
+        "β_0=\\operatorname{logit}(q_{eq})=\\ln\\tfrac{q_{eq}}{1-q_{eq}}.$$\n\n"
+        "De intercept $β_0$ is geijkt op **kostenpariteit**: bij $α=κ_c$ geldt "
+        "$q=q_{eq}$. Het service level $X$ zit in het onwaargenomen nut en "
+        "beïnvloedt $q$ niet direct (alleen de voorraad-/kostenkant)."
     )
 
     _cls_codes = sorted(get_classificatie_info().get("items", {}).keys())
@@ -3695,24 +3699,18 @@ with tab_subsim:
         )
 
     # ── Bron-Excel met de subscriptie-dataset ────────────────────────────
-    # Standaard de subscriptie-dataset (zonder 231-AS: RSPL) uit de repo; de
-    # kolom Aantal_klantlocaties_5jr wordt gekoppeld aan de classificatie-codes.
-    # Een expliciete upload wint.
     _subsim_upload = st.file_uploader(
         "Bron-Excel met de subscriptie-dataset (leeg = standaard dataset zonder RSPL)",
         type=["xlsx"],
         key="subsim_upload",
     )
-    # Gebruik SUBSCRIPTIES_PATH als standaard ALLEEN als het bestand op disk
-    # bestaat (bij cloud-deployments kan het ontbreken). Anders None, zodat
-    # laad_adoptie_data terugvalt op EXCEL_PATH.
     _subsim_default = SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None
     _excel_bron = _subsim_upload or _subsim_default
     if _subsim_upload is not None:
         _bron_naam = getattr(_excel_bron, "name", "geüploade Excel")
         st.caption(f"Bron-Excel: **{_bron_naam}**")
     elif _subsim_default is not None:
-        st.caption(f"Bron-Excel: subscriptie-dataset (`{os.path.basename(SUBSCRIPTIES_PATH)}`)") 
+        st.caption(f"Bron-Excel: subscriptie-dataset (`{os.path.basename(SUBSCRIPTIES_PATH)}`)")
     else:
         st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(EXCEL_PATH)}`) — upload de subscriptie-dataset voor RSPL-vrije analyse")
 
@@ -3726,132 +3724,68 @@ with tab_subsim:
             pass
         return _excel_bron
 
-    # ── Adoptiemodel: regionale baseline + logit-effect van α en X ────────
-    st.markdown("**Adoptiemodel (willingness-to-pay)**")
+    # ── Adoptiemodel: globale logit-kans q(α) ─────────────────────────────
+    st.markdown("**Adoptiemodel — logit discrete-keuze**")
+    _kp_sim        = st.session_state.get("kosten_params", {})
+    _alpha_def_sim = float(_kp_sim.get("alpha", 0.15))
+    _kappa_c_sim   = float(_kp_sim.get("kappa_c", 0.25))
+    _X_def_sim     = float(_kp_sim.get("service_level", 0.99))
     st.caption(
-        "Het verwachte aantal abonnees per component is $p_r$ × het aantal "
-        "verschillende historische klanten. De regionale adoptieparameter "
-        "$p_r$ hangt af van "
-        "prijspercentage α en service level X via een logit-specificatie: "
-        "$p_r(α,X)=σ(\\,\\mathrm{logit}(p_{r,0})-γ_α\\frac{α-α_0}{α_0}+γ_X[g(X)-g(X_0)]\\,)$ "
-        "met $g(X)=-\\ln(1-X)$. De twee baselines $p_{r,0}$ gelden bij de "
-        "referentie $(α_0,X_0)$."
+        f"$κ_c$ komt uit de Kostenanalyse: κ_c = **{_kappa_c_sim:.0%}** "
+        "_(pas aan via 💰 Kostenanalyse)_. $q_{eq}$ en $β_r$ zijn hieronder "
+        "instelbaar en worden meegenomen in de gevoeligheidsanalyse."
     )
 
-    # Standaarden voor α en X uit de Kostenanalyse-tab; hier overschrijfbaar.
-    _kp_sim = st.session_state.get("kosten_params", {})
-    _alpha_def_sim = float(_kp_sim.get("alpha", 0.15))
-    _X_def_sim     = float(_kp_sim.get("service_level", 0.99))
-
-    st.markdown("_Regionale baseline-adoptie $p_{r,0}$ (bij referentie $α_0, X_0$)_")
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        _p_dichtbij0 = st.number_input(
-            "Baseline p_r0 dichtbij (Benelux)", min_value=0.0, max_value=1.0,
-            value=0.70, step=0.05, format="%.2f", key="subsim_p_dichtbij0",
-        )
-    with col_r2:
-        _p_ver0 = st.number_input(
-            "Baseline p_r0 ver (overig)", min_value=0.0, max_value=1.0,
-            value=0.40, step=0.05, format="%.2f", key="subsim_p_ver0",
-        )
-
-    st.markdown("_Prijs en service level (effect op adoptie)_")
-    col_ax1, col_ax2 = st.columns(2)
-    with col_ax1:
+    col_a1, col_a2, col_a3 = st.columns(3)
+    with col_a1:
         _alpha_sim = st.number_input(
-            "α (prijspercentage)", min_value=0.0, max_value=1.0,
+            "α (prijspercentage)", min_value=0.0001, max_value=1.0,
             value=_alpha_def_sim, step=0.01, format="%.2f", key="subsim_alpha",
         )
-    with col_ax2:
-        _X_sim = st.number_input(
-            "X (service level)", min_value=0.50, max_value=0.9999,
-            value=_X_def_sim, step=0.005, format="%.3f", key="subsim_X",
+    with col_a2:
+        _q_eq = st.number_input(
+            "q_eq (adoptie bij kostenpariteit α=κ_c)", min_value=0.01, max_value=0.99,
+            value=0.55, step=0.05, format="%.2f", key="subsim_q_eq",
+            help="Kans dat een klant abonneert wanneer het abonnement precies "
+                 "even duur is als zelf voorraad houden (α = κ_c).",
+        )
+    with col_a3:
+        _beta_r = st.number_input(
+            "β_r (gevoeligheid kostenratio)", min_value=0.0, max_value=20.0,
+            value=1.0, step=0.1, format="%.2f", key="subsim_beta_r",
+            help="Hoe sterk de adoptie reageert op de kostenratio ln(κ_c/α). "
+                 "Groter β_r → adoptie daalt sneller als α richting κ_c stijgt.",
         )
 
-    with st.expander("Referentie en gevoeligheden (α₀, X₀, γ_α, γ_X)"):
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
-            _alpha0_sim = st.number_input(
-                "α₀ baseline prijspercentage", min_value=0.0001, max_value=1.0,
-                value=0.15, step=0.01, format="%.2f", key="subsim_alpha0",
-            )
-            _gamma_alpha = st.number_input(
-                "γ_α prijsgevoeligheid", min_value=0.0, max_value=20.0,
-                value=1.0, step=0.1, format="%.2f", key="subsim_gamma_alpha",
-            )
-        with col_b2:
-            _X0_sim = st.number_input(
-                "X₀ baseline service level", min_value=0.50, max_value=0.9999,
-                value=0.98, step=0.005, format="%.3f", key="subsim_X0",
-            )
-            _gamma_X = st.number_input(
-                "γ_X servicegevoeligheid", min_value=0.0, max_value=20.0,
-                value=0.5, step=0.1, format="%.2f", key="subsim_gamma_X",
-            )
-
-        st.markdown("**WTP-plafond op α (= α_U = κ_c)**")
-        _kc_subsim = float(st.session_state.get("kosten_params", {}).get("kappa_c", 0.25))
-        _wtp_plafond = st.checkbox(
-            f"Adoptie laten aflopen naar 0 richting α = κ_c (≈ {_kc_subsim:.0%})",
-            value=True, key="subsim_wtp_plafond",
-            help="Een klant abonneert alleen als α ≤ κ_c (abonnement niet duurder "
-                 "dan zelf-voorraad). Aan: de WTP-curve zakt glad naar 0 naarmate "
-                 "α de bovengrens α_U = κ_c nadert.")
-        _s_alpha = st.slider(
-            "Scherpte s (spreiding in klant-κ_c)", min_value=0.005, max_value=0.10,
-            value=0.02, step=0.005, format="%.3f", key="subsim_s_alpha",
-            help="Klein s → bijna harde cutoff bij α_U; groter s → geleidelijker "
-                 "aflopen door heterogeniteit in de klant-specifieke κ_c.",
-            disabled=not _wtp_plafond)
-
-    # κ_c als WTP-plafond op α: alleen doorgeven als de optie aanstaat.
-    _alpha_max_subsim = _kc_subsim if _wtp_plafond else None
-
-    # Effectieve regionale adoptieparameters p_r(α, X) via de logit-formule.
-    _p_dichtbij = regionale_adoptie_parameter(
-        _p_dichtbij0, _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
-        _gamma_alpha, _gamma_X,
-        alpha_max=_alpha_max_subsim, s_alpha=_s_alpha,
-    )
-    _p_ver = regionale_adoptie_parameter(
-        _p_ver0, _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
-        _gamma_alpha, _gamma_X,
-        alpha_max=_alpha_max_subsim, s_alpha=_s_alpha,
-    )
-    _c_pr1, _c_pr2 = st.columns(2)
-    _c_pr1.metric("p_r(α,X) dichtbij", f"{_p_dichtbij:.3f}",
-                  delta=f"{_p_dichtbij - _p_dichtbij0:+.3f}")
-    _c_pr2.metric("p_r(α,X) ver", f"{_p_ver:.3f}",
-                  delta=f"{_p_ver - _p_ver0:+.3f}")
-
-    # De twee data-niveaus worden hermapt naar de berekende p_r(α,X)-waarden.
-    _rate_overrides = {"benelux": float(_p_dichtbij), "overig": float(_p_ver)}
+    _q_ad = adoptie_kans(_alpha_sim, _kappa_c_sim, _q_eq, _beta_r)
+    _c_q1, _c_q2 = st.columns(2)
+    _c_q1.metric("q(α) — adoptiekans", f"{_q_ad:.3f}",
+                 delta=f"{_q_ad - _q_eq:+.3f} vs q_eq")
+    _c_q2.metric("κ_c / α — kostenratio", f"{_kappa_c_sim / max(_alpha_sim, 1e-9):.2f}")
 
     # ── Automatische doorwerking naar alle tabs ───────────────────────────
-    # Verwacht aantal subscripties E[Z_i(α,X)] = Σ_n q_in wordt analytisch
-    # (deterministisch, zonder Monte Carlo) bepaald en als integer Z-override
-    # in de configuratie gezet zodra α, X of een adoptie-parameter wijzigt.
+    # E[Z_i(α)] = N_i · q(α) wordt analytisch (deterministisch) bepaald en als
+    # integer Z-override in de configuratie gezet zodra α, q_eq of β_r wijzigt.
     _auto_z = st.checkbox(
-        "Verwachte Z automatisch doorzetten naar alle tabs bij wijziging van α/X",
+        "Verwachte Z automatisch doorzetten naar alle tabs bij wijziging van α/q_eq/β_r",
         value=True, key="subsim_auto_z",
-        help="Schrijft E[Z_i(α,X)] per component als integer Z-override en "
-             "herberekent de overige tabs.",
+        help="Schrijft E[Z_i(α)] = N_i·q(α) per component als integer Z-override "
+             "en herberekent de overige tabs.",
     )
     if _auto_z and _cls_codes:
         _auto_sig = (
-            round(_alpha_sim, 6), round(_X_sim, 6),
-            round(_alpha0_sim, 6), round(_X0_sim, 6),
-            round(_gamma_alpha, 6), round(_gamma_X, 6),
-            round(_p_dichtbij0, 6), round(_p_ver0, 6),
-            tuple(_cls_codes),
+            round(_alpha_sim, 6), round(_q_eq, 6), round(_beta_r, 6),
+            round(_kappa_c_sim, 6), tuple(_cls_codes),
         )
         if st.session_state.get("subsim_auto_sig") != _auto_sig:
             try:
                 _ez = verwacht_subscripties_per_component(
                     excel_file=_excel_arg(),
                     codes=_cls_codes,
-                    rate_overrides=_rate_overrides,
+                    alpha=float(_alpha_sim),
+                    kappa_c=float(_kappa_c_sim),
+                    q_eq=float(_q_eq),
+                    beta_r=float(_beta_r),
                 )
                 if not _ez.empty:
                     _n_ov = dict(cfg.get("n_klanten_overrides", {}))
@@ -3865,7 +3799,7 @@ with tab_subsim:
                     st.session_state.pop("overzicht_df", None)
                     st.session_state["subsim_auto_sig"] = _auto_sig
                     st.success(
-                        f"✅ Verwachte Z (α={_alpha_sim:.2f}, X={_X_sim:.3f}) "
+                        f"✅ Verwachte Z (α={_alpha_sim:.2f}, q(α)={_q_ad:.3f}) "
                         f"automatisch doorgezet naar {len(_ez)} componenten."
                     )
                     st.rerun()
@@ -3875,28 +3809,36 @@ with tab_subsim:
                     f"geen tab 'Adoptie' of is niet bereikbaar. ({_auto_err})"
                 )
 
-    # ── Gevoeligheidsanalyse: verwachte Z vs. (α, X) ──────────────────────
-    with st.expander("📈 Gevoeligheidsanalyse: verwachte Z vs. prijs α en service level X"):
+    # ── Gevoeligheidsanalyse: Σ E[Z] vs. α, β_r en q_eq ───────────────────
+    with st.expander("📈 Gevoeligheidsanalyse: verwachte Z vs. α, β_r en q_eq"):
         st.caption(
-            "Toont het totaal verwachte aantal subscripties $\\sum_i E[Z_i]$ als "
-            "functie van het prijspercentage α (bij vast X) en van het service "
-            "level X (bij vaste α). De stippellijn markeert de huidige instelling."
+            "Toont het totaal verwachte aantal subscripties "
+            "$\\sum_i E[Z_i]=q(\\cdot)\\cdot\\sum_i N_i$ als functie van het "
+            "prijspercentage α, de kostenratio-gevoeligheid β_r en de "
+            "pariteitskans q_eq. De stippellijn markeert de huidige instelling."
         )
-        _cga, _cgb = st.columns(2)
+        _cga, _cgb, _cgc = st.columns(3)
         with _cga:
             _a_min = st.number_input(
-                "α-bereik min", min_value=0.0, max_value=1.0, value=0.0,
+                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_sens_amin")
             _a_max = st.number_input(
                 "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
                 step=0.01, format="%.2f", key="subsim_sens_amax")
         with _cgb:
-            _x_min = st.number_input(
-                "X-bereik min", min_value=0.50, max_value=0.9999, value=0.90,
-                step=0.005, format="%.3f", key="subsim_sens_xmin")
-            _x_max = st.number_input(
-                "X-bereik max", min_value=0.50, max_value=0.9999, value=0.999,
-                step=0.005, format="%.3f", key="subsim_sens_xmax")
+            _br_min = st.number_input(
+                "β_r-bereik min", min_value=0.0, max_value=20.0, value=0.0,
+                step=0.1, format="%.2f", key="subsim_sens_brmin")
+            _br_max = st.number_input(
+                "β_r-bereik max", min_value=0.1, max_value=20.0, value=4.0,
+                step=0.1, format="%.2f", key="subsim_sens_brmax")
+        with _cgc:
+            _qe_min = st.number_input(
+                "q_eq-bereik min", min_value=0.01, max_value=0.99, value=0.10,
+                step=0.05, format="%.2f", key="subsim_sens_qemin")
+            _qe_max = st.number_input(
+                "q_eq-bereik max", min_value=0.02, max_value=0.99, value=0.90,
+                step=0.05, format="%.2f", key="subsim_sens_qemax")
         _n_grid = st.slider(
             "Aantal gridpunten", min_value=5, max_value=60, value=25,
             key="subsim_sens_n")
@@ -3904,25 +3846,28 @@ with tab_subsim:
         if st.button("Bereken gevoeligheid", key="subsim_sens_btn",
                      disabled=not _cls_codes):
             try:
-                _a_grid = list(np.linspace(float(_a_min), float(_a_max), int(_n_grid)))
-                _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_n_grid)))
+                _a_grid  = list(np.linspace(float(_a_min),  float(_a_max),  int(_n_grid)))
+                _br_grid = list(np.linspace(float(_br_min), float(_br_max), int(_n_grid)))
+                _qe_grid = list(np.linspace(float(_qe_min), float(_qe_max), int(_n_grid)))
                 with st.spinner("Gevoeligheid berekenen…"):
                     _z_vs_a = gevoeligheid_verwachte_z(
-                        _a_grid, 'alpha', _p_dichtbij0, _p_ver0,
-                        _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
-                        _gamma_alpha, _gamma_X,
-                        excel_file=_excel_arg(), codes=_cls_codes,
-                        kappa_c=_alpha_max_subsim, s_alpha=_s_alpha)
-                    _z_vs_x = gevoeligheid_verwachte_z(
-                        _x_grid, 'X', _p_dichtbij0, _p_ver0,
-                        _alpha_sim, _X_sim, _alpha0_sim, _X0_sim,
-                        _gamma_alpha, _gamma_X,
-                        excel_file=_excel_arg(), codes=_cls_codes,
-                        kappa_c=_alpha_max_subsim, s_alpha=_s_alpha)
+                        _a_grid, 'alpha', float(_alpha_sim), float(_kappa_c_sim),
+                        float(_q_eq), float(_beta_r),
+                        excel_file=_excel_arg(), codes=_cls_codes)
+                    _z_vs_br = gevoeligheid_verwachte_z(
+                        _br_grid, 'beta_r', float(_alpha_sim), float(_kappa_c_sim),
+                        float(_q_eq), float(_beta_r),
+                        excel_file=_excel_arg(), codes=_cls_codes)
+                    _z_vs_qe = gevoeligheid_verwachte_z(
+                        _qe_grid, 'q_eq', float(_alpha_sim), float(_kappa_c_sim),
+                        float(_q_eq), float(_beta_r),
+                        excel_file=_excel_arg(), codes=_cls_codes)
                 st.session_state["subsim_sens_data"] = {
                     "a_grid": _a_grid, "z_vs_a": _z_vs_a,
-                    "x_grid": _x_grid, "z_vs_x": _z_vs_x,
-                    "alpha": float(_alpha_sim), "X": float(_X_sim),
+                    "br_grid": _br_grid, "z_vs_br": _z_vs_br,
+                    "qe_grid": _qe_grid, "z_vs_qe": _z_vs_qe,
+                    "alpha": float(_alpha_sim), "beta_r": float(_beta_r),
+                    "q_eq": float(_q_eq),
                 }
             except (ValueError, FileNotFoundError, OSError) as _sens_err:
                 st.warning(
@@ -3934,19 +3879,25 @@ with tab_subsim:
         _sens = st.session_state.get("subsim_sens_data")
         if _sens:
             import matplotlib.pyplot as _plt_sens
-            _figs, (_axa, _axx) = _plt_sens.subplots(1, 2, figsize=(11, 4))
+            _figs, (_axa, _axb, _axc) = _plt_sens.subplots(1, 3, figsize=(14, 4))
             _axa.plot(_sens["a_grid"], _sens["z_vs_a"], color="#1f77b4", lw=2)
             _axa.axvline(_sens["alpha"], color="grey", ls="--", lw=1)
             _axa.set_xlabel("price percentage α")
             _axa.set_ylabel("expected total subscriptions  Σ E[Z]")
-            _axa.set_title(f"Z vs. α  (X = {_sens['X']:.3f})")
+            _axa.set_title(f"Z vs. α  (β_r={_sens['beta_r']:.2f}, q_eq={_sens['q_eq']:.2f})")
             _axa.grid(True, alpha=0.3)
-            _axx.plot(_sens["x_grid"], _sens["z_vs_x"], color="#2ca02c", lw=2)
-            _axx.axvline(_sens["X"], color="grey", ls="--", lw=1)
-            _axx.set_xlabel("service level X")
-            _axx.set_ylabel("expected total subscriptions  Σ E[Z]")
-            _axx.set_title(f"Z vs. X  (α = {_sens['alpha']:.2f})")
-            _axx.grid(True, alpha=0.3)
+            _axb.plot(_sens["br_grid"], _sens["z_vs_br"], color="#ff7f0e", lw=2)
+            _axb.axvline(_sens["beta_r"], color="grey", ls="--", lw=1)
+            _axb.set_xlabel("cost-ratio sensitivity β_r")
+            _axb.set_ylabel("Σ E[Z]")
+            _axb.set_title(f"Z vs. β_r  (α={_sens['alpha']:.2f})")
+            _axb.grid(True, alpha=0.3)
+            _axc.plot(_sens["qe_grid"], _sens["z_vs_qe"], color="#2ca02c", lw=2)
+            _axc.axvline(_sens["q_eq"], color="grey", ls="--", lw=1)
+            _axc.set_xlabel("adoption at parity q_eq")
+            _axc.set_ylabel("Σ E[Z]")
+            _axc.set_title(f"Z vs. q_eq  (α={_sens['alpha']:.2f})")
+            _axc.grid(True, alpha=0.3)
             _figs.tight_layout()
             st.pyplot(_figs)
             _plt_sens.close(_figs)
@@ -3955,12 +3906,11 @@ with tab_subsim:
     with st.expander("🧭 Pareto-efficiëntie: BPA-winst vs. klantsurplus over (α, X)"):
         st.caption(
             "Elk punt is een combinatie van prijspercentage α en service level X. "
-            "Via de keten $(α,X)\\to p_r\\to E[Z_i]\\to$ kostenmodel worden twee "
+            "Via de keten $α\\to q(α)\\to E[Z_i]\\to$ kostenmodel worden twee "
             "concurrerende doelen berekend: de **BPA-marge** (€) en het totale "
-            "**klantsurplus** $\\sum_{klant}(\\text{zelf-voorraadkosten}-"
-            "\\text{abonnementskosten})$. De Pareto-frontier verbindt de "
-            "niet-gedomineerde combinaties (geen enkele andere (α,X) scoort op "
-            "beide doelen beter)."
+            "**klantsurplus**. De adoptie q(α) hangt alleen van α af; X werkt via "
+            "de voorraad-/kostenkant. De Pareto-frontier verbindt de "
+            "niet-gedomineerde combinaties."
         )
         _kp_par = st.session_state.get("kosten_params", {})
         _kappa_bpa_par = float(_kp_par.get("kappa_bpa", 0.20))
@@ -3973,7 +3923,7 @@ with tab_subsim:
         _cp1, _cp2 = st.columns(2)
         with _cp1:
             _pa_min = st.number_input(
-                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
+                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_par_amin")
             _pa_max = st.number_input(
                 "α-bereik max", min_value=0.01, max_value=1.0, value=0.30,
@@ -4000,11 +3950,9 @@ with tab_subsim:
                     with st.spinner("Pareto-frontier berekenen…"):
                         _par_df = pareto_alpha_X(
                             _ov_par, _a_vals, _x_vals,
-                            _p_dichtbij0, _p_ver0, _alpha0_sim, _X0_sim,
+                            float(_q_eq), float(_beta_r),
                             _kappa_bpa_par, _kappa_c_par,
-                            _gamma_alpha, _gamma_X,
-                            excel_file=_excel_arg(), codes=_cls_codes,
-                            s_alpha=_s_alpha)
+                            excel_file=_excel_arg(), codes=_cls_codes)
                     if _par_df.empty:
                         st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_par_data", None)
@@ -4026,7 +3974,6 @@ with tab_subsim:
             else:
                 _m = _valid["margin"].to_numpy()
                 _s = _valid["surplus"].to_numpy()
-                # Niet-gedomineerde punten (maximaliseer marge én surplus).
                 _eff = np.ones(len(_valid), dtype=bool)
                 for _i in range(len(_valid)):
                     for _j in range(len(_valid)):
@@ -4043,14 +3990,12 @@ with tab_subsim:
                     edgecolor="white", linewidth=0.6, zorder=3)
                 _cb = _figp.colorbar(_sc, ax=_axp)
                 _cb.set_label("price percentage α")
-                # Pareto-frontier: niet-gedomineerde punten verbinden.
                 _front = _valid[_eff].sort_values("margin")
                 _axp.plot(
                     _front["margin"], _front["surplus"],
                     color="#d62728", lw=2, marker="o", ms=9,
                     markerfacecolor="none", markeredgecolor="#d62728",
                     label="Pareto-frontier", zorder=4)
-                # Markeer onhaalbare combinaties (rand rood).
                 _infeas = _valid[~_valid["feasible"]]
                 if not _infeas.empty:
                     _axp.scatter(
@@ -4068,7 +4013,6 @@ with tab_subsim:
                 st.pyplot(_figp)
                 _plt_par.close(_figp)
 
-                # Tabel met de Pareto-efficiënte combinaties.
                 st.markdown("**Pareto-efficiënte (α, X)-combinaties**")
                 _tab = _front.copy()
                 _tab["α"]              = _tab["alpha"].map(lambda v: f"{v:.0%}")
@@ -4092,8 +4036,8 @@ with tab_subsim:
         st.caption(
             "Zet het service level X vast en zoek het prijspercentage α dat de "
             "BPA-marge maximaliseert. Een hogere α verhoogt de omzet per klant "
-            "maar verlaagt de adoptie $E[Z_i]$ via het WTP-model, dus er bestaat "
-            "doorgaans een inwendig optimum."
+            "maar verlaagt de adoptie q(α), dus er bestaat doorgaans een "
+            "inwendig optimum."
         )
         _kp_opt = st.session_state.get("kosten_params", {})
         _kappa_bpa_opt = float(_kp_opt.get("kappa_bpa", 0.20))
@@ -4107,10 +4051,10 @@ with tab_subsim:
         with _co1:
             _X_opt = st.number_input(
                 "Vast service level X", min_value=0.50, max_value=0.9999,
-                value=float(_X_sim), step=0.005, format="%.3f",
+                value=float(_X_def_sim), step=0.005, format="%.3f",
                 key="subsim_opt_X")
             _oa_min = st.number_input(
-                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
+                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_opt_amin")
         with _co2:
             _oa_n = st.slider(
@@ -4133,12 +4077,10 @@ with tab_subsim:
                     with st.spinner("Optimale α zoeken…"):
                         _opt_curve, _opt_best = optimale_alpha_bij_X(
                             _ov_opt, float(_X_opt), _oa_grid,
-                            _p_dichtbij0, _p_ver0, _alpha0_sim, _X0_sim,
+                            float(_q_eq), float(_beta_r),
                             _kappa_bpa_opt, _kappa_c_opt,
-                            _gamma_alpha, _gamma_X,
                             excel_file=_excel_arg(), codes=_cls_codes,
-                            alleen_haalbaar=bool(_opt_feas),
-                            s_alpha=_s_alpha)
+                            alleen_haalbaar=bool(_opt_feas))
                     if _opt_curve is None or _opt_curve.empty or _opt_best is None:
                         st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_opt_data", None)
@@ -4178,7 +4120,6 @@ with tab_subsim:
             _axo.set_ylabel("BPA margin (€)")
             _axo.set_title(f"Margin vs. α at fixed X = {_oX:.3f}  (analytical E[Z])")
             _axo.grid(True, alpha=0.3)
-            # Tweede as: totale adoptie Σ Z om de trade-off te tonen.
             _axo2 = _axo.twinx()
             _axo2.plot(_ocurve["alpha"], _ocurve["total_Z"],
                        color="#2ca02c", lw=1.5, ls="-.", alpha=0.7,
@@ -4192,7 +4133,6 @@ with tab_subsim:
             st.pyplot(_figo)
             _plt_opt.close(_figo)
 
-            # Tabel met revenue, costs en stocklevels per α (naast de marge).
             st.markdown("**Revenue, costs en stocklevels per α** (bij vast X)")
             _tab_opt = _ocurve.copy()
             _tab_opt["α"]              = _tab_opt["alpha"].map(lambda v: f"{v:.1%}")
@@ -4205,7 +4145,6 @@ with tab_subsim:
                 _tab_opt[["α", "BPA-marge (€)", "Revenue (€)", "Costs (€)",
                           "Stocklevel (units)"]],
                 hide_index=True, use_container_width=True)
-
             st.download_button(
                 "⬇️ Download marge-vs-α curve (CSV)",
                 _opt_data["curve"].to_csv(index=False).encode("utf-8"),
@@ -4221,42 +4160,34 @@ with tab_sensitivity:
     st.subheader("Sensitivity-analyse van de WTP-functie")
     st.markdown(
         "Kies zelf de **afhankelijke (y-as)** uitkomst en de **onafhankelijke (x-as)** "
-        "variabele uit de willingness-to-pay-keten. Optioneel varieer je een **tweede** "
+        "variabele uit de adoptie-/kostenketen. Optioneel varieer je een **tweede** "
         "element om een familie van curves te tekenen, zodat je twee variabelen direct "
         "tegen elkaar kunt afwegen.\n\n"
         "Per parameterpunt loopt de volledige keten: "
-        "$\\text{WTP-elementen}\\to p_r(α,X)\\to E[Z_i]\\to$ kostenmodel "
-        "$\\to$ **BPA-marge / klantsurplus**. De adoptie volgt "
-        "$p_r(α,X)=σ\\!\\big(\\mathrm{logit}(p_0)-γ_α\\tfrac{α-α_0}{α_0}"
-        "+γ_X[g(X)-g(X_0)]\\big)\\cdot \\mathrm{gate}(α)$ met $g(X)=-\\ln(1-X)$, "
-        "voor de twee regionale baselines (Benelux/overig)."
+        "$\\text{parameters}\\to q(α)\\to E[Z_i]\\to$ kostenmodel "
+        "$\\to$ **BPA-marge / klantsurplus**. De adoptie volgt het globale "
+        "logit-model $q(α)=σ\\!\\big(\\operatorname{logit}(q_{eq})+β_r\\ln(κ_c/α)\\big)$; "
+        "de kans hangt alleen van α af (via κ_c/α), X werkt via de "
+        "voorraad-/kostenkant."
     )
 
     # ── Registry van WTP-elementen (label, grenzen, stap, default) ─────────
     _WTP_PARAMS = {
-        "p_dichtbij0": {"label": "p₀ dichtbij — baseline Benelux", "axis": "p₀ near — baseline Benelux",  "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
-        "p_ver0":      {"label": "p₀ ver — baseline overig",       "axis": "p₀ far — baseline other",      "min": 0.0,    "max": 1.0,    "step": 0.05,  "fmt": "%.3f"},
-        "alpha":       {"label": "α — prijspercentage",            "axis": "α — price percentage",         "min": 0.0,    "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X":           {"label": "X — service level",              "axis": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "alpha0":      {"label": "α₀ — referentieprijs",           "axis": "α₀ — reference price",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X0":          {"label": "X₀ — referentie service",        "axis": "X₀ — reference service",       "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "gamma_alpha": {"label": "γ_α — prijsgevoeligheid",        "axis": "γ_α — price sensitivity",      "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "gamma_X":     {"label": "γ_X — servicegevoeligheid",      "axis": "γ_X — service sensitivity",    "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "s_alpha":     {"label": "s — scherpte WTP-plafond",       "axis": "s — sharpness WTP ceiling",    "min": 0.005,  "max": 0.10,   "step": 0.005, "fmt": "%.3f"},
+        "alpha":   {"label": "α — prijspercentage",            "axis": "α — price percentage",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X":       {"label": "X — service level",              "axis": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "q_eq":    {"label": "q_eq — adoptie bij pariteit",     "axis": "q_eq — adoption at parity",    "min": 0.01,   "max": 0.99,   "step": 0.05,  "fmt": "%.3f"},
+        "beta_r":  {"label": "β_r — kostenratio-gevoeligheid",  "axis": "β_r — cost-ratio sensitivity", "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "kappa_c": {"label": "κ_c — kostenpariteit",            "axis": "κ_c — cost parity",            "min": 0.01,   "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
     }
 
     # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
     _kp_se = st.session_state.get("kosten_params", {})
     _seed_se = {
-        "p_dichtbij0": float(st.session_state.get("subsim_p_dichtbij0", 0.70)),
-        "p_ver0":      float(st.session_state.get("subsim_p_ver0", 0.40)),
-        "alpha":       float(_kp_se.get("alpha", 0.15)),
-        "X":           float(_kp_se.get("service_level", 0.99)),
-        "alpha0":      float(st.session_state.get("subsim_alpha0", 0.15)),
-        "X0":          float(st.session_state.get("subsim_X0", 0.98)),
-        "gamma_alpha": float(st.session_state.get("subsim_gamma_alpha", 1.0)),
-        "gamma_X":     float(st.session_state.get("subsim_gamma_X", 0.5)),
-        "s_alpha":     float(st.session_state.get("subsim_s_alpha", 0.02)),
+        "alpha":   float(_kp_se.get("alpha", 0.15)),
+        "X":       float(_kp_se.get("service_level", 0.99)),
+        "q_eq":    float(st.session_state.get("subsim_q_eq", 0.55)),
+        "beta_r":  float(st.session_state.get("subsim_beta_r", 1.0)),
+        "kappa_c": float(_kp_se.get("kappa_c", 0.25)),
     }
 
     def _clip_se(_name, _val):
@@ -4267,11 +4198,10 @@ with tab_sensitivity:
 
     # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
     _Y_METRICS = {
-        "bpa_margin": {"label": "Totale BPA-winst (€)",            "axis": "total BPA profit (€)",            "tbl": "BPA-winst (€)",   "kind": "euro"},
-        "surplus":    {"label": "Totaal klantsurplus (€)",        "axis": "total customer surplus (€)",        "tbl": "Klantsurplus (€)", "kind": "euro"},
-        "total_Z":    {"label": "Verwacht aantal subscripties E[Z]", "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",          "kind": "num"},
-        "p_dichtbij": {"label": "Adoptie p_r — Benelux",          "axis": "adoption parameter p_r (Benelux)",   "tbl": "p_r Benelux",    "kind": "pct"},
-        "p_ver":      {"label": "Adoptie p_r — overig",           "axis": "adoption parameter p_r (other)",    "tbl": "p_r overig",     "kind": "pct"},
+        "bpa_margin": {"label": "Totale BPA-winst (€)",              "axis": "total BPA profit (€)",                  "tbl": "BPA-winst (€)",    "kind": "euro"},
+        "surplus":    {"label": "Totaal klantsurplus (€)",           "axis": "total customer surplus (€)",            "tbl": "Klantsurplus (€)", "kind": "euro"},
+        "total_Z":    {"label": "Verwacht aantal subscripties E[Z]", "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",             "kind": "num"},
+        "q":          {"label": "Adoptiekans q(α)",                  "axis": "adoption probability q(α)",             "tbl": "q(α)",             "kind": "pct"},
     }
 
     # ── Afhankelijke (y-as) variabele ─────────────────────────────────────
@@ -4286,7 +4216,7 @@ with tab_sensitivity:
     with _cx:
         _x_var = st.selectbox(
             "X-as variabele", options=list(_WTP_PARAMS.keys()),
-            format_func=lambda k: _labels_se[k], index=2, key="se_x_var",
+            format_func=lambda k: _labels_se[k], index=0, key="se_x_var",
             help="Het WTP-element dat over de x-as wordt gevarieerd.")
     with _ccurve:
         _curve_opts = ["(geen)"] + [k for k in _WTP_PARAMS if k != _x_var]
@@ -4347,20 +4277,7 @@ with tab_sensitivity:
                     value=_clip_se(_k, _seed_se[_k]), step=_spec["step"],
                     format=_spec["fmt"], key=f"se_fix_{_k}")
 
-    # ── WTP-plafond (α_U = κ_c) ───────────────────────────────────────────
-    _kc_se = float(_kp_se.get("kappa_c", 0.25))
-    _cw1, _cw2 = st.columns([2, 1])
-    with _cw1:
-        _wtp_gate = st.checkbox(
-            f"WTP-plafond toepassen (adoptie → 0 richting α = κ_c ≈ {_kc_se:.0%})",
-            value=True, key="se_wtp_gate",
-            help="Vermenigvuldigt p_r met de gladde poort gate(α) zodat de "
-                 "adoptie naar 0 zakt naarmate α de bovengrens κ_c nadert.")
-    with _cw2:
-        _kc_input = st.number_input(
-            "κ_c (α_U)", min_value=0.01, max_value=1.0, value=_kc_se,
-            step=0.01, format="%.3f", key="se_kappa_c", disabled=not _wtp_gate)
-    _alpha_max_se = float(_kc_input) if _wtp_gate else None
+    # (WTP-plafond vervallen: adoptie hangt via κ_c/α af van α; geen aparte poort.)
 
     # ── Kostenparameters + bron ───────────────────────────────────────────
     _kappa_bpa_se = float(_kp_se.get("kappa_bpa", 0.20))
@@ -4406,7 +4323,6 @@ with tab_sensitivity:
                 _p[_x_var] = float(_xv)
                 if _cval is not None:
                     _p[_curve_var] = float(_cval)
-                _p["alpha_max"] = _alpha_max_se
                 _dicts.append(_p)
         return _dicts
 
