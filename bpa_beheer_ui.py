@@ -4303,6 +4303,13 @@ with tab_sensitivity:
     # ── X-as bereik ───────────────────────────────────────────────────────
     _spec_x = _WTP_PARAMS[_x_var]
     st.markdown(f"**X-as bereik — {_spec_x['label']}**")
+    # Opgeslagen min/max-waarden van een vorige x-variabele kunnen buiten de
+    # grenzen van de nieuwe variabele vallen -> Streamlit exception -> tab breekt.
+    for _se_key, _se_def in (("se_x_min", _spec_x["min"]), ("se_x_max", _spec_x["max"])):
+        if _se_key in st.session_state:
+            _sv = st.session_state[_se_key]
+            if not (_spec_x["min"] <= _sv <= _spec_x["max"]):
+                st.session_state[_se_key] = _se_def
     _cx1, _cx2, _cx3 = st.columns(3)
     with _cx1:
         _x_min = st.number_input(
@@ -4323,6 +4330,12 @@ with tab_sensitivity:
     if _curve_var != "(geen)":
         _spec_c = _WTP_PARAMS[_curve_var]
         st.markdown(f"**Curve-waarden — {_spec_c['label']}**")
+        # Zelfde guard als voor se_x_min/se_x_max: reset bij wisselen curve-var.
+        for _se_key, _se_def in (("se_c_min", _clip_se(_curve_var, _seed_se[_curve_var])), ("se_c_max", _spec_c["max"])):
+            if _se_key in st.session_state:
+                _sv = st.session_state[_se_key]
+                if not (_spec_c["min"] <= _sv <= _spec_c["max"]):
+                    st.session_state[_se_key] = _se_def
         _cc1, _cc2, _cc3 = st.columns(3)
         with _cc1:
             _c_min = st.number_input(
