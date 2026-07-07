@@ -817,8 +817,12 @@ def pareto_alpha_X(
     if _n.empty:
         return pd.DataFrame()
 
-    # Per-component λ per klant uit het basisoverzicht (λ/n is invariant in n).
-    base      = overzicht_df
+    # Beperk het overzicht tot componenten waarvoor adoptie-data beschikbaar
+    # is. Componenten zonder data zouden anders een vaste (α-onafhankelijke)
+    # bijdrage geven aan de marge, wat de curve en total_Z inconsistent maakt.
+    base = overzicht_df.loc[overzicht_df.index.isin(_n.index)]
+    if base.empty:
+        return pd.DataFrame()
     base_n    = base['n_klanten'].astype(float)
     base_lam  = base['lambda_jr'].astype(float)
     lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
@@ -826,23 +830,14 @@ def pareto_alpha_X(
     rijen = []
     for _a in alpha_waarden:
         # E[Z_i(α)] = N_i · q(α); q hangt alleen van α af (niet van X).
-        _q    = adoptie_kans(_a, kappa_c, q_eq, beta_r)
-        _ez   = _n * _q                          # continu: N_i · q(α)
-        _total_z  = float(_ez.sum())
-        _ez_re    = _ez.reindex(base.index)       # uitgelijnd op overzicht
-        _present  = _ez_re.notna()
-        # n_klanten afgerond (discrete klantenpool); lambda_jr CONTINU zodat de
-        # marge-curve glad verloopt (geen trapsgewijze sprongen door afronden).
-        _ez_cont  = _ez_re.where(_present, base_n)          # float Z_i of fallback
-        _n_int    = _ez_cont.round().clip(lower=0).astype(int)
+        _q       = adoptie_kans(_a, kappa_c, q_eq, beta_r)
+        _ez      = (_n * _q).reindex(base.index)  # continu, alleen adoptie-componenten
+        _total_z = float(_ez.sum())
+        _n_int   = _ez.round().clip(lower=0).astype(int)
         for _x in X_waarden:
             mod = base.copy()
             mod['n_klanten'] = _n_int.values
-            mod['lambda_jr'] = np.where(
-                _present.values,
-                _ez_cont.values * lam_per_cust.values,  # continu: Z_i(α) · λ/N
-                base_lam.values,
-            )
+            mod['lambda_jr'] = (_ez * lam_per_cust).values  # continu: Z_i(α) · λ/N
             if int(mod['n_klanten'].sum()) <= 0:
                 _margin  = 0.0
                 _surplus = 0.0
@@ -915,7 +910,10 @@ def metrieken_voor_wtp_grid(
     if _n.empty:
         return [_leeg() for _ in param_dicts]
 
-    base      = overzicht_df
+    # Beperk het overzicht tot componenten waarvoor adoptie-data beschikbaar is.
+    base = overzicht_df.loc[overzicht_df.index.isin(_n.index)]
+    if base.empty:
+        return [_leeg() for _ in param_dicts]
     base_n    = base['n_klanten'].astype(float)
     base_lam  = base['lambda_jr'].astype(float)
     lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
@@ -928,19 +926,12 @@ def metrieken_voor_wtp_grid(
         _br = float(p['beta_r'])
         _kc = float(p.get('kappa_c', kappa_c))
         _q       = adoptie_kans(_a, _kc, _qe, _br)
-        _ez      = _n * _q                              # continu: N_i · q(α)
+        _ez      = (_n * _q).reindex(base.index)  # continu, alleen adoptie-componenten
         _total_z = float(_ez.sum())
-        _ez_re   = _ez.reindex(base.index)
-        _present = _ez_re.notna()
-        _ez_cont = _ez_re.where(_present, base_n)       # float Z_i of fallback
-        _n_int   = _ez_cont.round().clip(lower=0).astype(int)
+        _n_int   = _ez.round().clip(lower=0).astype(int)
         mod = base.copy()
         mod['n_klanten'] = _n_int.values
-        mod['lambda_jr'] = np.where(
-            _present.values,
-            _ez_cont.values * lam_per_cust.values,      # continu: Z_i(α) · λ/N
-            base_lam.values,
-        )
+        mod['lambda_jr'] = (_ez * lam_per_cust).values  # continu: Z_i(α) · λ/N
         _rec = {'total_Z': _total_z, 'q': float(_q)}
         if int(mod['n_klanten'].sum()) <= 0:
             _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False})
