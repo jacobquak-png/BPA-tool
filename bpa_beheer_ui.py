@@ -4290,6 +4290,11 @@ with tab_sensitivity:
             help="Het WTP-element dat over de x-as wordt gevarieerd.")
     with _ccurve:
         _curve_opts = ["(geen)"] + [k for k in _WTP_PARAMS if k != _x_var]
+        # Als de opgeslagen curve-variabele gelijk is aan de nieuw gekozen
+        # x-variabele, reset dan naar "(geen)" — anders gooit Streamlit een
+        # exception (waarde niet in opties) en valt de tab-layout uit elkaar.
+        if st.session_state.get("se_curve_var", "(geen)") == _x_var:
+            st.session_state["se_curve_var"] = "(geen)"
         _curve_var = st.selectbox(
             "Curve-variabele (optioneel)", options=_curve_opts,
             format_func=lambda k: _labels_se.get(k, k), index=0, key="se_curve_var",
