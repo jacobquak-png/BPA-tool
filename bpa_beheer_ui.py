@@ -2700,6 +2700,7 @@ with tab_classificatie:
             st.session_state.cls_result   = _df_filtered
             st.session_state.cls_payload  = _payload
             st.session_state.cls_params   = _params
+            st.session_state.cls_raw      = _df_raw
             _sel_info = (f"top {_params.top_n}" if _params.selectie_modus == "top_n"
                          else f"drempel ≥ {_params.threshold}")
             st.toast(f"{_payload['n_items']} componenten geselecteerd "
@@ -2760,6 +2761,109 @@ with tab_classificatie:
             data=_csv, file_name=f"classificatie_{date.today()}.csv",
             mime="text/csv",
         )
+
+        # ── Grensgevallen ──
+        if "cls_raw" in st.session_state:
+            _params_g = st.session_state.cls_params
+            _df_g_raw = st.session_state.cls_raw
+            _types_g = set(s.lower() for s in _params_g.article_type_filter)
+            _mask_g = (
+                _df_g_raw["ArticleType"].astype(str).str.strip().str.lower()
+                .isin(_types_g)
+            )
+            _df_g_scored = bereken_scores(_df_g_raw[_mask_g].copy(), _params_g)
+
+            _COL_LOC = "Aantal_klantlocaties_met_orders_5jr"
+            _COL_PRI = "Standaard verkoopprijs"
+            _COL_ORD = "Gem_orders_per_klantlocatie_5jr"
+
+            def _grens_tabel(col_dim, thr_val):
+                if thr_val <= 0:
+                    return pd.DataFrame()
+                m_loc = _df_g_scored[_COL_LOC].fillna(0) >= _params_g.min_klantlocaties
+                m_pri = _df_g_scored[_COL_PRI].fillna(0) >= _params_g.min_prijs
+                m_ord = _df_g_scored[_COL_ORD].fillna(0) >= _params_g.min_orders
+                m_fail = _df_g_scored[col_dim].fillna(0) < thr_val
+                if col_dim == _COL_LOC:
+                    m_oth = m_pri & m_ord
+                elif col_dim == _COL_PRI:
+                    m_oth = m_loc & m_ord
+                else:
+                    m_oth = m_loc & m_pri
+                out = _df_g_scored[m_fail & m_oth].copy()
+                if out.empty:
+                    return out
+                out["Afstand_tot_drempel"] = (thr_val - out[col_dim].fillna(0)).round(3)
+                _code_col = next(
+                    (c for c in [
+                        "Verkooporderregel artikel.Artikel.Artikelcode",
+                        "Artikelcode", "Code",
+                    ] if c in out.columns), None
+                )
+                keep = [c for c in [
+                    _code_col, "ABC_categorie", "ArticleType", col_dim,
+                    "Afstand_tot_drempel", "Score_Prijs",
+                    "Score_Locaties", "Score_Orders", "Gewogen_Score",
+                ] if c and c in out.columns]
+                return out.sort_values("Afstand_tot_drempel").head(20)[keep]
+
+            st.divider()
+            st.markdown(
+                "### Grensgevallen — artikelen net onder de huidige drempel"
+            )
+            st.caption(
+                "Artikelen die door precies één filter worden uitgesloten "
+                "en het dichtst bij de drempel liggen. Scores zijn hypothetisch "
+                "(← zo zouden ze scoren als ze zouden worden toegelaten)."
+            )
+            _g_tabs = st.tabs([
+                f"Locaties (≥ {_params_g.min_klantlocaties})",
+                f"Prijs (≥ €{_params_g.min_prijs:,.0f})",
+                f"Orders (≥ {_params_g.min_orders:.1f})",
+            ])
+            for _gc, _gcol, _gthr, _glbl in [
+                (_g_tabs[0], _COL_LOC, _params_g.min_klantlocaties, "klantlocaties"),
+                (_g_tabs[1], _COL_PRI, _params_g.min_prijs,         "prijs (€)"),
+                (_g_tabs[2], _COL_ORD, _params_g.min_orders,        "orders/locatie"),
+            ]:
+                with _gc:
+                    _gdf = _grens_tabel(_gcol, _gthr)
+                    if _gdf.empty:
+                        st.info(
+                            "Drempel staat op 0 — filter is inactief."
+                            if _gthr <= 0
+                            else "Geen artikelen net onder de drempel gevonden."
+                        )
+                    else:
+                        st.caption(
+                            f"**{len(_gdf)}** artikelen die dit filter nipt missen "
+                            "(gesorteerd op afstand tot drempel)."
+                        )
+                        st.dataframe(_gdf, use_container_width=True, hide_index=True)
+                    if _gthr > 0 and _gcol in _df_g_scored.columns:
+                        import matplotlib.pyplot as _plt_grens
+                        _hvals = _df_g_scored[_gcol].fillna(0)
+                        _hclip = max(float(_gthr) * 3, float(_hvals.quantile(0.95)))
+                        _hdata = _hvals[_hvals <= _hclip].values
+                        _fig_g, _ax_g = _plt_grens.subplots(figsize=(7, 2.5))
+                        _n_g, _bins_g, _patches_g = _ax_g.hist(
+                            _hdata, bins=40, color="#bdbdbd", edgecolor="white"
+                        )
+                        for _p_g, _bv_g in zip(_patches_g, _bins_g[:-1]):
+                            _p_g.set_facecolor(
+                                "#e57373" if _bv_g < _gthr else "#81c784"
+                            )
+                        _ax_g.axvline(
+                            _gthr, color="#b71c1c", linestyle="--",
+                            linewidth=1.5, label=f"drempel = {_gthr}"
+                        )
+                        _ax_g.set_xlabel(_glbl)
+                        _ax_g.set_ylabel("Aantal")
+                        _ax_g.legend(fontsize=8)
+                        _ax_g.tick_params(labelsize=8)
+                        _plt_grens.tight_layout()
+                        st.pyplot(_fig_g)
+                        _plt_grens.close(_fig_g)
 
         # ── Verdeling: 3D-visualisatie + bar charts per criterium ──
         # Twee weergaven: (a) genormaliseerde scores (0–100/200) en
