@@ -2762,108 +2762,114 @@ with tab_classificatie:
             mime="text/csv",
         )
 
-        # ── Grensgevallen ──
+        # ── Drempel-sweep analyse ──
         if "cls_raw" in st.session_state:
-            _params_g = st.session_state.cls_params
-            _df_g_raw = st.session_state.cls_raw
-            _types_g = set(s.lower() for s in _params_g.article_type_filter)
-            _mask_g = (
-                _df_g_raw["ArticleType"].astype(str).str.strip().str.lower()
-                .isin(_types_g)
-            )
-            _df_g_scored = bereken_scores(_df_g_raw[_mask_g].copy(), _params_g)
-
-            _COL_LOC = "Aantal_klantlocaties_met_orders_5jr"
-            _COL_PRI = "Standaard verkoopprijs"
-            _COL_ORD = "Gem_orders_per_klantlocatie_5jr"
-
-            def _grens_tabel(col_dim, thr_val):
-                if thr_val <= 0:
-                    return pd.DataFrame()
-                m_loc = _df_g_scored[_COL_LOC].fillna(0) >= _params_g.min_klantlocaties
-                m_pri = _df_g_scored[_COL_PRI].fillna(0) >= _params_g.min_prijs
-                m_ord = _df_g_scored[_COL_ORD].fillna(0) >= _params_g.min_orders
-                m_fail = _df_g_scored[col_dim].fillna(0) < thr_val
-                if col_dim == _COL_LOC:
-                    m_oth = m_pri & m_ord
-                elif col_dim == _COL_PRI:
-                    m_oth = m_loc & m_ord
-                else:
-                    m_oth = m_loc & m_pri
-                out = _df_g_scored[m_fail & m_oth].copy()
-                if out.empty:
-                    return out
-                out["Afstand_tot_drempel"] = (thr_val - out[col_dim].fillna(0)).round(3)
-                _code_col = next(
-                    (c for c in [
-                        "Verkooporderregel artikel.Artikel.Artikelcode",
-                        "Artikelcode", "Code",
-                    ] if c in out.columns), None
+            with st.expander("📉 Drempel-sweep: stabiliteit van de selectielijst", expanded=False):
+                st.caption(
+                    "Per filter wordt één drempel gevarieerd; de andere twee blijven op hun huidige waarde. "
+                    "Jaccard-similariteit en Kendall\u2019s \u03c4 meten hoeveel de selectielijst "
+                    "afwijkt t.o.v. de huidige instelling (referentie = rode stippellijn)."
                 )
-                keep = [c for c in [
-                    _code_col, "ABC_categorie", "ArticleType", col_dim,
-                    "Afstand_tot_drempel", "Score_Prijs",
-                    "Score_Locaties", "Score_Orders", "Gewogen_Score",
-                ] if c and c in out.columns]
-                return out.sort_values("Afstand_tot_drempel").head(20)[keep]
+                _sw_raw    = st.session_state.cls_raw
+                _sw_params = st.session_state.cls_params
+                _sw_types  = set(s.lower() for s in _sw_params.article_type_filter)
+                _sw_mask   = (
+                    _sw_raw["ArticleType"].astype(str).str.strip().str.lower()
+                    .isin(_sw_types)
+                )
+                _sw_scored = bereken_scores(_sw_raw[_sw_mask].copy(), _sw_params)
 
-            st.divider()
-            st.markdown(
-                "### Grensgevallen — artikelen net onder de huidige drempel"
-            )
-            st.caption(
-                "Artikelen die door precies één filter worden uitgesloten "
-                "en het dichtst bij de drempel liggen. Scores zijn hypothetisch "
-                "(← zo zouden ze scoren als ze zouden worden toegelaten)."
-            )
-            _g_tabs = st.tabs([
-                f"Locaties (≥ {_params_g.min_klantlocaties})",
-                f"Prijs (≥ €{_params_g.min_prijs:,.0f})",
-                f"Orders (≥ {_params_g.min_orders:.1f})",
-            ])
-            for _gc, _gcol, _gthr, _glbl in [
-                (_g_tabs[0], _COL_LOC, _params_g.min_klantlocaties, "klantlocaties"),
-                (_g_tabs[1], _COL_PRI, _params_g.min_prijs,         "prijs (€)"),
-                (_g_tabs[2], _COL_ORD, _params_g.min_orders,        "orders/locatie"),
-            ]:
-                with _gc:
-                    _gdf = _grens_tabel(_gcol, _gthr)
-                    if _gdf.empty:
-                        st.info(
-                            "Drempel staat op 0 — filter is inactief."
-                            if _gthr <= 0
-                            else "Geen artikelen net onder de drempel gevonden."
-                        )
-                    else:
-                        st.caption(
-                            f"**{len(_gdf)}** artikelen die dit filter nipt missen "
-                            "(gesorteerd op afstand tot drempel)."
-                        )
-                        st.dataframe(_gdf, use_container_width=True, hide_index=True)
-                    if _gthr > 0 and _gcol in _df_g_scored.columns:
-                        import matplotlib.pyplot as _plt_grens
-                        _hvals = _df_g_scored[_gcol].fillna(0)
-                        _hclip = max(float(_gthr) * 3, float(_hvals.quantile(0.95)))
-                        _hdata = _hvals[_hvals <= _hclip].values
-                        _fig_g, _ax_g = _plt_grens.subplots(figsize=(7, 2.5))
-                        _n_g, _bins_g, _patches_g = _ax_g.hist(
-                            _hdata, bins=40, color="#bdbdbd", edgecolor="white"
-                        )
-                        for _p_g, _bv_g in zip(_patches_g, _bins_g[:-1]):
-                            _p_g.set_facecolor(
-                                "#e57373" if _bv_g < _gthr else "#81c784"
-                            )
-                        _ax_g.axvline(
-                            _gthr, color="#b71c1c", linestyle="--",
-                            linewidth=1.5, label=f"drempel = {_gthr}"
-                        )
-                        _ax_g.set_xlabel(_glbl)
-                        _ax_g.set_ylabel("Aantal")
-                        _ax_g.legend(fontsize=8)
-                        _ax_g.tick_params(labelsize=8)
-                        _plt_grens.tight_layout()
-                        st.pyplot(_fig_g)
-                        _plt_grens.close(_fig_g)
+                _SW_LOC = "Aantal_klantlocaties_met_orders_5jr"
+                _SW_PRI = "Standaard verkoopprijs"
+                _SW_ORD = "Gem_orders_per_klantlocatie_5jr"
+
+                def _sw_sel(ml, mp, mo):
+                    """Hard filters + topn; returns frozenset of index labels."""
+                    _t = _sw_scored.copy()
+                    if ml > 0 and _SW_LOC in _t.columns:
+                        _t = _t[_t[_SW_LOC].fillna(0) >= ml]
+                    if mp > 0 and _SW_PRI in _t.columns:
+                        _t = _t[_t[_SW_PRI].fillna(0) >= mp]
+                    if mo > 0 and _SW_ORD in _t.columns:
+                        _t = _t[_t[_SW_ORD].fillna(0) >= mo]
+                    return frozenset(pas_topn_selectie_toe(_t, _sw_params).index)
+
+                def _sweep_stats(col_dim, thr_vals, base_loc, base_pri, base_ord):
+                    """Returns list of (thr, jaccard, kendall_tau) vs baseline."""
+                    try:
+                        from scipy.stats import kendalltau as _kt
+                    except ImportError:
+                        _kt = None
+                    import numpy as _np_sw
+                    _idx     = list(_sw_scored.index)
+                    _base    = _sw_sel(base_loc, base_pri, base_ord)
+                    _v_base  = _np_sw.array([1 if i in _base else 0 for i in _idx], dtype=_np_sw.int8)
+                    out = []
+                    for tv in thr_vals:
+                        ml = tv if col_dim == _SW_LOC else base_loc
+                        mp = tv if col_dim == _SW_PRI else base_pri
+                        mo = tv if col_dim == _SW_ORD else base_ord
+                        _new   = _sw_sel(ml, mp, mo)
+                        _v_new = _np_sw.array([1 if i in _new else 0 for i in _idx], dtype=_np_sw.int8)
+                        _inter = int((_v_base & _v_new).sum())
+                        _union = int((_v_base | _v_new).sum())
+                        _jac   = _inter / _union if _union > 0 else 1.0
+                        if _kt is not None:
+                            try:
+                                _tau = float(_kt(_v_base, _v_new)[0])
+                            except Exception:
+                                _tau = float("nan")
+                        else:
+                            _tau = float("nan")
+                        out.append((tv, _jac, _tau))
+                    return out
+
+                import matplotlib.pyplot as _plt_sw
+                _sw_configs = [
+                    (_SW_LOC, "Min. klantlocaties",      float(_sw_params.min_klantlocaties)),
+                    (_SW_PRI, "Min. verkoopprijs (€)",   float(_sw_params.min_prijs)),
+                    (_SW_ORD, "Min. orders/locatie",     float(_sw_params.min_orders)),
+                ]
+                _sw_fig, _sw_axes = _plt_sw.subplots(2, 3, figsize=(13, 5.5), sharex="col")
+                for _ci, (_sw_col, _sw_lbl, _sw_cur) in enumerate(_sw_configs):
+                    _ax_j = _sw_axes[0][_ci]
+                    _ax_t = _sw_axes[1][_ci]
+                    if _sw_col not in _sw_scored.columns:
+                        for _ax in (_ax_j, _ax_t):
+                            _ax.text(0.5, 0.5, "kolom niet gevonden", ha="center",
+                                     va="center", transform=_ax.transAxes, fontsize=9)
+                        continue
+                    _sw_vals  = _sw_scored[_sw_col].fillna(0)
+                    _sw_p95   = float(_sw_vals.quantile(0.95))
+                    _sw_max   = max(_sw_p95, _sw_cur * 1.5, 1.0)
+                    _sw_steps = [_sw_max * k / 39 for k in range(40)]
+                    _sw_res   = _sweep_stats(
+                        _sw_col, _sw_steps,
+                        float(_sw_params.min_klantlocaties),
+                        float(_sw_params.min_prijs),
+                        float(_sw_params.min_orders),
+                    )
+                    _xs   = [r[0] for r in _sw_res]
+                    _jacs = [r[1] for r in _sw_res]
+                    _taus = [r[2] for r in _sw_res]
+                    _ax_j.plot(_xs, _jacs, color="#1976d2", linewidth=2)
+                    _ax_j.set_ylabel("Jaccard", fontsize=9)
+                    _ax_j.set_ylim(-0.05, 1.05)
+                    _ax_j.set_title(_sw_lbl, fontsize=9)
+                    _ax_t.plot(_xs, _taus, color="#388e3c", linewidth=2)
+                    _ax_t.set_ylabel("Kendall's \u03c4", fontsize=9)
+                    _ax_t.set_ylim(-0.05, 1.05)
+                    _ax_t.set_xlabel(_sw_lbl, fontsize=9)
+                    if _sw_cur > 0:
+                        for _ax in (_ax_j, _ax_t):
+                            _ax.axvline(_sw_cur, color="#b71c1c", linestyle="--",
+                                        linewidth=1.5, label=f"huidig: {_sw_cur:g}")
+                            _ax.legend(fontsize=8)
+                    for _ax in (_ax_j, _ax_t):
+                        _ax.tick_params(labelsize=8)
+                _plt_sw.tight_layout()
+                st.pyplot(_sw_fig)
+                _plt_sw.close(_sw_fig)
 
         # ── Verdeling: 3D-visualisatie + bar charts per criterium ──
         # Twee weergaven: (a) genormaliseerde scores (0–100/200) en
