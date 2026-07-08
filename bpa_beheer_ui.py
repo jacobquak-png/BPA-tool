@@ -152,8 +152,8 @@ def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float
         weight_locaties=p["weight_locaties"],
         weight_orders=p["weight_orders"],
         orders_power=p["orders_power"],
-        prijs_drempel=p.get("prijs_drempel", 0.0),
-        prijs_penalty=p.get("prijs_penalty", 0.0),
+        min_prijs=p.get("min_prijs", 0.0),
+        min_orders=p.get("min_orders", 0.0),
         min_klantlocaties=p["min_klantlocaties"],
         article_type_filter=tuple(p["article_type_filter"]),
     )
@@ -2617,21 +2617,23 @@ with tab_classificatie:
     st.markdown("**Niet-lineariteiten**")
     _ord_pow = st.slider("Orders-power", 1.0, 4.0, 2.0, 0.1, key="cls_ord_pow")
 
-    st.markdown("**Prijsdrempel-penalty**")
-    _pp1, _pp2 = st.columns(2)
-    with _pp1:
-        _prijs_drempel = st.number_input(
-            "Prijsdrempel (€)", 0.0, 1_000_000.0, 0.0, 10.0,
-            key="cls_prijs_drempel",
-            help="Componenten met een verkoopprijs ONDER deze drempel krijgen "
-                 "een penalty op hun gewogen score. 0 = penalty uit.",
+    st.markdown("**Min-filter drempels**")
+    st.caption(
+        "Artikelen onder deze drempels worden uitgesloten vóór de weging wordt toegepast."
+    )
+    _mf1, _mf2 = st.columns(2)
+    with _mf1:
+        _min_prijs = st.number_input(
+            "Min. verkoopprijs (€)", 0.0, 100_000.0, 0.0, 10.0,
+            key="cls_min_prijs",
+            help="Artikelen met verkoopprijs < dit bedrag worden uitgesloten (harde filter).",
         )
-    with _pp2:
-        _prijs_penalty = st.number_input(
-            "Penalty (scorepunten)", 0.0, 100.0, 0.0, 1.0,
-            key="cls_prijs_penalty",
-            help="Aantal scorepunten dat van de gewogen score wordt afgetrokken "
-                 "voor componenten onder de prijsdrempel.",
+    with _mf2:
+        _min_orders = st.number_input(
+            "Min. gem. orders/locatie", 0.0, 100.0, 0.0, 0.1,
+            key="cls_min_orders",
+            format="%.1f",
+            help="Artikelen met gem. orders/locatie < deze waarde worden uitgesloten.",
         )
 
     st.markdown("**Harde filters**")
@@ -2654,8 +2656,8 @@ with tab_classificatie:
         weight_locaties=float(_w_loc),
         weight_orders=float(_w_ord),
         orders_power=float(_ord_pow),
-        prijs_drempel=float(_prijs_drempel),
-        prijs_penalty=float(_prijs_penalty),
+        min_prijs=float(_min_prijs),
+        min_orders=float(_min_orders),
         min_klantlocaties=int(_min_loc),
         article_type_filter=_art_types,
     )
@@ -2973,8 +2975,8 @@ with tab_classificatie:
                     "weight_locaties":         _params.weight_locaties,
                     "weight_orders":           _params.weight_orders,
                     "orders_power":            _params.orders_power,
-                    "prijs_drempel":           _params.prijs_drempel,
-                    "prijs_penalty":           _params.prijs_penalty,
+                    "min_prijs":               _params.min_prijs,
+                    "min_orders":              _params.min_orders,
                     "min_klantlocaties":       _params.min_klantlocaties,
                     "article_type_filter":     list(_params.article_type_filter),
                 }, sort_keys=True)
