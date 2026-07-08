@@ -91,6 +91,8 @@ class ClassificatieParams:
     min_klantlocaties:       int = 5
     article_type_filter:     tuple = ("critical", "onbekend")  # case-insensitief
     lt_default_waarden:      tuple = ("30", "30 dagen", "30,0", "30.0")
+    score_methode:           str = "arithmetisch"  # "arithmetisch" of "geometrisch"
+    epsilon:                 float = 1.0            # verschuiving bij geometrisch gemiddelde
 
     def normaliseer_weights(self) -> "ClassificatieParams":
         """Zorg dat de gewichten optellen tot 1."""
@@ -222,6 +224,30 @@ def _mtbf_naar_jaren(raw, col_name: str | None) -> float | None:
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 
+def _gewogen_score(
+    score_prijs: pd.Series,
+    score_locaties: pd.Series,
+    score_orders: pd.Series,
+    p: ClassificatieParams,
+) -> pd.Series:
+    """Aggregeer de drie criterium-scores tot een gewogen eindscore.
+
+    arithmetisch : gewogen som (lineair compensatoir).
+    geometrisch  : gewogen geometrisch gemiddelde (gedeeltelijk compensatoir);
+                   scores worden verschoven met epsilon en geschaald naar (0, 1]
+                   vóór de machtsverheffing, conform G_i in het methoderapport.
+    """
+    wp, wc, ws = p.weight_prijs, p.weight_locaties, p.weight_orders
+    if p.score_methode == "geometrisch":
+        eps   = p.epsilon
+        denom = 100.0 + eps
+        sp = (score_prijs    + eps) / denom
+        sc = (score_locaties + eps) / denom
+        ss = (score_orders   + eps) / denom
+        return (100.0 * (sp ** wp) * (sc ** wc) * (ss ** ws)).round(1)
+    return (score_prijs * wp + score_locaties * wc + score_orders * ws).round(1)
+
+
 def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
     """
     Voegt de kolommen Score_Prijs, Score_Locaties, Score_Orders,
@@ -265,11 +291,9 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
         _scaled_orders = pd.Series(1.0, index=df.index)
     df["Score_Orders"] = (_scaled_orders ** p.orders_power) * 100
 
-    df["Gewogen_Score"] = (
-        df["Score_Prijs"]    * p.weight_prijs
-        + df["Score_Locaties"] * p.weight_locaties
-        + df["Score_Orders"]   * p.weight_orders
-    ).round(1)
+    df["Gewogen_Score"] = _gewogen_score(
+        df["Score_Prijs"], df["Score_Locaties"], df["Score_Orders"], p
+    )
 
     for col in ["Score_Prijs", "Score_Locaties", "Score_Orders"]:
         df[col] = df[col].round(1)
@@ -496,11 +520,12 @@ def _selectie_codes_voor_gewichten(
     harde filters; alleen de gewogen score wordt opnieuw berekend.
     """
     p = params.normaliseer_weights()
-    gewogen = (
-        df_scored_full["Score_Prijs"]    * p.weight_prijs
-        + df_scored_full["Score_Locaties"] * p.weight_locaties
-        + df_scored_full["Score_Orders"]   * p.weight_orders
-    ).round(1)
+    gewogen = _gewogen_score(
+        df_scored_full["Score_Prijs"],
+        df_scored_full["Score_Locaties"],
+        df_scored_full["Score_Orders"],
+        p,
+    )
     work = df_scored_full.copy()
     work["Gewogen_Score"] = gewogen
     if p.selectie_modus == "top_n":
@@ -617,12 +642,14 @@ def weight_sensitivity(
     _kand_codes_ser = kandidaten[code_col].astype(str)
 
     def _gewogen_op_kandidaten(wp: float, wl: float, wo: float) -> pd.Series:
-        _gw = (
-            kandidaten["Score_Prijs"]    * wp
-            + kandidaten["Score_Locaties"] * wl
-            + kandidaten["Score_Orders"]   * wo
+        from dataclasses import replace as _dc_replace
+        _p_tmp = _dc_replace(pb, weight_prijs=wp, weight_locaties=wl, weight_orders=wo)
+        return _gewogen_score(
+            kandidaten["Score_Prijs"],
+            kandidaten["Score_Locaties"],
+            kandidaten["Score_Orders"],
+            _p_tmp,
         )
-        return _gw.round(1)
 
     baseline_score = _gewogen_op_kandidaten(
         pb.weight_prijs, pb.weight_locaties, pb.weight_orders
