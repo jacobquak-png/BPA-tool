@@ -156,6 +156,8 @@ def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float
         min_orders=p.get("min_orders", 0.0),
         min_klantlocaties=p["min_klantlocaties"],
         article_type_filter=tuple(p["article_type_filter"]),
+        score_methode=p.get("score_methode", "arithmetisch"),
+        epsilon=p.get("epsilon", 1.0),
     )
     return weight_sensitivity(_df_scored, params, step=step, return_combos=True)
 
@@ -2636,6 +2638,30 @@ with tab_classificatie:
             help="Artikelen met gem. orders/locatie < deze waarde worden uitgesloten.",
         )
 
+    st.markdown("**Aggregatiemethode**")
+    _score_methode = st.radio(
+        "Score-aggregatie",
+        options=["arithmetisch", "geometrisch"],
+        index=0,
+        horizontal=True,
+        key="cls_score_methode",
+        help=(
+            "Arithmetisch: gewogen som (lineair compensatoir). "
+            "Geometrisch: gewogen geometrisch gemiddelde — een zeer lage score op "
+            "één dimensie trekt de totaalscore sterker omlaag."
+        ),
+    )
+    if _score_methode == "geometrisch":
+        _epsilon = st.number_input(
+            "ε (epsilon, verschuiving)", 0.001, 10.0, 1.0, 0.1,
+            key="cls_epsilon",
+            format="%.3f",
+            help="Kleine constante waarmee elke score wordt verschoven voor de machtsverheffing "
+                 "(s̅ᴵ = (s + ε) / (100 + ε)). Standaard 1.0."
+        )
+    else:
+        _epsilon = 1.0
+
     st.markdown("**Harde filters**")
     _c8, _c9 = st.columns(2)
     with _c8:
@@ -2660,6 +2686,8 @@ with tab_classificatie:
         min_orders=float(_min_orders),
         min_klantlocaties=int(_min_loc),
         article_type_filter=_art_types,
+        score_methode=_score_methode,
+        epsilon=float(_epsilon),
     )
 
     st.divider()
@@ -3089,6 +3117,8 @@ with tab_classificatie:
                     "min_orders":              _params.min_orders,
                     "min_klantlocaties":       _params.min_klantlocaties,
                     "article_type_filter":     list(_params.article_type_filter),
+                    "score_methode":           _params.score_methode,
+                    "epsilon":                 _params.epsilon,
                 }, sort_keys=True)
                 _per_artikel, _per_combo = _cached_weight_sweep(
                     st.session_state.cls_result, _params_json, float(_sweep_step),
