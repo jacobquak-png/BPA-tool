@@ -262,11 +262,11 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     p = params.normaliseer_weights()
     df = df.copy()
 
-    # Score_Prijs: log + min-max (outlier-robust). Lagere prijs = lagere score.
-    _price_log = np.log1p(df[COL_PRICE].clip(lower=0).fillna(0))
-    _p_min, _p_max = _price_log.min(), _price_log.max()
+    # Score_Prijs: lineaire min-max. Lagere prijs = lagere score.
+    _price_raw = df[COL_PRICE].clip(lower=0).fillna(0)
+    _p_min, _p_max = _price_raw.min(), _price_raw.max()
     if _p_max > _p_min:
-        df["Score_Prijs"] = ((_price_log - _p_min) / (_p_max - _p_min)) * 100
+        df["Score_Prijs"] = ((_price_raw - _p_min) / (_p_max - _p_min)) * 100
     else:
         df["Score_Prijs"] = 100.0
 
