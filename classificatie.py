@@ -278,13 +278,17 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     else:
         df["Score_Locaties"] = 100.0
 
-    # Score_Orders: lineaire inverse min-max met vaste floor=1.0, niet-lineair
+    # Score_Orders: log + inverse min-max met vaste floor=1.0, niet-lineair.
+    # Log-schaal omdat orderfrequentie een rate is: het verschil tussen
+    # 0.1 en 1 order/locatie is even relevant als tussen 1 en 10.
     # Alle items met orders <= floor krijgen score 100 (echte slow movers).
     _orders_floor = 1.0
     _orders_clipped = df[COL_ORDERS].clip(lower=_orders_floor)
-    _om = _orders_clipped.max()
-    if _om > _orders_floor:
-        _scaled_orders = ((_om - _orders_clipped) / (_om - _orders_floor)).fillna(0.0)
+    _orders_log = np.log1p(_orders_clipped)
+    _of_log = np.log1p(_orders_floor)
+    _om_log = _orders_log.max()
+    if _om_log > _of_log:
+        _scaled_orders = ((_om_log - _orders_log) / (_om_log - _of_log)).fillna(0.0)
     else:
         _scaled_orders = pd.Series(1.0, index=df.index)
     df["Score_Orders"] = (_scaled_orders ** p.orders_power) * 100
