@@ -3500,14 +3500,17 @@ with tab_budget:
             )
 
             # ── Greedy ──
-            # Primair op Ratio (waarde/€); bij gelijke ratio kiest de greedy
-            # het component met de laagste investering. mergesort houdt de
-            # volgorde stabiel en daarmee deterministisch.
-            _df_sorted = _df_b.sort_values(
-                ["Ratio", "Inv"],
-                ascending=[False, True],
-                kind="mergesort",
-            ).copy()
+            # Primair op Ratio (waarde/€), afgerond op 3 decimalen zodat items
+            # met hetzelfde getoonde ROI (1 dec., in %) als gelijk worden beschouwd;
+            # bij gelijke afgeronde ratio kiest de greedy het component met de
+            # laagste investering. mergesort houdt de volgorde stabiel.
+            _df_sorted = (
+                _df_b
+                .assign(_Ratio_rd=lambda d: d["Ratio"].round(3))
+                .sort_values(["_Ratio_rd", "Inv"], ascending=[False, True], kind="mergesort")
+                .drop(columns=["_Ratio_rd"])
+                .copy()
+            )
             _cum = _df_sorted["Inv"].cumsum()
             _df_sorted["In_selectie"] = _cum <= _budget
 
@@ -3604,7 +3607,7 @@ with tab_budget:
                         else "background-color: #ffcdd2")
 
             st.dataframe(
-                _tbl_b.style.format({
+                _tbl_b.reset_index().style.format({
                     'IP (€)':         '€ {:,.2f}',
                     'VP (€)':         '€ {:,.2f}',
                     'λ/jr':           '{:.4f}',
@@ -3653,7 +3656,7 @@ with tab_budget:
                             else "background-color: #ffcdd2")
 
                 st.dataframe(
-                    _show.style.format({
+                    _show.reset_index(drop=True).style.format({
                         'Inv. (€)':  '€ {:,.0f}',
                         'Waarde':    '{:,.1f}',
                         'Waarde/€':  '{:.4f}',
