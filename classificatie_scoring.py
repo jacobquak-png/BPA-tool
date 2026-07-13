@@ -208,15 +208,22 @@ df["Beslissing_Drempel"] = np.where(
     "Niet opnemen"
 )
 
-# Methode B: top-X% — items waarvan de Gewogen_Score in de bovenste TOP_PCT%
-# van de (gefilterde) dataset valt worden opgenomen.
-_top_cutoff = df["Gewogen_Score"].quantile(1.0 - TOP_PCT / 100.0)
-df["Beslissing_TopPct"] = np.where(
-    df["Gewogen_Score"] >= _top_cutoff,
-    "Opnemen in lijst",
-    "Niet opnemen"
+# Methode B: top-X% per criterium — een component wordt opgenomen als het
+# voor ALLE drie criteria in de bovenste TOP_PCT% van de dataset valt.
+_q = 1.0 - TOP_PCT / 100.0
+_cutoff_prijs    = df["Score_Prijs"].quantile(_q)
+_cutoff_locaties = df["Score_Locaties"].quantile(_q)
+_cutoff_orders   = df["Score_Orders"].quantile(_q)
+_in_top_all = (
+    (df["Score_Prijs"]    >= _cutoff_prijs)
+    & (df["Score_Locaties"] >= _cutoff_locaties)
+    & (df["Score_Orders"]   >= _cutoff_orders)
 )
-print(f"  Top-{TOP_PCT:.0f}% drempel: Gewogen_Score >= {_top_cutoff:.1f}")
+df["Beslissing_TopPct"] = np.where(_in_top_all, "Opnemen in lijst", "Niet opnemen")
+print(
+    f"  Top-{TOP_PCT:.0f}% per criterium drempels: "
+    f"φ≥{_cutoff_prijs:.1f}  χ≥{_cutoff_locaties:.1f}  ψ≥{_cutoff_orders:.1f}"
+)
 
 # Standaard actieve beslissing (pas aan naar "Beslissing_TopPct" om de andere methode te gebruiken)
 df["Classificatie_Beslissing"] = df["Beslissing_Drempel"]
@@ -286,14 +293,15 @@ df = df[df[COL_LOCATIONS].fillna(0) >= MIN_KLANTLOCATIES]
 print(f"  Harde filters (ArticleType + locaties>={MIN_KLANTLOCATIES}): {before} → {len(df)} rijen ({before - len(df)} uitgesloten)")
 
 # ── Samenvatting ──────────────────────────────────────────────
-total      = len(df)
-opnemen    = (df["Gewogen_Score"] >= THRESHOLD).sum()
-niet       = total - opnemen
+total         = len(df)
+opnemen_thr   = (df["Beslissing_Drempel"]  == "Opnemen in lijst").sum()
+opnemen_top   = (df["Beslissing_TopPct"]   == "Opnemen in lijst").sum()
 
 print(f"\n{'─'*50}")
-print(f"  Totaal componenten      : {total:>6}")
-print(f"  Opnemen in lijst (>={THRESHOLD}): {opnemen:>6}  ({opnemen/total*100:.1f}%)")
-print(f"  Niet opnemen   (<{THRESHOLD}) : {niet:>6}  ({niet/total*100:.1f}%)")
+print(f"  Totaal componenten             : {total:>6}")
+print(f"  Methode A — vaste drempel {THRESHOLD}  : {opnemen_thr:>6}  ({opnemen_thr/total*100:.1f}%)")
+print(f"  Methode B — top {TOP_PCT:.0f}%            : {opnemen_top:>6}  ({opnemen_top/total*100:.1f}%)")
+print(f"  Actief (Classificatie_Beslissing): Methode A")
 print(f"{'─'*50}")
 
 # Scorestatistieken per groep (ABC alleen ter info, telt niet meer in score)
