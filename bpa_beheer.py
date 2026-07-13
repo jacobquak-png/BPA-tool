@@ -793,6 +793,7 @@ def pareto_alpha_X(
     kappa_c:   float,
     excel_file       = None,
     codes            = None,
+    n_series         = None,
 ) -> pd.DataFrame:
     """Pareto-analyse over (α, X): BPA-marge vs. totaal klantsurplus.
 
@@ -806,6 +807,10 @@ def pareto_alpha_X(
       4. het kostenmodel → BPA-marge en het totale klantsurplus
          Σ_klant (zelf-voorraadkosten − abonnementskosten).
 
+    ``n_series`` : optioneel vooraf geladen N_i (Series op Code). Wordt gebruikt
+    om herhaald inlezen van de Adoptie-tab te vermijden wanneer deze functie
+    vaak wordt aangeroepen (bv. per β_r-trekking in de onzekerheidsband).
+
     Returns een DataFrame met kolommen:
         alpha, X, margin, surplus, total_Z, feasible, revenue, costs,
         stock_level (totale base-stock Σ_i S_i* over alle componenten).
@@ -813,8 +818,8 @@ def pareto_alpha_X(
     if overzicht_df is None or overzicht_df.empty:
         return pd.DataFrame()
 
-    _n = aantal_klanten_per_component(excel_file, codes)
-    if _n.empty:
+    _n = n_series if n_series is not None else aantal_klanten_per_component(excel_file, codes)
+    if _n is None or _n.empty:
         return pd.DataFrame()
 
     # Beperk het overzicht tot componenten waarvoor adoptie-data beschikbaar
@@ -1017,6 +1022,138 @@ def optimale_alpha_bij_X(
             _kandidaten = _haalbaar
     best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
     return curve, best
+
+
+def beta_r_winstband(
+    overzicht_df,
+    X_fix:      float,
+    alpha_grid,
+    q_eq:       float,
+    beta_r_min: float,
+    beta_r_max: float,
+    kappa_bpa:  float,
+    kappa_c:    float,
+    n_samples:  int = 200,
+    excel_file        = None,
+    codes             = None,
+    seed              = None,
+    alleen_haalbaar:  bool = False,
+    percentielen      = (5, 50, 95),
+):
+    """β_r-parameteronzekerheid: uniforme bandbreedte voor winst-vs-α en optimale α.
+
+    β_r kan niet uit historische subscriptie-data worden geschat en wordt
+    daarom als **onzekere scenario-parameter** behandeld. Bij gebrek aan
+    voorkennis over welke waarde binnen een plausibel bereik het meest
+    waarschijnlijk is, wordt een uniforme verdeling gebruikt::
+
+        β_r^(k) ~ U(beta_r_min, beta_r_max),   k = 1 … n_samples.
+
+    Voor elke trekking wordt (bij vast service level ``X_fix``) de volledige
+    keten α → q(α) → E[Z_i] → kostenmodel over ``alpha_grid`` doorgerekend
+    (via :func:`pareto_alpha_X`). Dit levert per α een verdeling van de
+    verwachte BPA-winst E[Π_BPA(α)] en per trekking een winst-maximaliserende
+    α*. De N_i worden één keer geladen en over alle trekkingen hergebruikt.
+
+    Parameters
+    ----------
+    n_samples : aantal β_r-trekkingen (K).
+    seed      : optionele seed voor reproduceerbare trekkingen.
+    alleen_haalbaar : bepaal α* per trekking alleen over haalbare α (marge ≥ 0
+                      én alle klanten profiteren), met terugval op alle α.
+    percentielen : welke percentielen te rapporteren (default P5/P50/P95).
+
+    Returns
+    -------
+    dict met sleutels:
+        alpha_grid     : np.array van gebruikte α-waarden;
+        beta_r_samples : np.array getrokken β_r-waarden;
+        margin_matrix  : (n_samples × len(alpha_grid)) marges E[Π_BPA];
+        margin_pct     : {p: array over α} percentiel-band van de winst;
+        margin_mean    : np.array gemiddelde winst per α;
+        opt_alpha      : np.array optimale α* per trekking;
+        opt_margin     : np.array optimale winst per trekking;
+        opt_alpha_pct  : {p: float} percentielen van de optimale α*;
+        opt_margin_pct : {p: float} percentielen van de optimale winst.
+    Of ``None`` wanneer er geen data/overzicht beschikbaar is.
+    """
+    _alpha = np.asarray(list(alpha_grid), dtype=float)
+    if overzicht_df is None or overzicht_df.empty or _alpha.size == 0:
+        return None
+    if float(beta_r_max) < float(beta_r_min):
+        beta_r_min, beta_r_max = beta_r_max, beta_r_min
+
+    # N_i één keer laden (dure Excel-read) en over alle trekkingen hergebruiken.
+    _n = aantal_klanten_per_component(excel_file, codes)
+    if _n is None or _n.empty:
+        return None
+
+    _rng = np.random.default_rng(seed)
+    _br_samples = _rng.uniform(float(beta_r_min), float(beta_r_max), int(n_samples))
+
+    _margin = np.full((int(n_samples), _alpha.size), np.nan)
+    _opt_a  = np.full(int(n_samples), np.nan)
+    _opt_m  = np.full(int(n_samples), np.nan)
+
+    for _k, _br in enumerate(_br_samples):
+        _curve = pareto_alpha_X(
+            overzicht_df, list(_alpha), [float(X_fix)],
+            float(q_eq), float(_br), float(kappa_bpa), float(kappa_c),
+            codes=codes, n_series=_n,
+        )
+        if _curve is None or _curve.empty:
+            continue
+        # Uitlijnen op _alpha (identieke floats uit dezelfde grid).
+        _m_series = _curve.set_index('alpha')['margin']
+        _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+
+        _valid = _curve.dropna(subset=['margin'])
+        if _valid.empty:
+            continue
+        _kandidaten = _valid
+        if alleen_haalbaar:
+            _haalbaar = _valid[_valid['feasible']]
+            if not _haalbaar.empty:
+                _kandidaten = _haalbaar
+        _best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
+        _opt_a[_k] = float(_best['alpha'])
+        _opt_m[_k] = float(_best['margin'])
+
+    # Percentiel-band alleen berekenen wanneer er ten minste één geldige rij is.
+    def _safe_pct(arr2d, p):
+        _col_ok = ~np.all(np.isnan(arr2d), axis=0)
+        _out = np.full(arr2d.shape[1], np.nan)
+        if _col_ok.any():
+            _out[_col_ok] = np.nanpercentile(arr2d[:, _col_ok], p, axis=0)
+        return _out
+
+    _margin_pct = {int(p): _safe_pct(_margin, p) for p in percentielen}
+    with np.errstate(invalid='ignore'):
+        _margin_mean = np.where(
+            np.all(np.isnan(_margin), axis=0), np.nan, np.nanmean(_margin, axis=0))
+
+    _opt_valid = _opt_a[~np.isnan(_opt_a)]
+    _optm_valid = _opt_m[~np.isnan(_opt_m)]
+    _opt_a_pct = {
+        int(p): (float(np.percentile(_opt_valid, p)) if _opt_valid.size else float('nan'))
+        for p in percentielen
+    }
+    _opt_m_pct = {
+        int(p): (float(np.percentile(_optm_valid, p)) if _optm_valid.size else float('nan'))
+        for p in percentielen
+    }
+
+    return {
+        'alpha_grid':     _alpha,
+        'beta_r_samples': _br_samples,
+        'margin_matrix':  _margin,
+        'margin_pct':     _margin_pct,
+        'margin_mean':    _margin_mean,
+        'opt_alpha':      _opt_a,
+        'opt_margin':     _opt_m,
+        'opt_alpha_pct':  _opt_a_pct,
+        'opt_margin_pct': _opt_m_pct,
+    }
 
 
 def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
