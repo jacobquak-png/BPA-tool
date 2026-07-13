@@ -86,8 +86,9 @@ class ClassificatieParams:
     orders_power:            float = 2.0
     min_prijs:               float = 0.0   # minimum verkoopprijs (EUR), harde filter
     min_orders:              float = 0.0   # minimum gem. orders/locatie, harde filter
-    selectie_modus:          str = "threshold"   # "threshold" of "top_n"
+    selectie_modus:          str = "threshold"   # "threshold", "top_n" of "top_pct_all"
     top_n:                   int = 100            # alleen gebruikt bij modus "top_n"
+    top_pct:                 float = 20.0         # alleen gebruikt bij modus "top_pct_all"
     min_klantlocaties:       int = 5
     article_type_filter:     tuple = ("critical", "onbekend")  # case-insensitief
     lt_default_waarden:      tuple = ("30", "30 dagen", "30,0", "30.0")
@@ -300,10 +301,11 @@ def bereken_scores(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFram
     for col in ["Score_Prijs", "Score_Locaties", "Score_Orders"]:
         df[col] = df[col].round(1)
 
-    if p.selectie_modus == "top_n":
-        # Bij top-X wordt de beslissing pas ná de harde filters bepaald
-        # (in pas_harde_filters_toe), zodat de top-X over de daadwerkelijk in
-        # aanmerking komende set gaat. Hier voorlopig alles op "Niet opnemen".
+    if p.selectie_modus in ("top_n", "top_pct_all"):
+        # Bij top-X en top-pct-all wordt de beslissing pas ná de harde filters
+        # bepaald (in pas_topn_selectie_toe), zodat de selectie over de
+        # daadwerkelijk in aanmerking komende set gaat. Hier voorlopig alles
+        # op "Niet opnemen".
         df["Classificatie_Beslissing"] = "Niet opnemen"
     else:
         df["Classificatie_Beslissing"] = np.where(
@@ -349,9 +351,9 @@ def pas_basis_filters_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.D
 
 
 def pas_topn_selectie_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.DataFrame:
-    """Score-AFHANKELIJKE stap: markeer in top_n-modus de X componenten met de
-    hoogste gewogen score als "Opnemen in lijst". Vereist een reeds gescoorde
-    DataFrame (kolom Gewogen_Score).
+    """Score-AFHANKELIJKE stap: markeer in top_n- of top_pct_all-modus de
+    geselecteerde componenten als "Opnemen in lijst". Vereist een reeds
+    gescoorde DataFrame (kolommen Score_Prijs/Locaties/Orders + Gewogen_Score).
     """
     if params.selectie_modus == "top_n" and "Gewogen_Score" in df.columns:
         # Bij gelijke score beslist de oorspronkelijke volgorde (stable sort).
@@ -364,6 +366,24 @@ def pas_topn_selectie_toe(df: pd.DataFrame, params: ClassificatieParams) -> pd.D
             .index
         )
         df.loc[_top_idx, "Classificatie_Beslissing"] = "Opnemen in lijst"
+
+    elif params.selectie_modus == "top_pct_all" and all(
+        c in df.columns for c in ("Score_Prijs", "Score_Locaties", "Score_Orders")
+    ):
+        # Een component wordt opgenomen als het voor ALLE drie criteria
+        # tegelijk in de bovenste top_pct% van de dataset valt.
+        df = df.copy()
+        _q = 1.0 - params.top_pct / 100.0
+        _cp = df["Score_Prijs"].quantile(_q)
+        _cl = df["Score_Locaties"].quantile(_q)
+        _co = df["Score_Orders"].quantile(_q)
+        _mask = (
+            (df["Score_Prijs"]    >= _cp)
+            & (df["Score_Locaties"] >= _cl)
+            & (df["Score_Orders"]   >= _co)
+        )
+        df["Classificatie_Beslissing"] = np.where(_mask, "Opnemen in lijst", "Niet opnemen")
+
     return df
 
 
@@ -530,8 +550,8 @@ def _selectie_codes_voor_gewichten(
     )
     work = df_scored_full.copy()
     work["Gewogen_Score"] = gewogen
-    if p.selectie_modus == "top_n":
-        # Beslissing wordt in pas_harde_filters_toe (na de filters) bepaald.
+    if p.selectie_modus in ("top_n", "top_pct_all"):
+        # Beslissing wordt in pas_topn_selectie_toe (na de filters) bepaald.
         work["Classificatie_Beslissing"] = "Niet opnemen"
     else:
         work["Classificatie_Beslissing"] = np.where(
