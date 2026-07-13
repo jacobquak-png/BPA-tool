@@ -4525,7 +4525,7 @@ with tab_subsim:
                 _axbr.axvline(_ag[_ix], color="#d62728", ls=":", lw=1.4,
                               label=f"α*(P50) = {_ag[_ix]:.1%}")
             _axbr.axhline(0, color="grey", lw=0.8, ls=":")
-            _axbr.set_xlabel("price percentage α")
+            _axbr.set_xlabel("α")
             _axbr.set_ylabel("expected BPA profit  E[Π_BPA] (€)")
             _axbr.set_title(
                 f"Profit band under β_r ~ U({_bru['beta_r_min']:.2f}, "
