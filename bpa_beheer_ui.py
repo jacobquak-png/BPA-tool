@@ -2593,15 +2593,20 @@ with tab_classificatie:
     st.markdown("**Selectiemethode**")
     _sel_modus = st.radio(
         "Hoe wordt de selectie bepaald?",
-        options=["top_n", "threshold"],
-        format_func=lambda m: ("Top X componenten (hoogste score)"
-                               if m == "top_n"
-                               else "Drempelwaarde (score ≥ drempel)"),
+        options=["top_n", "threshold", "top_pct_all"],
+        format_func=lambda m: (
+            "Top X componenten (hoogste gewogen score)"
+            if m == "top_n"
+            else "Drempelwaarde (gewogen score ≥ drempel)"
+            if m == "threshold"
+            else "Top X% per criterium (φ én χ én ψ)"
+        ),
         horizontal=True,
         key="cls_sel_modus",
-        help=("Top X: neem de X componenten met de hoogste gewogen score op "
-              "(ná de harde filters). Drempelwaarde: neem álle componenten met "
-              "een score ≥ de gekozen drempel op."),
+        help=("Top X: neem de X componenten met de hoogste gewogen score op. "
+              "Drempelwaarde: neem álle componenten met een score ≥ drempel op. "
+              "Top X% per criterium: neem alleen componenten op die tegelijk in "
+              "de bovenste X% zitten voor prijs (φ), locaties (χ én orders (ψ)."),
     )
     _sm1, _sm2 = st.columns(2)
     with _sm1:
@@ -2612,9 +2617,19 @@ with tab_classificatie:
                      "filters) worden opgenomen in de lijst.",
             )
             _thr = 0.0
+            _top_pct = 20.0
+        elif _sel_modus == "top_pct_all":
+            _top_pct = st.slider(
+                "Top X% per criterium", 1.0, 50.0, 20.0, 1.0, key="cls_top_pct",
+                help="Een component wordt opgenomen als het tegelijk in de bovenste "
+                     "X% valt voor φ (prijs), χ (locaties) én ψ (orders per locatie).",
+            )
+            _thr = 0.0
+            _top_n = 100
         else:
             _thr = st.number_input("Drempel (≥ opnemen)", 0.0, 100.0, 55.0, 1.0, key="cls_thr")
             _top_n = 100
+            _top_pct = 20.0
 
     st.markdown("**Niet-lineariteiten**")
     _ord_pow = st.slider("Orders-power", 1.0, 4.0, 2.0, 0.1, key="cls_ord_pow")
@@ -2678,6 +2693,7 @@ with tab_classificatie:
         threshold=float(_thr),
         selectie_modus=_sel_modus,
         top_n=int(_top_n),
+        top_pct=float(_top_pct),
         weight_prijs=float(_w_prijs),
         weight_locaties=float(_w_loc),
         weight_orders=float(_w_ord),
@@ -2729,8 +2745,11 @@ with tab_classificatie:
             st.session_state.cls_payload  = _payload
             st.session_state.cls_params   = _params
             st.session_state.cls_raw      = _df_raw
-            _sel_info = (f"top {_params.top_n}" if _params.selectie_modus == "top_n"
-                         else f"drempel ≥ {_params.threshold}")
+            _sel_info = (
+                f"top {_params.top_n}" if _params.selectie_modus == "top_n"
+                else f"top {_params.top_pct:.0f}% per criterium" if _params.selectie_modus == "top_pct_all"
+                else f"drempel ≥ {_params.threshold}"
+            )
             st.toast(f"{_payload['n_items']} componenten geselecteerd "
                      f"({_sel_info})", icon="✅")
         except Exception as e:
