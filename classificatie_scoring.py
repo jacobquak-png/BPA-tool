@@ -41,6 +41,11 @@ SELECTIE_PATH = os.environ.get(
 
 THRESHOLD   = 55
 
+# Alternatieve methode: selecteer de top X% op basis van gewogen score.
+# Stel in via env-var CLS_TOP_PCT (bijv. "20" voor top 20%).
+# Zet op None om de methode uit te schakelen (alleen THRESHOLD wordt gebruikt).
+TOP_PCT = float(os.environ.get("CLS_TOP_PCT", "20"))
+
 COL_ABC          = "ABC_categorie"
 COL_PRICE        = "Standaard verkoopprijs"
 COL_LOCATIONS    = "Aantal_klantlocaties_met_orders_5jr"
@@ -196,11 +201,25 @@ for col in ["Score_Prijs", "Score_Locaties", "Score_Orders"]:  # "Score_ABC" eru
     df[col] = df[col].round(1)
 
 # ── 6. Classificatiebeslissing ────────────────────────────────
-df["Classificatie_Beslissing"] = np.where(
+# Methode A: vaste drempel
+df["Beslissing_Drempel"] = np.where(
     df["Gewogen_Score"] >= THRESHOLD,
     "Opnemen in lijst",
     "Niet opnemen"
 )
+
+# Methode B: top-X% — items waarvan de Gewogen_Score in de bovenste TOP_PCT%
+# van de (gefilterde) dataset valt worden opgenomen.
+_top_cutoff = df["Gewogen_Score"].quantile(1.0 - TOP_PCT / 100.0)
+df["Beslissing_TopPct"] = np.where(
+    df["Gewogen_Score"] >= _top_cutoff,
+    "Opnemen in lijst",
+    "Niet opnemen"
+)
+print(f"  Top-{TOP_PCT:.0f}% drempel: Gewogen_Score >= {_top_cutoff:.1f}")
+
+# Standaard actieve beslissing (pas aan naar "Beslissing_TopPct" om de andere methode te gebruiken)
+df["Classificatie_Beslissing"] = df["Beslissing_Drempel"]
 
 # ── 7. λ_i = 1 / MTBF(jaren) ───────────────────────────────
 # Failure rate per individueel component per jaar.
