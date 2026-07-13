@@ -34,6 +34,7 @@ from bpa_beheer import (
     gevoeligheid_verwachte_z,
     pareto_alpha_X,
     optimale_alpha_bij_X,
+    beta_r_winstband,
     winst_voor_wtp_grid,
     metrieken_voor_wtp_grid,
     SERVICE_LEVELS,
@@ -4384,6 +4385,190 @@ with tab_subsim:
                 _opt_data["curve"].to_csv(index=False).encode("utf-8"),
                 file_name="optimale_alpha_bij_X.csv", mime="text/csv",
                 key="subsim_opt_dl")
+
+    # ── β_r-onzekerheidsband: uniforme scenario-parameter ─────────────────
+    with st.expander("🎲 β_r-onzekerheidsband: bandbreedte van winst en optimale α"):
+        st.caption(
+            "$β_r$ kan **niet** uit historische subscriptie-data worden "
+            "geschat en wordt daarom als **onzekere scenario-parameter** "
+            "behandeld. Bij gebrek aan voorkennis over welke waarde binnen een "
+            "plausibel bereik het meest waarschijnlijk is, gebruiken we een "
+            "**uniforme** verdeling $β_r\\sim U(β_r^{min}, β_r^{max})$. Per "
+            "trekking wordt (bij vast $X$) de volledige keten "
+            "$α\\to q(α)\\to E[Z_i]\\to$ kostenmodel doorgerekend. Zo ontstaat "
+            "per α een verdeling van de verwachte BPA-winst $E[Π_{BPA}(α)]$ "
+            "(P5/P50/P95-band) en een verdeling van de winst-maximaliserende "
+            "$α^*$."
+        )
+        _kp_bru = st.session_state.get("kosten_params", {})
+        _kappa_bpa_bru = float(_kp_bru.get("kappa_bpa", 0.20))
+        _kappa_c_bru   = float(_kp_bru.get("kappa_c", 0.25))
+        st.caption(
+            f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_bru:.0%}**, "
+            f"κ_c = **{_kappa_c_bru:.0%}**. $q_{{eq}}$ = **{_q_eq:.2f}** "
+            "(uit het adoptiemodel hierboven)."
+        )
+
+        _cbr1, _cbr2 = st.columns(2)
+        with _cbr1:
+            _X_bru = st.number_input(
+                "Vast service level X", min_value=0.50, max_value=0.9999,
+                value=float(_X_def_sim), step=0.005, format="%.3f",
+                key="subsim_bru_X")
+            _bra_min = st.number_input(
+                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                step=0.01, format="%.2f", key="subsim_bru_amin")
+            _bra_max = st.number_input(
+                "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
+                step=0.01, format="%.2f", key="subsim_bru_amax")
+        with _cbr2:
+            _br_lo = st.number_input(
+                "β_r^min", min_value=0.0, max_value=20.0, value=0.5,
+                step=0.1, format="%.2f", key="subsim_bru_brlo",
+                help="Ondergrens van het plausibele β_r-bereik.")
+            _br_hi = st.number_input(
+                "β_r^max", min_value=0.1, max_value=20.0, value=3.5,
+                step=0.1, format="%.2f", key="subsim_bru_brhi",
+                help="Bovengrens van het plausibele β_r-bereik.")
+            _bra_n = st.slider(
+                "Aantal α-waarden", 5, 60, 25, key="subsim_bru_na")
+        _cbr3, _cbr4 = st.columns(2)
+        with _cbr3:
+            _bru_K = st.slider(
+                "Aantal β_r-trekkingen (K)", 20, 1000, 200, step=20,
+                key="subsim_bru_K",
+                help="Meer trekkingen → gladdere band, maar langere rekentijd.")
+        with _cbr4:
+            _bru_feas = st.checkbox(
+                "α* alleen over haalbare α zoeken",
+                value=False, key="subsim_bru_feas",
+                help="Bepaal de optimale α* per trekking alleen over haalbare α "
+                     "(marge ≥ 0 én alle klanten profiteren).")
+        _bru_seed = st.checkbox(
+            "Reproduceerbare trekkingen (vaste seed)", value=True,
+            key="subsim_bru_seed")
+
+        if st.button("🎲 Bereken β_r-band", key="subsim_bru_btn",
+                     disabled=not _cls_codes):
+            try:
+                _ov_bru = get_overzicht_df(cfg)
+                if _ov_bru is None or _ov_bru.empty:
+                    st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+                elif float(_br_hi) <= float(_br_lo):
+                    st.warning("β_r^max moet groter zijn dan β_r^min.")
+                else:
+                    _bra_grid = list(np.linspace(float(_bra_min), float(_bra_max), int(_bra_n)))
+                    with st.spinner(
+                            f"β_r-band berekenen ({int(_bru_K)} trekkingen × "
+                            f"{int(_bra_n)} α-waarden)…"):
+                        _bru_res = beta_r_winstband(
+                            _ov_bru, float(_X_bru), _bra_grid,
+                            float(_q_eq), float(_br_lo), float(_br_hi),
+                            _kappa_bpa_bru, _kappa_c_bru,
+                            n_samples=int(_bru_K),
+                            excel_file=_excel_arg(), codes=_cls_codes,
+                            seed=(42 if _bru_seed else None),
+                            alleen_haalbaar=bool(_bru_feas))
+                    if _bru_res is None:
+                        st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
+                        st.session_state.pop("subsim_bru_data", None)
+                    else:
+                        _bru_res["X"] = float(_X_bru)
+                        _bru_res["beta_r_min"] = float(_br_lo)
+                        _bru_res["beta_r_max"] = float(_br_hi)
+                        st.session_state["subsim_bru_data"] = _bru_res
+            except (ValueError, FileNotFoundError, OSError) as _bru_err:
+                st.warning(
+                    "β_r-band niet beschikbaar: de bron-Excel bevat geen tab "
+                    f"'Adoptie' of is niet bereikbaar. ({_bru_err})"
+                )
+                st.session_state.pop("subsim_bru_data", None)
+
+        _bru = st.session_state.get("subsim_bru_data")
+        if _bru:
+            import matplotlib.pyplot as _plt_bru
+            _ag   = _bru["alpha_grid"]
+            _p5   = _bru["margin_pct"].get(5)
+            _p50  = _bru["margin_pct"].get(50)
+            _p95  = _bru["margin_pct"].get(95)
+            _mean = _bru["margin_mean"]
+            _oap  = _bru["opt_alpha_pct"]
+
+            _cbm1, _cbm2, _cbm3 = st.columns(3)
+            _cbm1.metric("α* — P5", f"{_oap.get(5, float('nan')):.1%}")
+            _cbm2.metric("α* — mediaan (P50)", f"{_oap.get(50, float('nan')):.1%}")
+            _cbm3.metric("α* — P95", f"{_oap.get(95, float('nan')):.1%}")
+            st.caption(
+                "Onder onzekerheid in de klantgevoeligheid β_r ligt de optimale "
+                f"α meestal tussen **{_oap.get(5, float('nan')):.1%}** en "
+                f"**{_oap.get(95, float('nan')):.1%}** "
+                f"(mediaan **{_oap.get(50, float('nan')):.1%}**), bij "
+                f"X = {_bru['X']:.3f} en β_r ~ U({_bru['beta_r_min']:.2f}, "
+                f"{_bru['beta_r_max']:.2f})."
+            )
+
+            # ── Grafiek 1: winst-band vs α ────────────────────────────────
+            _figbr, _axbr = _plt_bru.subplots(figsize=(9, 4.8))
+            if _p5 is not None and _p95 is not None:
+                _axbr.fill_between(
+                    _ag, _p5, _p95, color="#1f77b4", alpha=0.20,
+                    label="P5–P95 band")
+            if _p50 is not None:
+                _axbr.plot(_ag, _p50, color="#1f77b4", lw=2.2,
+                           label="mediaan (P50)")
+            if _mean is not None:
+                _axbr.plot(_ag, _mean, color="#ff7f0e", lw=1.4, ls="--",
+                           label="gemiddelde E[Π]")
+            # Mediaan-optimum markeren.
+            if _p50 is not None and np.isfinite(_p50).any():
+                _ix = int(np.nanargmax(_p50))
+                _axbr.axvline(_ag[_ix], color="#d62728", ls=":", lw=1.4,
+                              label=f"α*(P50) = {_ag[_ix]:.1%}")
+            _axbr.axhline(0, color="grey", lw=0.8, ls=":")
+            _axbr.set_xlabel("price percentage α")
+            _axbr.set_ylabel("expected BPA profit  E[Π_BPA] (€)")
+            _axbr.set_title(
+                f"Profit band under β_r ~ U({_bru['beta_r_min']:.2f}, "
+                f"{_bru['beta_r_max']:.2f})  at X = {_bru['X']:.3f}")
+            _axbr.grid(True, alpha=0.3)
+            _axbr.legend(loc="best", fontsize=9)
+            _figbr.tight_layout()
+            st.pyplot(_figbr)
+            _plt_bru.close(_figbr)
+
+            # ── Grafiek 2: verdeling van optimale α* ──────────────────────
+            _opt_a_valid = _bru["opt_alpha"][~np.isnan(_bru["opt_alpha"])]
+            if _opt_a_valid.size:
+                _fighx, _axhx = _plt_bru.subplots(figsize=(9, 3.6))
+                _axhx.hist(_opt_a_valid * 100.0, bins=min(30, max(5, _opt_a_valid.size // 5)),
+                           color="#2ca02c", alpha=0.75, edgecolor="white")
+                for _p, _c, _lbl in ((5, "#d62728", "P5"), (50, "#000000", "P50"),
+                                     (95, "#d62728", "P95")):
+                    _axhx.axvline(_oap.get(_p, float('nan')) * 100.0, color=_c,
+                                  ls="--", lw=1.4,
+                                  label=f"{_lbl} = {_oap.get(_p, float('nan')):.1%}")
+                _axhx.set_xlabel("optimal price percentage α* (%)")
+                _axhx.set_ylabel("frequency")
+                _axhx.set_title("Distribution of profit-maximising α* over β_r draws")
+                _axhx.grid(True, alpha=0.3)
+                _axhx.legend(loc="best", fontsize=9)
+                _fighx.tight_layout()
+                st.pyplot(_fighx)
+                _plt_bru.close(_fighx)
+
+            # ── Downloadbare band-tabel ───────────────────────────────────
+            _band_df = pd.DataFrame({
+                "alpha":      _ag,
+                "P5":         _p5   if _p5   is not None else np.nan,
+                "P50":        _p50  if _p50  is not None else np.nan,
+                "P95":        _p95  if _p95  is not None else np.nan,
+                "mean":       _mean if _mean is not None else np.nan,
+            })
+            st.download_button(
+                "⬇️ Download winst-band per α (CSV)",
+                _band_df.to_csv(index=False).encode("utf-8"),
+                file_name="beta_r_winstband.csv", mime="text/csv",
+                key="subsim_bru_dl")
 
 
 # ─────────────────────────────────────────────────────────────────────────────────
