@@ -4547,7 +4547,7 @@ with tab_subsim:
                     _axhx.axvline(_oap.get(_p, float('nan')) * 100.0, color=_c,
                                   ls="--", lw=1.4,
                                   label=f"{_lbl} = {_oap.get(_p, float('nan')):.1%}")
-                _axhx.set_xlabel("optimal price percentage α* (%)")
+                _axhx.set_xlabel("optimal α* (%)")
                 _axhx.set_ylabel("frequency")
                 _axhx.set_title("Distribution of profit-maximising α* over β_r draws")
                 _axhx.grid(True, alpha=0.3)
