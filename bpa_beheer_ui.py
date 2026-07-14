@@ -30,6 +30,7 @@ from bpa_beheer import (
     adoptie_kans,
     aantal_klanten_per_component,
     binomiale_verdeling,
+    binomiale_quantile,
     verwacht_subscripties_per_component,
     gevoeligheid_verwachte_z,
     pareto_alpha_X,
@@ -4300,6 +4301,23 @@ with tab_subsim:
         _opt_feas = st.checkbox(
             "Alleen haalbare combinaties meenemen (marge ≥ 0 én alle klanten profiteren)",
             value=False, key="subsim_opt_feas")
+        _opt_cc = st.checkbox(
+            "Chance-constraint base stock  P(β_i ≥ X) ≥ 1−ε",
+            value=False, key="subsim_opt_cc",
+            help="Stock wordt robuust gedimensioneerd op het (1-ε)-kwantiel van "
+                 "Z_i ~ Binomiaal(M_i, q), i.p.v. de verwachte waarde E[Z_i]. "
+                 "Omzet blijft op E[Z_i] (klanten betalen ongeacht gebruik). "
+                 "ε = 0.5 ≈ huidige gemiddelde benadering; ε = 0.10 geeft een "
+                 "90%-garantie dat het service level X gehaald wordt.")
+        if _opt_cc:
+            _opt_eps = st.slider(
+                "ε — kans dat service-belofte niet gehaald wordt door hogere adoptie",
+                min_value=0.01, max_value=0.50, value=0.10, step=0.01,
+                format="%.2f", key="subsim_opt_eps",
+                help="ε = 0.10: 90%-garantie (ε ∈ {0.05, 0.10} aanbevolen). "
+                     "ε = 0.50: mediaan ≈ huidige gemiddelde benadering.")
+        else:
+            _opt_eps = None
 
         if st.button("🎯 Bereken optimale α", key="subsim_opt_btn",
                      disabled=not _cls_codes):
@@ -4315,7 +4333,8 @@ with tab_subsim:
                             float(_q_eq), float(_beta_r),
                             _kappa_bpa_opt, _kappa_c_opt,
                             excel_file=_excel_arg(), codes=_cls_codes,
-                            alleen_haalbaar=bool(_opt_feas))
+                            alleen_haalbaar=bool(_opt_feas),
+                            epsilon=_opt_eps)
                     if _opt_curve is None or _opt_curve.empty or _opt_best is None:
                         st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_opt_data", None)
@@ -4324,6 +4343,8 @@ with tab_subsim:
                             "curve": _opt_curve,
                             "best": _opt_best.to_dict(),
                             "X": float(_X_opt),
+                            "cc": _opt_cc,
+                            "eps": _opt_eps,
                         }
             except (ValueError, FileNotFoundError, OSError) as _opt_err:
                 st.warning(
@@ -4344,6 +4365,16 @@ with tab_subsim:
             _cm2.metric("BPA-marge", f"€ {_obest['margin']:,.0f}")
             _cm3.metric(_z_lbl, f"{_obest['total_Z']:,.0f}",
                         help=f"Haalbaar: {'ja' if _obest['feasible'] else 'nee'}")
+            if _opt_data.get("cc") and _opt_data.get("eps") is not None:
+                _eps_shown = _opt_data["eps"]
+                st.caption(
+                    f"⚙️ Chance-constraint actief (ε = {_eps_shown:.2f}): stock "
+                    f"gedimensioneerd op het **{(1-_eps_shown):.0%}-kwantiel** "
+                    f"$Z_i^{{1-ε}}$ van $Z_i \\sim \\text{{Binomiaal}}(M_i, q)$. "
+                    f"Omzet blijft op $E[Z_i]$. "
+                    f"Het service level $X$ wordt gehaald tenzij adoptie tot de "
+                    f"bovenste {_eps_shown:.0%} behoort."
+                )
             _figo, _axo = _plt_opt.subplots(figsize=(9, 4.5))
             _axo.plot(_ocurve["alpha"], _ocurve["margin"],
                       color="#1f77b4", lw=2, marker="o", ms=4,
@@ -4447,6 +4478,20 @@ with tab_subsim:
         _bru_seed = st.checkbox(
             "Reproduceerbare trekkingen (vaste seed)", value=True,
             key="subsim_bru_seed")
+        _bru_cc = st.checkbox(
+            "Chance-constraint base stock  P(β_i ≥ X) ≥ 1−ε",
+            value=False, key="subsim_bru_cc",
+            help="Stock robuust op het (1-ε)-kwantiel van Z_i ~ Binomiaal(M_i, q). "
+                 "Omzet blijft op E[Z_i]. Gecombineerd met de β_r-onzekerheid laat "
+                 "dit zien hoe de garantie-eis de winstband omlaag schuift.")
+        if _bru_cc:
+            _bru_eps = st.slider(
+                "ε — kans dat service-belofte niet gehaald wordt",
+                min_value=0.01, max_value=0.50, value=0.10, step=0.01,
+                format="%.2f", key="subsim_bru_eps",
+                help="ε = 0.10: 90%-garantie. ε = 0.50: mediaan ≈ gemiddelde.")
+        else:
+            _bru_eps = None
 
         if st.button("🎲 Bereken β_r-band", key="subsim_bru_btn",
                      disabled=not _cls_codes):
@@ -4468,7 +4513,8 @@ with tab_subsim:
                             n_samples=int(_bru_K),
                             excel_file=_excel_arg(), codes=_cls_codes,
                             seed=(42 if _bru_seed else None),
-                            alleen_haalbaar=bool(_bru_feas))
+                            alleen_haalbaar=bool(_bru_feas),
+                            epsilon=_bru_eps)
                     if _bru_res is None:
                         st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_bru_data", None)
@@ -4476,6 +4522,8 @@ with tab_subsim:
                         _bru_res["X"] = float(_X_bru)
                         _bru_res["beta_r_min"] = float(_br_lo)
                         _bru_res["beta_r_max"] = float(_br_hi)
+                        _bru_res["cc"] = _bru_cc
+                        _bru_res["eps"] = _bru_eps
                         st.session_state["subsim_bru_data"] = _bru_res
             except (ValueError, FileNotFoundError, OSError) as _bru_err:
                 st.warning(
@@ -4498,13 +4546,19 @@ with tab_subsim:
             _cbm1.metric("α* — P5", f"{_oap.get(5, float('nan')):.1%}")
             _cbm2.metric("α* — mediaan (P50)", f"{_oap.get(50, float('nan')):.1%}")
             _cbm3.metric("α* — P95", f"{_oap.get(95, float('nan')):.1%}")
+            _cc_suffix = ""
+            if _bru.get("cc") and _bru.get("eps") is not None:
+                _cc_suffix = (
+                    f" Met chance-constraint ε = {_bru['eps']:.2f}: stock op "
+                    f"{(1-_bru['eps']):.0%}-kwantiel $Z_i^{{1-ε}}$, omzet op $E[Z_i]$."
+                )
             st.caption(
                 "Onder onzekerheid in de klantgevoeligheid β_r ligt de optimale "
                 f"α meestal tussen **{_oap.get(5, float('nan')):.1%}** en "
                 f"**{_oap.get(95, float('nan')):.1%}** "
                 f"(mediaan **{_oap.get(50, float('nan')):.1%}**), bij "
                 f"X = {_bru['X']:.3f} en β_r ~ U({_bru['beta_r_min']:.2f}, "
-                f"{_bru['beta_r_max']:.2f})."
+                f"{_bru['beta_r_max']:.2f}).{_cc_suffix}"
             )
 
             # ── Grafiek 1: winst-band vs α ────────────────────────────────
@@ -4525,7 +4579,7 @@ with tab_subsim:
                 _axbr.axvline(_ag[_ix], color="#d62728", ls=":", lw=1.4,
                               label=f"α*(P50) = {_ag[_ix]:.1%}")
             _axbr.axhline(0, color="grey", lw=0.8, ls=":")
-            _axbr.set_xlabel("α")
+            _axbr.set_xlabel("price percentage α")
             _axbr.set_ylabel("expected BPA profit  E[Π_BPA] (€)")
             _axbr.set_title(
                 f"Profit band under β_r ~ U({_bru['beta_r_min']:.2f}, "
@@ -4547,7 +4601,7 @@ with tab_subsim:
                     _axhx.axvline(_oap.get(_p, float('nan')) * 100.0, color=_c,
                                   ls="--", lw=1.4,
                                   label=f"{_lbl} = {_oap.get(_p, float('nan')):.1%}")
-                _axhx.set_xlabel("optimal α* (%)")
+                _axhx.set_xlabel("optimal price percentage α* (%)")
                 _axhx.set_ylabel("frequency")
                 _axhx.set_title("Distribution of profit-maximising α* over β_r draws")
                 _axhx.grid(True, alpha=0.3)
