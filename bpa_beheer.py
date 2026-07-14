@@ -719,6 +719,41 @@ def binomiale_verdeling(N, q, k_min=None, k_max=None):
     return ks, np.exp(logpmf)
 
 
+def binomiale_quantile(N: int, q: float, level: float) -> int:
+    """(level)-kwantiel van Binomiaal(N, q): kleinste z met P(Z ≤ z) ≥ level.
+
+    Gebruikt voor de chance-constrained base-stock berekening:
+
+        Z_i^{1-ε} = min{ z ∈ Z≥0 : P(Z_i ≤ z) ≥ 1-ε },
+        Z_i ~ Binomiaal(M_i, q^s).
+
+    Bij level = 0.5 geeft dit de mediaan (≈ gemiddelde voor grote N), bij
+    level = 0.90 / 0.95 geeft dit de robuuste bovengrens waarbij het
+    service level X met kans 1-ε ook bij hogere adoptie wordt gehaald.
+    """
+    import math
+    N = int(round(float(N)))
+    q = float(min(max(float(q), 0.0), 1.0))
+    level = float(min(max(float(level), 0.0), 1.0))
+    if N <= 0:
+        return 0
+    if q <= 0.0:
+        return 0
+    if q >= 1.0:
+        return N
+    _lg   = math.lgamma
+    _lnq  = math.log(q)
+    _ln1q = math.log(1.0 - q)
+    _logc = _lg(N + 1)
+    _cdf  = 0.0
+    for _k in range(N + 1):
+        _logp = _logc - _lg(_k + 1) - _lg(N - _k + 1) + _k * _lnq + (N - _k) * _ln1q
+        _cdf += math.exp(_logp)
+        if _cdf >= level:
+            return _k
+    return N
+
+
 def verwacht_subscripties_per_component(
     excel_file = None,
     codes      = None,
@@ -794,6 +829,7 @@ def pareto_alpha_X(
     excel_file       = None,
     codes            = None,
     n_series         = None,
+    epsilon: float   = None,
 ) -> pd.DataFrame:
     """Pareto-analyse over (α, X): BPA-marge vs. totaal klantsurplus.
 
@@ -810,6 +846,12 @@ def pareto_alpha_X(
     ``n_series`` : optioneel vooraf geladen N_i (Series op Code). Wordt gebruikt
     om herhaald inlezen van de Adoptie-tab te vermijden wanneer deze functie
     vaak wordt aangeroepen (bv. per β_r-trekking in de onzekerheidsband).
+    ``epsilon``  : geaccepteerde kans dat de service-belofte niet gehaald wordt
+    door hogere adoptie dan verwacht. Wanneer opgegeven wordt de base-stock
+    berekend op het (1-ε)-kwantiel Z_i^{1-ε} ~ Binomiaal(M_i, q), terwijl de
+    omzet (revenue) op E[Z_i] = M_i·q blijft (klanten betalen ongeacht gebruik).
+    Hiermee implementeert de keten Eq. (chance-constraint) uit de thesis:
+    P(β_i(S_i; Z_i) ≥ X) ≥ 1-ε. Standaard None = gemiddelde benadering.
 
     Returns een DataFrame met kolommen:
         alpha, X, margin, surplus, total_Z, feasible, revenue, costs,
@@ -832,17 +874,29 @@ def pareto_alpha_X(
     base_lam  = base['lambda_jr'].astype(float)
     lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
 
+    _n_base = _n.reindex(base.index).fillna(0.0)  # M_i uitgelijnd op base
     rijen = []
     for _a in alpha_waarden:
-        # E[Z_i(α)] = N_i · q(α); q hangt alleen van α af (niet van X).
+        # E[Z_i(α)] = M_i · q(α); q hangt alleen van α af (niet van X).
         _q       = adoptie_kans(_a, kappa_c, q_eq, beta_r)
-        _ez      = (_n * _q).reindex(base.index)  # continu, alleen adoptie-componenten
+        _ez      = _n_base * _q                      # E[Z_i] – voor omzet
         _total_z = float(_ez.sum())
         _n_int   = _ez.round().clip(lower=0).astype(int)
+        # Chance-constrained stock: Z_i^{1-ε}-kwantiel per component.
+        # Omzet blijft op E[Z_i]; alleen de stock wordt robuust berekend.
+        if epsilon is not None:
+            _level = 1.0 - float(epsilon)
+            _z_cc = pd.Series(
+                [float(binomiale_quantile(int(round(float(_mi))), _q, _level))
+                 for _mi in _n_base.values],
+                index=base.index, dtype=float,
+            )
+        else:
+            _z_cc = _ez   # geen CC: stock op verwachte waarde
         for _x in X_waarden:
             mod = base.copy()
-            mod['n_klanten'] = _n_int.values
-            mod['lambda_jr'] = (_ez * lam_per_cust).values  # continu: Z_i(α) · λ/N
+            mod['n_klanten'] = _n_int.values              # E[Z_i]: bepaalt omzet
+            mod['lambda_jr'] = (_z_cc * lam_per_cust).values  # Z_cc of E[Z_i]: bepaalt stock
             if int(mod['n_klanten'].sum()) <= 0:
                 _margin  = 0.0
                 _surplus = 0.0
@@ -988,6 +1042,7 @@ def optimale_alpha_bij_X(
     excel_file       = None,
     codes            = None,
     alleen_haalbaar: bool = False,
+    epsilon: float        = None,
 ):
     """Zoek het prijspercentage α dat de BPA-marge maximaliseert bij vast X.
 
@@ -1009,6 +1064,7 @@ def optimale_alpha_bij_X(
         overzicht_df, list(alpha_grid), [float(X_fix)],
         q_eq, beta_r, kappa_bpa, kappa_c,
         excel_file=excel_file, codes=codes,
+        epsilon=epsilon,
     )
     if curve.empty:
         return curve, None
@@ -1039,6 +1095,7 @@ def beta_r_winstband(
     seed              = None,
     alleen_haalbaar:  bool = False,
     percentielen      = (5, 50, 95),
+    epsilon: float    = None,
 ):
     """β_r-parameteronzekerheid: uniforme bandbreedte voor winst-vs-α en optimale α.
 
@@ -1100,6 +1157,7 @@ def beta_r_winstband(
             overzicht_df, list(_alpha), [float(X_fix)],
             float(q_eq), float(_br), float(kappa_bpa), float(kappa_c),
             codes=codes, n_series=_n,
+            epsilon=epsilon,
         )
         if _curve is None or _curve.empty:
             continue
