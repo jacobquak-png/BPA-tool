@@ -5270,6 +5270,19 @@ with tab_sensitivity:
                 _dicts.append(_p)
         return _dicts
 
+    _se_greedy = st.checkbox(
+        "📦 Greedy modus (budget-beperkte selectie)",
+        value=False, key="se_greedy",
+        help="Berekent per parameterpunt de greedy component-selectie binnen het "
+             "budget. Toont winst van de daadwerkelijk gekozen subset. "
+             "'Klantsurplus' is niet beschikbaar in greedy modus.")
+    _se_budget = None
+    if _se_greedy:
+        _se_budget = st.number_input(
+            "Budget (€)", min_value=0.0, value=100_000.0,
+            step=10_000.0, format="%.0f", key="se_budget",
+            help="Maximaal investeringsbudget voor de greedy-selectie per parameterpunt.")
+
     if st.button("📊 Bereken sensitivity", type="primary",
                  disabled=not _cls_codes_se, key="se_bereken"):
         try:
@@ -5280,12 +5293,16 @@ with tab_sensitivity:
         if _ov_se is None or _ov_se.empty:
             st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
         else:
-            with st.spinner("Winst-sensitivity berekenen via het kostenmodel…"):
+            with st.spinner(
+                    "Winst-sensitivity berekenen"
+                    + (" (greedy per punt)" if _se_greedy else " via het kostenmodel")
+                    + "…"):
                 try:
                     _recs = metrieken_voor_wtp_grid(
                         _ov_se, _bouw_param_dicts(),
                         _kappa_bpa_se, _kappa_c_se,
                         excel_file=_excel_arg_se(), codes=_cls_codes_se,
+                        budget=float(_se_budget) if _se_greedy else None,
                     )
                     _yvals = [r.get(_y_var, float("nan")) for r in _recs]
                     _nx = len(_x_grid)
