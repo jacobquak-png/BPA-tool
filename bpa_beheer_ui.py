@@ -3871,9 +3871,102 @@ with tab_budget:
                     st.pyplot(_fig_gs)
                     _plt_gs.close(_fig_gs)
 
+                    # ── Component selection heatmap ───────────────────────
+                    st.markdown("#### Component selection per α")
+                    if "selected_codes" in _gs_df.columns:
+                        # Bouw boolean matrix: rijen = componenten, kolommen = α
+                        _all_sel_codes = sorted(
+                            {c for row in _gs_df["selected_codes"] for c in row}
+                        )
+                        _alpha_vals = _gs_df["alpha"].tolist()
+                        _mat = pd.DataFrame(
+                            False, index=_all_sel_codes, columns=_alpha_vals
+                        )
+                        for _, _row in _gs_df.iterrows():
+                            _mat.loc[list(_row["selected_codes"]), _row["alpha"]] = True
+
+                        # Sorteer: altijd geselecteerd bovenaan, daarna op eerste α
+                        _freq = _mat.sum(axis=1)
+                        _first = _mat.apply(
+                            lambda r: _alpha_vals[r.values.argmax()] if r.any() else 1.0,
+                            axis=1,
+                        )
+                        _mat = _mat.loc[
+                            _mat.index[
+                                np.lexsort((_first.values, -_freq.values))
+                            ]
+                        ]
+
+                        _n_comp_hm = len(_mat)
+                        _fig_hm, _ax_hm = _plt_gs.subplots(
+                            figsize=(max(8, len(_alpha_vals) * 0.35),
+                                     max(3, _n_comp_hm * 0.28 + 0.8))
+                        )
+                        _ax_hm.imshow(
+                            _mat.values.astype(float),
+                            aspect="auto", cmap="Blues", vmin=0, vmax=1,
+                            interpolation="nearest",
+                        )
+                        _xt = list(range(0, len(_alpha_vals), max(1, len(_alpha_vals) // 10)))
+                        _ax_hm.set_xticks(_xt)
+                        _ax_hm.set_xticklabels(
+                            [f"{_alpha_vals[_i]:.0%}" for _i in _xt], fontsize=8)
+                        _ax_hm.set_yticks(range(_n_comp_hm))
+                        _ax_hm.set_yticklabels(_mat.index.tolist(), fontsize=7)
+                        _ax_hm.set_xlabel("price percentage α", fontsize=9)
+                        _ax_hm.set_ylabel("component", fontsize=9)
+                        _ax_hm.set_title(
+                            "Component in greedy selection (blue = selected)",
+                            fontsize=10,
+                        )
+                        # Markeer α* en huidige α
+                        _ax_hm.axvline(
+                            _alpha_vals.index(
+                                min(_alpha_vals, key=lambda a: abs(a - _gs_opt_a))
+                            ),
+                            color="#d62728", ls="--", lw=1.5, label=f"α* = {_gs_opt_a:.1%}",
+                        )
+                        _ax_hm.axvline(
+                            _alpha_vals.index(
+                                min(_alpha_vals, key=lambda a: abs(a - float(_alpha_b)))
+                            ),
+                            color="#ff7f0e", ls=":", lw=1.4,
+                            label=f"current α = {_alpha_b:.1%}",
+                        )
+                        _ax_hm.legend(loc="lower right", fontsize=8)
+                        _fig_hm.tight_layout()
+                        st.pyplot(_fig_hm)
+                        _plt_gs.close(_fig_hm)
+
+                        # Frequentietabel: hoeveel α-waarden is component geselecteerd
+                        _freq_df = pd.DataFrame({
+                            "component":      _mat.index,
+                            "# α selected":   _freq.loc[_mat.index].values,
+                            "fraction":       (_freq.loc[_mat.index].values / len(_alpha_vals)),
+                            "first α":        _first.loc[_mat.index].apply(lambda x: f"{x:.1%}").values,
+                        }).reset_index(drop=True)
+                        _freq_df["fraction"] = _freq_df["fraction"].map("{:.0%}".format)
+                        st.dataframe(
+                            _freq_df, use_container_width=True,
+                            column_config={
+                                "component":    st.column_config.TextColumn("Component"),
+                                "# α selected": st.column_config.NumberColumn("# α selected"),
+                                "fraction":     st.column_config.TextColumn("% of α-range"),
+                                "first α":      st.column_config.TextColumn("First selected at α"),
+                            },
+                        )
+                        st.caption(
+                            f"**{int((_freq == len(_alpha_vals)).sum())} components** are always "
+                            f"selected (across all {len(_alpha_vals)} α-values). "
+                            f"**{int(((0 < _freq) & (_freq < len(_alpha_vals))).sum())} components** "
+                            "enter or leave the selection as α changes — "
+                            "these are the components whose ROI ranking shifts most with α."
+                        )
+
                     st.download_button(
                         "⬇️ Download α-sweep greedy (CSV)",
-                        _gs_df.to_csv(index=False).encode("utf-8"),
+                        _gs_df.drop(columns=["selected_codes"], errors="ignore")
+                            .to_csv(index=False).encode("utf-8"),
                         file_name="greedy_alpha_sweep.csv", mime="text/csv",
                         key="gs_dl")
 
