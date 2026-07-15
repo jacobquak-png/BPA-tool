@@ -2116,7 +2116,7 @@ with tab_historie:
                                     linestyle=':', label=_be_titel)
                     break
             if _cum_arr[0] >= 0:
-                _be_titel = 'Break-even in year 0 (immediately profitable)'
+                _be_titel = 'Break-even in year 0 (immediately positive margin)'
 
             _ax_mt2.set_xticks(_x_pos)
             _ax_mt2.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
@@ -2210,7 +2210,7 @@ with tab_historie:
                     _ax10s2.axvline(_bex10, color='#F57C00', linewidth=1.8, linestyle=':', label=_be10t)
                     break
             if _sc10[0] >= 0:
-                _be10t = 'Break-even in year 0 (immediately profitable)'
+                _be10t = 'Break-even in year 0 (immediately positive margin)'
             _ax10s2.set_xticks(_xp10)
             _ax10s2.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
             _ax10s2.set_ylabel('Cumulative cash flow (€)', fontsize=11)
@@ -2962,7 +2962,7 @@ with tab_classificatie:
                 _viz_cols  = _raw_cols
                 _crit_meta = {
                     _raw_cols[0]: ("Price (€)",      "#1976D2"),
-                    _raw_cols[1]: ("Customer locations",  "#388E3C"),
+                    _raw_cols[1]: ("Customer commonality",  "#388E3C"),
                     _raw_cols[2]: ("Orders / location", "#F57C00"),
                 }
                 _eenheid_x = "Value"
@@ -2970,7 +2970,7 @@ with tab_classificatie:
                 _viz_cols  = _score_cols
                 _crit_meta = {
                     "Score_Prijs":    ("Price",    "#1976D2"),
-                    "Score_Locaties": ("Locations", "#388E3C"),
+                    "Score_Locaties": ("Commonality", "#388E3C"),
                     "Score_Orders":   ("Orders",   "#F57C00"),
                 }
                 _eenheid_x = "Score"
@@ -3177,11 +3177,11 @@ with tab_classificatie:
                         c=_per_combo["n_opnemen"], cmap="viridis", s=90,
                         edgecolor="white", linewidth=0.5,
                     )
-                    _ax1.set_xlabel("gewicht prijs")
-                    _ax1.set_ylabel("gewicht orders")
-                    _ax1.set_title("# opnemen (locaties = rest)", fontsize=10)
+                    _ax1.set_xlabel("price weight")
+                    _ax1.set_ylabel("order weight")
+                    _ax1.set_title("# included (commonality = remainder)", fontsize=10)
                     _ax1.grid(True, alpha=0.3)
-                    _fig1.colorbar(_sc, ax=_ax1, label="# opnemen")
+                    _fig1.colorbar(_sc, ax=_ax1, label="# included")
                     _fig1.tight_layout()
                     st.pyplot(_fig1)
                     _plt_sw.close(_fig1)
@@ -3192,7 +3192,7 @@ with tab_classificatie:
                     st.markdown("**Stabiliteit van artikelen**")
                     _fig2, _ax2 = _plt_sw.subplots(figsize=(5, 4))
                     _ax2.bar(
-                        ["altijd", "soms", "nooit"],
+                        ["always", "sometimes", "never"],
                         [_altijd, _soms, _nooit],
                         color=["#2ca02c", "#ff7f0e", "#d62728"],
                         edgecolor="white",
@@ -3200,8 +3200,8 @@ with tab_classificatie:
                     for _i, _v in enumerate([_altijd, _soms, _nooit]):
                         _ax2.text(_i, _v, str(_v), ha="center", va="bottom",
                                   fontsize=9)
-                    _ax2.set_ylabel("aantal artikelen")
-                    _ax2.set_title("'soms' = selectie hangt af van de weging",
+                    _ax2.set_ylabel("number of components")
+                    _ax2.set_title("'sometimes' = selection depends on weighting",
                                    fontsize=10)
                     _ax2.grid(True, axis="y", alpha=0.3)
                     _fig2.tight_layout()
@@ -3215,8 +3215,8 @@ with tab_classificatie:
                     _per_artikel["Selectie_frequentie"], bins=20,
                     range=(0, 1), color="#1f77b4", edgecolor="white", alpha=0.85,
                 )
-                _ax3.set_xlabel("fractie combinaties waarin geselecteerd")
-                _ax3.set_ylabel("aantal artikelen")
+                _ax3.set_xlabel("fraction of combinations selected")
+                _ax3.set_ylabel("number of components")
                 _ax3.grid(True, axis="y", alpha=0.3)
                 _fig3.tight_layout()
                 st.pyplot(_fig3)
@@ -3247,7 +3247,7 @@ with tab_classificatie:
 
                     # Per dominant criterium: welk criterium verstoort de
                     # volgorde het meest als het zwaarder weegt?
-                    _crit_naam = {0: "prijs", 1: "locaties", 2: "orders"}
+                    _crit_naam = {0: "price", 1: "commonality", 2: "orders"}
                     _wcols = ["weight_prijs", "weight_locaties", "weight_orders"]
                     _cm["_dominant"] = (
                         _cm[_wcols].values.argmax(axis=1)
@@ -3272,8 +3272,8 @@ with tab_classificatie:
                         _ax4.set_xticks(_xpos)
                         _ax4.set_xticklabels(_grp.index)
                         _ax4.set_ylim(0, 1)
-                        _ax4.set_ylabel("gem. correlatie t.o.v. baseline")
-                        _ax4.set_title("Hoger = volgorde blijft stabieler",
+                        _ax4.set_ylabel("avg. correlation vs. baseline")
+                        _ax4.set_title("Higher = ranking more stable",
                                        fontsize=10)
                         _ax4.legend(fontsize=8)
                         _ax4.grid(True, axis="y", alpha=0.3)
@@ -3292,8 +3292,8 @@ with tab_classificatie:
                         for _i, _v in enumerate(_grp["mean_rank_shift"]):
                             _ax5.text(_i, _v, f"{_v:.0f}", ha="center",
                                       va="bottom", fontsize=9)
-                        _ax5.set_ylabel("gem. positieverschuiving")
-                        _ax5.set_title("Hoger = volgorde schuift meer op",
+                        _ax5.set_ylabel("avg. rank shift")
+                        _ax5.set_title("Higher = ranking shifts more",
                                        fontsize=10)
                         _ax5.grid(True, axis="y", alpha=0.3)
                         _fig5.tight_layout()
@@ -4580,9 +4580,9 @@ with tab_subsim:
                               label=f"α*(P50) = {_ag[_ix]:.1%}")
             _axbr.axhline(0, color="grey", lw=0.8, ls=":")
             _axbr.set_xlabel("price percentage α")
-            _axbr.set_ylabel("expected BPA profit  E[Π_BPA] (€)")
+            _axbr.set_ylabel("expected BPA margin  E[Π_BPA] (€)")
             _axbr.set_title(
-                f"Profit band under β_r ~ U({_bru['beta_r_min']:.2f}, "
+                f"Margin band under β_r ~ U({_bru['beta_r_min']:.2f}, "
                 f"{_bru['beta_r_max']:.2f})  at X = {_bru['X']:.3f}")
             _axbr.grid(True, alpha=0.3)
             _axbr.legend(loc="best", fontsize=9)
@@ -4603,7 +4603,7 @@ with tab_subsim:
                                   label=f"{_lbl} = {_oap.get(_p, float('nan')):.1%}")
                 _axhx.set_xlabel("optimal price percentage α* (%)")
                 _axhx.set_ylabel("frequency")
-                _axhx.set_title("Distribution of profit-maximising α* over β_r draws")
+                _axhx.set_title("Distribution of margin-maximising α* over β_r draws")
                 _axhx.grid(True, alpha=0.3)
                 _axhx.legend(loc="best", fontsize=9)
                 _fighx.tight_layout()
@@ -4671,10 +4671,10 @@ with tab_sensitivity:
 
     # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
     _Y_METRICS = {
-        "bpa_margin": {"label": "Totale BPA-winst (€)",              "axis": "total BPA profit (€)",                  "tbl": "BPA-winst (€)",    "kind": "euro"},
-        "surplus":    {"label": "Totaal klantsurplus (€)",           "axis": "total customer surplus (€)",            "tbl": "Klantsurplus (€)", "kind": "euro"},
-        "total_Z":    {"label": "Verwacht aantal subscripties E[Z]", "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",             "kind": "num"},
-        "q":          {"label": "Adoptiekans q(α)",                  "axis": "adoption probability q(α)",             "tbl": "q(α)",             "kind": "pct"},
+        "bpa_margin": {"label": "Total BPA margin (€)",              "axis": "total BPA margin (€)",                  "tbl": "BPA margin (€)",    "kind": "euro"},
+        "surplus":    {"label": "Total customer surplus (€)",          "axis": "total customer surplus (€)",            "tbl": "Customer surplus (€)", "kind": "euro"},
+        "total_Z":    {"label": "Expected subscriptions E[Z]",         "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",             "kind": "num"},
+        "q":          {"label": "Adoption probability q(α)",           "axis": "adoption probability q(α)",             "tbl": "q(α)",             "kind": "pct"},
     }
 
     # ── Afhankelijke (y-as) variabele ─────────────────────────────────────
@@ -4873,9 +4873,9 @@ with tab_sensitivity:
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
         _x_fmt     = _res_se["x_fmt"]
-        _y_axis    = _res_se.get("y_axis", "total BPA profit (€)")
-        _y_lbl     = _res_se.get("y_label", "total BPA profit (€)")
-        _y_tbl     = _res_se.get("y_tbl", "BPA-winst (€)")
+        _y_axis    = _res_se.get("y_axis", "total BPA margin (€)")
+        _y_lbl     = _res_se.get("y_label", "total BPA margin (€)")
+        _y_tbl     = _res_se.get("y_tbl", "BPA margin (€)")
         _y_kind    = _res_se.get("y_kind", "euro")
 
         _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
