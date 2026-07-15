@@ -4918,6 +4918,20 @@ with tab_subsim:
         else:
             _bru_eps = None
 
+        _bru_greedy = st.checkbox(
+            "📦 Greedy modus (budget-beperkte selectie)",
+            value=False, key="subsim_bru_greedy",
+            help="Berekent per β_r-trekking de greedy component-selectie binnen "
+                 "het opgegeven budget. Toont de winst van de daadwerkelijk "
+                 "gekozen subset i.p.v. de volledige portfolio.")
+        _bru_budget = None
+        if _bru_greedy:
+            _bru_budget = st.number_input(
+                "Budget (€)", min_value=0.0, value=100_000.0,
+                step=10_000.0, format="%.0f", key="subsim_bru_budget",
+                help="Maximaal investeringsbudget voor de greedy-selectie. "
+                     "Service level X wordt overgenomen van 'Vast service level X' hierboven.")
+
         if st.button("🎲 Bereken β_r-band", key="subsim_bru_btn",
                      disabled=not _cls_codes):
             try:
@@ -4930,7 +4944,9 @@ with tab_subsim:
                     _bra_grid = list(np.linspace(float(_bra_min), float(_bra_max), int(_bra_n)))
                     with st.spinner(
                             f"β_r-band berekenen ({int(_bru_K)} trekkingen × "
-                            f"{int(_bra_n)} α-waarden)…"):
+                            f"{int(_bra_n)} α-waarden"
+                            + (" — greedy per trekking" if _bru_greedy else "")
+                            + ")…"):
                         _bru_res = beta_r_winstband(
                             _ov_bru, float(_X_bru), _bra_grid,
                             float(_q_eq), float(_br_lo), float(_br_hi),
@@ -4939,7 +4955,8 @@ with tab_subsim:
                             excel_file=_excel_arg(), codes=_cls_codes,
                             seed=(42 if _bru_seed else None),
                             alleen_haalbaar=bool(_bru_feas),
-                            epsilon=_bru_eps)
+                            epsilon=_bru_eps,
+                            budget=float(_bru_budget) if _bru_greedy else None)
                     if _bru_res is None:
                         st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_bru_data", None)
@@ -4977,13 +4994,19 @@ with tab_subsim:
                     f" Met chance-constraint ε = {_bru['eps']:.2f}: stock op "
                     f"{(1-_bru['eps']):.0%}-kwantiel $Z_i^{{1-ε}}$, omzet op $E[Z_i]$."
                 )
+            _greedy_suffix = ""
+            if _bru.get("budget") is not None:
+                _greedy_suffix = (
+                    f" **Greedy modus**: winst van budget-gestuurde selectie "
+                    f"binnen **€\u202f{_bru['budget']:,.0f}**."
+                )
             st.caption(
                 "Onder onzekerheid in de klantgevoeligheid β_r ligt de optimale "
                 f"α meestal tussen **{_oap.get(5, float('nan')):.1%}** en "
                 f"**{_oap.get(95, float('nan')):.1%}** "
                 f"(mediaan **{_oap.get(50, float('nan')):.1%}**), bij "
                 f"X = {_bru['X']:.3f} en β_r ~ U({_bru['beta_r_min']:.2f}, "
-                f"{_bru['beta_r_max']:.2f}).{_cc_suffix}"
+                f"{_bru['beta_r_max']:.2f}).{_cc_suffix}{_greedy_suffix}"
             )
 
             # ── Grafiek 1: winst-band vs α ────────────────────────────────
@@ -5005,10 +5028,15 @@ with tab_subsim:
                               label=f"α*(P50) = {_ag[_ix]:.1%}")
             _axbr.axhline(0, color="grey", lw=0.8, ls=":")
             _axbr.set_xlabel("price percentage α")
-            _axbr.set_ylabel("BPA margin  (Π_BPA) (€)")
+            _axbr.set_ylabel(
+                "BPA margin  (Π_BPA) (€)" if _bru.get("budget") is None
+                else f"greedy margin (€, budget ≤ €{_bru['budget']:,.0f})"
+            )
             _axbr.set_title(
-                f"Margin band under β_r ~ U({_bru['beta_r_min']:.2f}, "
-                f"{_bru['beta_r_max']:.2f})  at X = {_bru['X']:.3f}")
+                ("Greedy " if _bru.get("budget") is not None else "")
+                + f"Margin band under β_r ~ U({_bru['beta_r_min']:.2f}, "
+                + f"{_bru['beta_r_max']:.2f})  at X = {_bru['X']:.3f}"
+                + (f"  | budget ≤ €{_bru['budget']:,.0f}" if _bru.get("budget") is not None else ""))
             _axbr.grid(True, alpha=0.3)
             _axbr.legend(loc="best", fontsize=9)
             _figbr.tight_layout()
