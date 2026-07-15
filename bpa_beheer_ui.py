@@ -5443,7 +5443,8 @@ with tab_sensitivity:
                 if 0 <= _pd_idx < len(_pd_list):
                     _det_p  = _pd_list[_pd_idx]
                     _det_n  = _cached_aantal_klanten(
-                        _excel_arg_se() if _excel_se else None, tuple(_cls_codes_se)
+                        _file_mtime(_excel_se if isinstance(_excel_se, str) else ""),
+                        upload=_excel_arg_se() if _excel_se else None,
                     )
                     try:
                         _ov_det = get_overzicht_df(cfg)
