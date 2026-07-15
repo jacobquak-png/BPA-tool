@@ -1293,29 +1293,32 @@ def greedy_alpha_sweep(
     for _a in _alpha_arr:
         _q = adoptie_kans(float(_a), float(kappa_c), float(q_eq), float(beta_r))
 
-        # Z_i: verwachte abonnees of CC-kwantiel per component
+        # E[Z_i] = M_i · q — altijd de grondslag voor omzet en total_Z.
+        _z_mean = _n_base_v * _q
+
+        # Z_i voor stock-sizing: kwantiel bij CC, anders identiek aan mean.
         if epsilon is not None:
             _lvl = 1.0 - float(epsilon)
-            _z = np.array([
+            _z_stock = np.array([
                 float(binomiale_quantile(int(round(float(_n_base_v[_j]))), _q, _lvl))
                 for _j in range(_N)
             ], dtype=float)
         else:
-            _z = _n_base_v * _q
+            _z_stock = _z_mean
 
-        # S_i* per component via Poisson inverse (volledig herschaald op Z_i(α))
+        # S_i* per component via Poisson inverse (stock-sizing op _z_stock)
         _s_star = np.array([
             float(BPAOptimizationModel.inverse_service_level(
                 float(service_level),
-                float(_z[_j]) * float(_lam_pc[_j]),
+                float(_z_stock[_j]) * float(_lam_pc[_j]),
                 float(_lt_yr[_j]),
             ))
             for _j in range(_N)
         ], dtype=float)
 
         _inv_v    = _s_star * _ip
-        _rev_v    = _z * float(_a) * _vp
-        _cbpa_v   = float(kappa_bpa) * _ip * _s_star
+        _rev_v    = _z_mean * float(_a) * _vp          # omzet op E[Z_i]
+        _cbpa_v   = float(kappa_bpa) * _ip * _s_star   # kosten op CC-stock
         _margin_v = _rev_v - _cbpa_v
         _roi_v    = np.where(_inv_v > 0, _margin_v / _inv_v, np.inf)
 
@@ -1332,15 +1335,15 @@ def greedy_alpha_sweep(
                 _rest -= float(_inv_v[_pos])
 
         rijen.append({
-            'alpha':        float(_a),
-            'q':            float(_q),
-            'total_Z':      float(_z.sum()),
-            'total_inv':    float(_inv_v[_sel].sum()),
-            'total_rev':    float(_rev_v[_sel].sum()),
-            'total_margin': float(_margin_v[_sel].sum()),
-            'total_cbpa':   float(_cbpa_v[_sel].sum()),
-            'n_selected':    int(_sel.sum()),
-            'n_total':       _N,
+            'alpha':          float(_a),
+            'q':              float(_q),
+            'total_Z':        float(_z_mean.sum()),   # verwachte abonnees (niet kwantiel)
+            'total_inv':      float(_inv_v[_sel].sum()),
+            'total_rev':      float(_rev_v[_sel].sum()),
+            'total_margin':   float(_margin_v[_sel].sum()),
+            'total_cbpa':     float(_cbpa_v[_sel].sum()),
+            'n_selected':     int(_sel.sum()),
+            'n_total':        _N,
             'selected_codes': list(base.index[_sel]),
         })
 
