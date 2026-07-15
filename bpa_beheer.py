@@ -1413,6 +1413,117 @@ def greedy_alpha_sweep(
     return pd.DataFrame(rijen)
 
 
+def greedy_detail_for_params(
+    overzicht_df,
+    alpha: float,
+    service_level: float,
+    q_eq: float,
+    beta_r: float,
+    kappa_bpa: float,
+    kappa_c: float,
+    budget: float,
+    n_series=None,
+    excel_file=None,
+    codes=None,
+    epsilon: float = None,
+) -> pd.DataFrame:
+    """Per-component greedy detail voor één parametercombinatie.
+
+    Geeft een DataFrame terug met per component:
+        code, omschrijving, Z_i (verwachte abonnees), S* (voorraadniveau),
+        Inv (€), Rev (€), Marge (€), ROI, geselecteerd (bool).
+
+    Gesorteerd: geselecteerde componenten eerst, daarna op ROI aflopend.
+    """
+    if overzicht_df is None or overzicht_df.empty:
+        return pd.DataFrame()
+
+    _n = n_series if n_series is not None else aantal_klanten_per_component(excel_file, codes)
+    if _n is None or _n.empty:
+        base = overzicht_df.copy()
+        _n_base_v = base['n_klanten'].astype(float).values
+    else:
+        base = overzicht_df.loc[overzicht_df.index.isin(_n.index)].copy()
+        if base.empty:
+            return pd.DataFrame()
+        _n_base_v = _n.reindex(base.index).fillna(0.0).values
+
+    _base_n   = base['n_klanten'].astype(float).replace(0, np.nan)
+    _base_lam = base['lambda_jr'].astype(float)
+    _lam_pc   = (_base_lam / _base_n).fillna(0.0).values
+    _lt_yr    = base['LT_dagen'].astype(float).values / 365.0
+    _ip       = base['IP'].astype(float).values
+    _vp_col   = 'VP' if 'VP' in base.columns else 'IP'
+    _vp       = base[_vp_col].astype(float).values
+    _N        = len(base)
+
+    _q      = adoptie_kans(float(alpha), float(kappa_c), float(q_eq), float(beta_r))
+    _z_mean = _n_base_v * _q
+
+    if epsilon is not None:
+        _lvl     = 1.0 - float(epsilon)
+        _z_stock = np.maximum(
+            np.array([
+                float(binomiale_quantile(int(round(float(_n_base_v[_j]))), _q, _lvl))
+                for _j in range(_N)
+            ], dtype=float),
+            _z_mean,
+        )
+    else:
+        _z_stock = _z_mean
+
+    _s_star = np.array([
+        float(BPAOptimizationModel.inverse_service_level(
+            float(service_level),
+            float(_z_stock[_j]) * float(_lam_pc[_j]),
+            float(_lt_yr[_j]),
+        ))
+        for _j in range(_N)
+    ], dtype=float)
+
+    _inv_v    = _s_star * _ip
+    _rev_v    = _z_mean * float(alpha) * _vp
+    _cbpa_v   = float(kappa_bpa) * _ip * _s_star
+    _margin_v = _rev_v - _cbpa_v
+    _roi_v    = np.where(_inv_v > 0, _margin_v / _inv_v, np.inf)
+
+    # Greedy selectie (zelfde logica als greedy_alpha_sweep)
+    _order = np.lexsort((_inv_v, -_roi_v))
+    _cum   = np.cumsum(_inv_v[_order])
+    _sel   = np.zeros(_N, dtype=bool)
+    _sel[_order[_cum <= float(budget)]] = True
+    _rest = float(budget) - float(_inv_v[_sel].sum())
+    for _pos in _order:
+        if not _sel[_pos] and float(_inv_v[_pos]) <= _rest:
+            _sel[_pos] = True
+            _rest -= float(_inv_v[_pos])
+
+    _omsch_col = next(
+        (c for c in ('omschrijving', 'Omschrijving', 'description') if c in base.columns),
+        None,
+    )
+    records = []
+    for _j, _code in enumerate(base.index):
+        records.append({
+            'code':         str(_code),
+            'omschrijving': str(base[_omsch_col].iloc[_j]) if _omsch_col else '',
+            'Z_i':          round(float(_z_mean[_j]), 2),
+            'S*':           int(_s_star[_j]),
+            'Inv (€)':      round(float(_inv_v[_j]), 2),
+            'Rev (€)':      round(float(_rev_v[_j]), 2),
+            'Marge (€)':    round(float(_margin_v[_j]), 2),
+            'ROI':          (round(float(_roi_v[_j]), 4)
+                             if np.isfinite(_roi_v[_j]) else float('inf')),
+            'geselecteerd': bool(_sel[_j]),
+        })
+
+    _df = pd.DataFrame(records)
+    _df = _df.sort_values(
+        ['geselecteerd', 'ROI'], ascending=[False, False]
+    ).reset_index(drop=True)
+    return _df
+
+
 def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
     """Hermap de twee adoption-rate niveaus (Benelux hoog / overig laag).
 
