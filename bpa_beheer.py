@@ -1103,6 +1103,7 @@ def beta_r_winstband(
     alleen_haalbaar:  bool = False,
     percentielen      = (5, 50, 95),
     epsilon: float    = None,
+    budget: float     = None,
 ):
     """β_r-parameteronzekerheid: uniforme bandbreedte voor winst-vs-α en optimale α.
 
@@ -1160,29 +1161,53 @@ def beta_r_winstband(
     _opt_m  = np.full(int(n_samples), np.nan)
 
     for _k, _br in enumerate(_br_samples):
-        _curve = pareto_alpha_X(
-            overzicht_df, list(_alpha), [float(X_fix)],
-            float(q_eq), float(_br), float(kappa_bpa), float(kappa_c),
-            codes=codes, n_series=_n,
-            epsilon=epsilon,
-        )
-        if _curve is None or _curve.empty:
-            continue
-        # Uitlijnen op _alpha (identieke floats uit dezelfde grid).
-        _m_series = _curve.set_index('alpha')['margin']
-        _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
-
-        _valid = _curve.dropna(subset=['margin'])
-        if _valid.empty:
-            continue
-        _kandidaten = _valid
-        if alleen_haalbaar:
-            _haalbaar = _valid[_valid['feasible']]
-            if not _haalbaar.empty:
-                _kandidaten = _haalbaar
-        _best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
-        _opt_a[_k] = float(_best['alpha'])
-        _opt_m[_k] = float(_best['margin'])
+        if budget is not None:
+            # Greedy modus: per trekking de volledige greedy uitvoeren.
+            _gs = greedy_alpha_sweep(
+                overzicht_df, list(_alpha), float(budget),
+                float(X_fix), float(q_eq), float(_br),
+                float(kappa_bpa), float(kappa_c),
+                n_series=_n,
+                epsilon=epsilon,
+            )
+            if _gs.empty:
+                continue
+            _m_series = _gs.set_index('alpha')['total_margin']
+            _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+            _valid = _gs.dropna(subset=['total_margin'])
+            if _valid.empty:
+                continue
+            _kandidaten = _valid
+            if alleen_haalbaar:
+                _pos = _valid[_valid['total_margin'] > 0]
+                if not _pos.empty:
+                    _kandidaten = _pos
+            _best = _kandidaten.loc[_kandidaten['total_margin'].idxmax()]
+            _opt_a[_k] = float(_best['alpha'])
+            _opt_m[_k] = float(_best['total_margin'])
+        else:
+            _curve = pareto_alpha_X(
+                overzicht_df, list(_alpha), [float(X_fix)],
+                float(q_eq), float(_br), float(kappa_bpa), float(kappa_c),
+                codes=codes, n_series=_n,
+                epsilon=epsilon,
+            )
+            if _curve is None or _curve.empty:
+                continue
+            # Uitlijnen op _alpha (identieke floats uit dezelfde grid).
+            _m_series = _curve.set_index('alpha')['margin']
+            _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+            _valid = _curve.dropna(subset=['margin'])
+            if _valid.empty:
+                continue
+            _kandidaten = _valid
+            if alleen_haalbaar:
+                _haalbaar = _valid[_valid['feasible']]
+                if not _haalbaar.empty:
+                    _kandidaten = _haalbaar
+            _best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
+            _opt_a[_k] = float(_best['alpha'])
+            _opt_m[_k] = float(_best['margin'])
 
     # Percentiel-band alleen berekenen wanneer er ten minste één geldige rij is.
     def _safe_pct(arr2d, p):
@@ -1218,6 +1243,7 @@ def beta_r_winstband(
         'opt_margin':     _opt_m,
         'opt_alpha_pct':  _opt_a_pct,
         'opt_margin_pct': _opt_m_pct,
+        'budget':         budget,
     }
 
 
