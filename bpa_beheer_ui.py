@@ -116,6 +116,12 @@ def _cached_bereken_overzicht(cfg_json: str, _excel_mtime: float, _selectie_mtim
     return bereken_overzicht(json.loads(cfg_json))
 
 
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_aantal_klanten(_excel_mtime: float, upload=None) -> pd.Series:
+    """Cached M_i per component. upload = bestandspad (str) of UploadedFile."""
+    return aantal_klanten_per_component(upload)
+
+
 def get_classificatie_info() -> dict:
     """Lees bpa_selectie.json (cached). Auto-invalideert bij file-update."""
     return _cached_laad_classificatie_selectie(_file_mtime(SELECTIE_PATH))
@@ -136,6 +142,7 @@ def invalidate_caches() -> None:
     _cached_bereken_overzicht.clear()
     _cached_laad_classificatie_selectie.clear()
     _cached_laad_ruwe_dataset.clear()
+    _cached_aantal_klanten.clear()
 
 
 @st.cache_data(show_spinner="Gewichten-sweep berekenen…", max_entries=8)
@@ -2293,11 +2300,49 @@ with tab_kosten:
                 format_func=lambda v: f"{v:.1%}",
             )
 
+        _kost_ad1, _kost_ad2 = st.columns(2)
+        with _kost_ad1:
+            k_q_eq = st.number_input(
+                "q_eq (adoptie bij pariteit)",
+                min_value=0.01, max_value=0.99,
+                value=float(st.session_state.get("subsim_q_eq", 0.55)),
+                step=0.05, format="%.2f", key="kost_q_eq",
+                help="Adoptiekans bij kostenpariteit α = κ_c.",
+            )
+        with _kost_ad2:
+            k_beta_r = st.number_input(
+                "β_r (kostenratio-gevoeligheid)",
+                min_value=0.0, max_value=20.0,
+                value=float(st.session_state.get("subsim_beta_r", 1.0)),
+                step=0.1, format="%.2f", key="kost_beta_r",
+                help="Gevoeligheid adoptie voor kostenratio ln(κ_c/α).",
+            )
+
         if st.button("💰 Bereken kosten"):
             with st.spinner("Kostenmodel berekenen…"):
                 try:
+                    # Adoptie-bewuste overzicht: vervang n_klanten/lambda_jr door Z_i(α)
+                    _k_ov = st.session_state.overzicht_df.copy()
+                    try:
+                        _k_excel_src = st.session_state.get("subsim_upload") or (
+                            SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None)
+                        if _k_excel_src is not None:
+                            _k_n_mi = _cached_aantal_klanten(
+                                _file_mtime(_k_excel_src if isinstance(_k_excel_src, str) else ""),
+                                upload=_k_excel_src,
+                            )
+                            if not _k_n_mi.empty:
+                                _k_q    = adoptie_kans(k_alpha, k_kappa_c, k_q_eq, k_beta_r)
+                                _k_base = _k_ov.loc[_k_ov.index.isin(_k_n_mi.index)].copy()
+                                _k_ez   = _k_n_mi.reindex(_k_base.index).fillna(0.0) * _k_q
+                                _k_lpc  = (_k_base["lambda_jr"] / _k_base["n_klanten"].replace(0, np.nan)).fillna(0.0)
+                                _k_base["n_klanten"] = _k_ez.round().clip(lower=0).astype(int)
+                                _k_base["lambda_jr"] = (_k_ez * _k_lpc).values
+                                _k_ov = _k_base
+                    except Exception:
+                        pass  # fallback op origineel overzicht
                     _m, _r = bouw_model_kosten(
-                        st.session_state.overzicht_df,
+                        _k_ov,
                         alpha=k_alpha,
                         kappa_bpa=k_kappa_bpa,
                         kappa_c=k_kappa_c,
@@ -2428,18 +2473,72 @@ with tab_drempel:
         )
         _sl_col = f"s@{_sl_d:.1%}"
 
+        # ── Adoptie-bewuste parameters: bereken Z_i(α) als huidig niveau ──
+        _drm_c1, _drm_c2, _drm_c3 = st.columns(3)
+        with _drm_c1:
+            _drm_alpha = st.number_input(
+                "α (abonnementstarief)",
+                min_value=0.001, max_value=1.0,
+                value=float(st.session_state.get("kosten_params", {}).get("alpha", 0.15)),
+                step=0.01, format="%.3f", key="drm_alpha",
+                help="Prijspercentage α waarvoor Z_i(α) = M_i·q(α) wordt berekend.",
+            )
+        with _drm_c2:
+            _drm_q_eq = st.number_input(
+                "q_eq (adoptie bij pariteit)",
+                min_value=0.01, max_value=0.99,
+                value=float(st.session_state.get("subsim_q_eq", 0.55)),
+                step=0.05, format="%.2f", key="drm_q_eq",
+            )
+        with _drm_c3:
+            _drm_beta_r = st.number_input(
+                "β_r (kostenratio-gevoeligheid)",
+                min_value=0.0, max_value=20.0,
+                value=float(st.session_state.get("subsim_beta_r", 1.0)),
+                step=0.1, format="%.2f", key="drm_beta_r",
+            )
+        _drm_kappa_c = float(st.session_state.get("kosten_params", {}).get("kappa_c", 0.25))
+        _drm_q = adoptie_kans(_drm_alpha, _drm_kappa_c, _drm_q_eq, _drm_beta_r)
+
+        # Laad M_i (cached) voor Z_i(α) = M_i·q(α)
+        _drm_n_mi = pd.Series(dtype=float)
+        try:
+            _drm_excel_src = st.session_state.get("subsim_upload") or (
+                SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None)
+            if _drm_excel_src is not None:
+                _drm_n_mi = _cached_aantal_klanten(
+                    _file_mtime(_drm_excel_src if isinstance(_drm_excel_src, str) else ""),
+                    upload=_drm_excel_src,
+                )
+        except Exception:
+            pass
+        if not _drm_n_mi.empty:
+            st.caption(
+                f"Adoptie-bewust: q(α={_drm_alpha:.1%}) = {_drm_q:.3f} — "
+                f"Z_i(α) = M_i·q gebruikt als huidig niveau. "
+                f"Drempel = extra abonnees boven Z_i(α) nodig voor S*+1."
+            )
+
         _MAX_N_SEARCH = 100_000
         _drempel_rows = []
 
         for _, _row in _df_ov.iterrows():
-            _code  = _row["Code"]
-            _n     = int(_row["n_klanten"])
-            _lam   = float(_row["lambda_jr"])
-            _lt_jr = float(_row["LT_dagen"]) / 365
-            _s_now = int(_row[_sl_col]) if _sl_col in _df_ov.columns else 0
+            _code     = _row["Code"]
+            _n_orig   = int(_row["n_klanten"])
+            _lam_orig = float(_row["lambda_jr"])
+            _lt_jr    = float(_row["LT_dagen"]) / 365
 
-            if _n > 0 and _lam > 0 and _lt_jr > 0:
-                _lam_pn = _lam / _n
+            # Adoptie-bewust: gebruik Z_i(α) = M_i·q(α) als huidig abonneeniveau
+            _mi  = float(_drm_n_mi.get(str(_code), float(_n_orig))) if not _drm_n_mi.empty else float(_n_orig)
+            _n   = int(round(_mi * _drm_q))
+            _lam_pn = _lam_orig / _n_orig if _n_orig > 0 else _lam_orig
+            _lam = _n * _lam_pn
+
+            # S* op huidig adoptiepunt (Poisson-inverse)
+            _s_now = (BPAOptimizationModel.inverse_service_level(_sl_d, _lam, _lt_jr)
+                      if _n > 0 and _lam > 0 and _lt_jr > 0 else 0)
+
+            if _n > 0 and _lam_pn > 0 and _lt_jr > 0:
                 # Binary search: kleinste N_drempel waarbij S* > _s_now
                 _lo, _hi = _n + 1, _n + _MAX_N_SEARCH
                 _s_hi = BPAOptimizationModel.inverse_service_level(
@@ -2470,7 +2569,7 @@ with tab_drempel:
                 "Z voor S*+1":   _n_drempel if _n_drempel is not None else f">{_n + _MAX_N_SEARCH}",
                 "Extra Z nodig": _extra,
                 "λ/jr":          round(_lam, 4),
-                "μ = λ·L":       round(float(_row["mu"]), 4),
+                "μ = λ·L":       round(_lam * _lt_jr, 4),
             })
 
         _tbl_d = pd.DataFrame(_drempel_rows).set_index("Code")
@@ -3459,16 +3558,79 @@ with tab_budget:
                 f"α = **{_alpha_b:.1%}** · κ_BPA = **{_kappa_b:.1%}**"
             )
 
-            # ── Economisch model (identiek aan Kostenanalyse-tab) ─────────
-            #   Omzet_jr_i = N_i · α · VP_i              (abonnementsstroom)
-            #   C_BPA_i    = κ_BPA · IP_i · S*_i         (carrying cost basisvoorraad)
+            # ── Adoptie-bewuste parameters ──────────────────────────────
+            _bud_ad1, _bud_ad2, _bud_ad3 = st.columns(3)
+            with _bud_ad1:
+                _bud_q_eq = st.number_input(
+                    "q_eq (adoptie bij pariteit)",
+                    min_value=0.01, max_value=0.99,
+                    value=float(st.session_state.get("subsim_q_eq", 0.55)),
+                    step=0.05, format="%.2f", key="bud_q_eq",
+                    help="Adoptiekans bij kostenpariteit α = κ_c.",
+                )
+            with _bud_ad2:
+                _bud_beta_r = st.number_input(
+                    "β_r (kostenratio-gevoeligheid)",
+                    min_value=0.0, max_value=20.0,
+                    value=float(st.session_state.get("subsim_beta_r", 1.0)),
+                    step=0.1, format="%.2f", key="bud_beta_r",
+                    help="Gevoeligheid adoptie voor kostenratio ln(κ_c/α).",
+                )
+            with _bud_ad3:
+                _bud_kappa_c = st.number_input(
+                    "κ_c (%)",
+                    min_value=0.1, max_value=100.0,
+                    value=float(_kp.get("kappa_c", 0.25)) * 100,
+                    step=0.5, format="%.1f", key="bud_kappa_c",
+                    help="Kostenpariteit κ_c voor adoptie-logit.",
+                ) / 100
+
+            # Laad M_i (cached) voor Z_i(α) = M_i·q(α) correctie
+            _bud_n_mi = pd.Series(dtype=float)
+            try:
+                _bud_excel_src = st.session_state.get("subsim_upload") or (
+                    SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None)
+                if _bud_excel_src is not None:
+                    _bud_n_mi = _cached_aantal_klanten(
+                        _file_mtime(_bud_excel_src if isinstance(_bud_excel_src, str) else ""),
+                        upload=_bud_excel_src,
+                    )
+            except Exception:
+                pass
+
+            # ── Economisch model (adoptie-bewust) ────────────────────────
+            #   Z_i(α) = M_i·q(α)  →  λ_i(α) = Z_i·(λ/N)  →  S*_i herberekend
+            #   Omzet_jr_i = Z_i(α)·α·VP_i      (revenue op verwachte abonnees)
+            #   C_BPA_i    = κ_BPA·IP_i·S*_i     (carrying cost op adoptie-S*)
             #   Winst_jr_i = Omzet_jr_i − C_BPA_i
-            # Dit is dezelfde formule als calculate_detailed_bpa_costs() en
-            # revenue_by_part gebruikt in bouw_model_kosten(). λ speelt hier
-            # geen directe rol meer — λ zit impliciet in S* via Poisson.
             _df_b = _ov_df.copy()
-            _df_b["S_star"]     = _ov_df[_sl_keuze].astype(float)
-            _df_b["Inv"]        = _inv_per_comp
+            if not _bud_n_mi.empty:
+                # Herbereken S* en n_klanten op basis van Z_i(α) = M_i·q(α)
+                _bud_q    = adoptie_kans(_alpha_b, _bud_kappa_c, _bud_q_eq, _bud_beta_r)
+                _bud_base = _ov_df.loc[_ov_df.index.isin(_bud_n_mi.index)].copy()
+                _bud_ez   = _bud_n_mi.reindex(_bud_base.index).fillna(0.0) * _bud_q
+                _bud_lpc  = (_bud_base["lambda_jr"] / _bud_base["n_klanten"].replace(0, np.nan)).fillna(0.0)
+                _sl_val_b = float(_sl_keuze.replace("s@", "").replace("%", "")) / 100
+                _bud_lt   = _bud_base["LT_dagen"].astype(float) / 365.0
+                _bud_sstar = pd.Series([
+                    float(BPAOptimizationModel.inverse_service_level(
+                        _sl_val_b,
+                        float(_bud_ez.iloc[_j]) * float(_bud_lpc.iloc[_j]),
+                        float(_bud_lt.iloc[_j]),
+                    ))
+                    for _j in range(len(_bud_base))
+                ], index=_bud_base.index, dtype=float)
+                _df_b = _bud_base.copy()
+                _df_b["n_klanten"] = _bud_ez.round().clip(lower=0).astype(int)
+                _df_b["S_star"]    = _bud_sstar
+                _df_b[_sl_keuze]   = _bud_sstar  # sync voor tabelkolom S*
+                st.caption(
+                    f"Adoptie-bewust: q(α={_alpha_b:.1%}) = {_bud_q:.3f} → "
+                    f"Z_i = M_i·q(α) · S* herberekend op adoptie-λ."
+                )
+            else:
+                _df_b["S_star"] = _ov_df[_sl_keuze].astype(float)
+            _df_b["Inv"]        = _df_b["S_star"] * _df_b["IP"]
             _df_b["Marge_stuk"] = _df_b["VP"] - _df_b["IP"]
             _df_b["Omzet_jr"]   = _df_b["n_klanten"] * _alpha_b * _df_b["VP"]
             _df_b["C_BPA"]      = _kappa_b * _df_b["IP"] * _df_b["S_star"]
