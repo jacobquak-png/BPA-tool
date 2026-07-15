@@ -884,11 +884,18 @@ def pareto_alpha_X(
         _n_int   = _ez.round().clip(lower=0).astype(int)
         # Chance-constrained stock: Z_i^{1-ε}-kwantiel per component.
         # Omzet blijft op E[Z_i]; alleen de stock wordt robuust berekend.
+        # Invariant: CC kan stock alleen verhogen, nooit verlagen.
+        # Voor N=1-componenten met q < ε geeft het kwantiel 0 terug; door
+        # onderaan te clippen op E[Z_i] = _ez geldt altijd _z_cc ≥ _ez,
+        # zodat margin_CC ≤ margin_no_CC bij vaste α en portfolio.
         if epsilon is not None:
             _level = 1.0 - float(epsilon)
             _z_cc = pd.Series(
-                [float(binomiale_quantile(int(round(float(_mi))), _q, _level))
-                 for _mi in _n_base.values],
+                np.maximum(
+                    [float(binomiale_quantile(int(round(float(_mi))), _q, _level))
+                     for _mi in _n_base.values],
+                    _ez.values,   # ondergrens: nooit minder dan verwachte waarde
+                ),
                 index=base.index, dtype=float,
             )
         else:
@@ -1297,12 +1304,20 @@ def greedy_alpha_sweep(
         _z_mean = _n_base_v * _q
 
         # Z_i voor stock-sizing: kwantiel bij CC, anders identiek aan mean.
+        # Invariant: CC kan stock alleen verhogen, nooit verlagen.
+        # Voor N=1-componenten met q < ε geeft het kwantiel 0 terug, wat de
+        # investering elimineert en de marge kunstmatig opblaast. Door het
+        # kwantiel onderaan te clippen op E[Z_i] geldt altijd:
+        #   _z_stock ≥ _z_mean  →  costs_CC ≥ costs_no_CC  →  margin_CC ≤ margin_no_CC.
         if epsilon is not None:
             _lvl = 1.0 - float(epsilon)
-            _z_stock = np.array([
-                float(binomiale_quantile(int(round(float(_n_base_v[_j]))), _q, _lvl))
-                for _j in range(_N)
-            ], dtype=float)
+            _z_stock = np.maximum(
+                np.array([
+                    float(binomiale_quantile(int(round(float(_n_base_v[_j]))), _q, _lvl))
+                    for _j in range(_N)
+                ], dtype=float),
+                _z_mean,   # ondergrens: nooit minder dan verwachte waarde
+            )
         else:
             _z_stock = _z_mean
 
