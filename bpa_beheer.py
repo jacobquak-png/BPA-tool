@@ -946,6 +946,7 @@ def metrieken_voor_wtp_grid(
     kappa_c:   float,
     excel_file       = None,
     codes            = None,
+    budget: float    = None,
 ):
     """Meerdere keten-uitkomsten per parametercombinatie (α, X, q_eq, β_r).
 
@@ -992,8 +993,29 @@ def metrieken_voor_wtp_grid(
         _br = float(p['beta_r'])
         _kc = float(p.get('kappa_c', kappa_c))
         _q       = adoptie_kans(_a, _kc, _qe, _br)
-        _ez      = (_n * _q).reindex(base.index)  # continu, alleen adoptie-componenten
+        _ez      = (_n * _q).reindex(base.index)
         _total_z = float(_ez.sum())
+
+        if budget is not None:
+            # Greedy modus: run greedy voor deze (α, X, q_eq, β_r)-combinatie.
+            _gs = greedy_alpha_sweep(
+                overzicht_df, [_a], float(budget), _x,
+                _qe, _br, float(kappa_bpa), _kc,
+                n_series=_n,
+            )
+            if _gs.empty:
+                resultaten.append({**_leeg(), 'total_Z': _total_z, 'q': float(_q)})
+            else:
+                _row = _gs.iloc[0]
+                resultaten.append({
+                    'bpa_margin': float(_row['total_margin']),
+                    'surplus':    float('nan'),   # niet beschikbaar bij greedy
+                    'total_Z':    float(_row['total_Z']),
+                    'q':          float(_row['q']),
+                    'feasible':   float(_row['total_margin']) >= 0,
+                })
+            continue
+
         _n_int   = _ez.round().clip(lower=0).astype(int)
         mod = base.copy()
         mod['n_klanten'] = _n_int.values
