@@ -1339,8 +1339,9 @@ def greedy_alpha_sweep(
             'total_rev':    float(_rev_v[_sel].sum()),
             'total_margin': float(_margin_v[_sel].sum()),
             'total_cbpa':   float(_cbpa_v[_sel].sum()),
-            'n_selected':   int(_sel.sum()),
-            'n_total':      _N,
+            'n_selected':    int(_sel.sum()),
+            'n_total':       _N,
+            'selected_codes': list(base.index[_sel]),
         })
 
     return pd.DataFrame(rijen)
