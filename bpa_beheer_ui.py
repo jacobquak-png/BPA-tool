@@ -39,6 +39,7 @@ from bpa_beheer import (
     greedy_alpha_sweep,
     winst_voor_wtp_grid,
     metrieken_voor_wtp_grid,
+    greedy_detail_for_params,
     SERVICE_LEVELS,
     CONFIG_PATH,
     HISTORY_PATH,
@@ -5311,18 +5312,23 @@ with tab_sensitivity:
                         for _i in range(len(_curve_vals))
                     ]
                     st.session_state["se_resultaat"] = {
-                        "x_grid":     _x_grid,
-                        "per_curve":  _per_curve,
-                        "x_var":      _x_var,
-                        "curve_var":  _curve_var,
-                        "curve_vals": _curve_vals,
-                        "x_label":    _spec_x["axis"],
-                        "x_fmt":      _spec_x["fmt"],
-                        "x_cur":      _clip_se(_x_var, _seed_se[_x_var]),
-                        "y_axis":     _y_spec["axis"],
-                        "y_label":    _y_spec["axis"],
-                        "y_tbl":      _y_spec["tbl"],
-                        "y_kind":     _y_spec["kind"],
+                        "x_grid":      _x_grid,
+                        "per_curve":   _per_curve,
+                        "x_var":       _x_var,
+                        "curve_var":   _curve_var,
+                        "curve_vals":  _curve_vals,
+                        "x_label":     _spec_x["axis"],
+                        "x_fmt":       _spec_x["fmt"],
+                        "x_cur":       _clip_se(_x_var, _seed_se[_x_var]),
+                        "y_axis":      _y_spec["axis"],
+                        "y_label":     _y_spec["axis"],
+                        "y_tbl":       _y_spec["tbl"],
+                        "y_kind":      _y_spec["kind"],
+                        # greedy detail
+                        "greedy_mode": _se_greedy,
+                        "greedy_budget": float(_se_budget) if _se_greedy else None,
+                        "param_dicts": _bouw_param_dicts() if _se_greedy else [],
+                        "fixed_params": dict(_fixed) if _se_greedy else {},
                     }
                 except ValueError as _se_err:
                     st.warning(
@@ -5399,6 +5405,95 @@ with tab_sensitivity:
                 file_name=f"wtp_sensitivity_{date.today()}.csv",
                 mime="text/csv",
             )
+
+        # ── Greedy component-detail ───────────────────────────────────────
+        if _res_se.get("greedy_mode"):
+            with st.expander("🔍 Componentdetail greedy-selectie"):
+                _pd_list  = _res_se["param_dicts"]
+                _gbudget  = _res_se["greedy_budget"]
+                _gxg      = _res_se["x_grid"]
+                _gcvals   = _res_se["curve_vals"]
+                _gcv_var  = _res_se["curve_var"]
+                _gx_var   = _res_se["x_var"]
+                _gx_lbl   = _res_se["x_label"].split(" ")[0]
+                _gx_fmt   = _res_se["x_fmt"]
+
+                _col_c, _col_x = st.columns([1, 2])
+                with _col_c:
+                    if _gcv_var != "(geen)" and _gcvals:
+                        _spec_c_g = _WTP_PARAMS[_gcv_var]
+                        _cv_opts  = [
+                            f"{_spec_c_g['label'].split(' ')[0]} = {v:{_spec_c_g['fmt'][1:]}}"
+                            for v in _gcvals
+                        ]
+                        _cv_idx = st.selectbox(
+                            f"Curvewaarde ({_gcv_var})", options=range(len(_cv_opts)),
+                            format_func=lambda i: _cv_opts[i], key="se_detail_cv",
+                        )
+                    else:
+                        _cv_idx = 0
+                with _col_x:
+                    _xv_labels = [f"{_gx_lbl} = {v:{_gx_fmt[1:]}}" for v in _gxg]
+                    _xv_idx = st.selectbox(
+                        f"X-aswaarde ({_gx_var})", options=range(len(_gxg)),
+                        format_func=lambda i: _xv_labels[i], key="se_detail_xv",
+                    )
+
+                _pd_idx = _cv_idx * len(_gxg) + _xv_idx
+                if 0 <= _pd_idx < len(_pd_list):
+                    _det_p  = _pd_list[_pd_idx]
+                    _det_n  = _cached_aantal_klanten(
+                        _excel_arg_se() if _excel_se else None, tuple(_cls_codes_se)
+                    )
+                    try:
+                        _ov_det = get_overzicht_df(cfg)
+                    except Exception:
+                        _ov_det = None
+                    _det_df = greedy_detail_for_params(
+                        overzicht_df=_ov_det,
+                        alpha=float(_det_p["alpha"]),
+                        service_level=float(_det_p["X"]),
+                        q_eq=float(_det_p["q_eq"]),
+                        beta_r=float(_det_p["beta_r"]),
+                        kappa_bpa=_kappa_bpa_se,
+                        kappa_c=float(_det_p.get("kappa_c", _kappa_c_se)),
+                        budget=_gbudget,
+                        n_series=_det_n,
+                    )
+                    if _det_df.empty:
+                        st.info("Geen componentdata beschikbaar voor dit punt.")
+                    else:
+                        _n_sel  = int(_det_df["geselecteerd"].sum())
+                        _n_tot  = len(_det_df)
+                        _inv_sel = _det_df.loc[_det_df["geselecteerd"], "Inv (€)"].sum()
+                        _mar_sel = _det_df.loc[_det_df["geselecteerd"], "Marge (€)"].sum()
+                        st.caption(
+                            f"📦 **{_n_sel} / {_n_tot}** componenten geselecteerd — "
+                            f"investering **€{_inv_sel:,.0f}** / budget €{_gbudget:,.0f} — "
+                            f"totale marge **€{_mar_sel:,.0f}**"
+                        )
+
+                        def _highlight_sel(row):
+                            bg = ("background-color: #d4edda" if row["geselecteerd"]
+                                  else "background-color: #f8f9fa; color: #888")
+                            return [bg] * len(row)
+
+                        _disp_df = _det_df.copy()
+                        if not _disp_df["omschrijving"].any():
+                            _disp_df = _disp_df.drop(columns=["omschrijving"])
+                        st.dataframe(
+                            _disp_df.style.apply(_highlight_sel, axis=1),
+                            use_container_width=True, height=450,
+                        )
+                        st.download_button(
+                            "⬇️ Download componentdetail (CSV)",
+                            data=_det_df.to_csv(
+                                sep=";", decimal=",", index=False
+                            ).encode("utf-8"),
+                            file_name=f"greedy_detail_{date.today()}.csv",
+                            mime="text/csv",
+                            key="se_detail_dl",
+                        )
     else:
         st.info("Stel de parameters in en klik op **📊 Bereken sensitivity**.")
 
