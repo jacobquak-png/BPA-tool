@@ -1214,6 +1214,138 @@ def beta_r_winstband(
     }
 
 
+def greedy_alpha_sweep(
+    overzicht_df,
+    alpha_grid,
+    budget: float,
+    service_level: float,
+    q_eq: float,
+    beta_r: float,
+    kappa_bpa: float,
+    kappa_c: float,
+    excel_file=None,
+    codes=None,
+    n_series=None,
+    epsilon: float = None,
+) -> pd.DataFrame:
+    """Adoptie-bewuste greedy budget-selectie voor elk α in alpha_grid.
+
+    De bestaande greedy-tab gebruikt een vaste Z (uit het overzicht) en een
+    vaste α. Dat is niet consistent met het adoptiemodel: zowel de revenue
+    (Z_i·α·VP_i) als de investering (S_i*(X, Λ_i(α))·IP_i) hangen af van α
+    via de adoptiekans q(α). Een hogere α verlaagt q(α) → minder abonnees →
+    lagere Λ_i → lagere S_i* én lagere Inv_i, maar ook lagere omzet per α-punt.
+    De greedy-rangschikking (ROI = Margin_i/Inv_i) en dus de geselecteerde set
+    kunnen daardoor per α verschillen.
+
+    Deze functie herschrijft voor elk α de volledige keten::
+
+        q(α) → Z_i(α) → S_i*(X, Z_i·λ/N·L) → Inv_i / Rev_i / Margin_i → greedy
+
+    en laat zo zien hoe de geselecteerde portfolio én de totale marge van de
+    greedy-selectie variëren met α (en impliciet met β_r).
+
+    Parameters
+    ----------
+    budget        : maximaal investeringsbudget (€).
+    service_level : doel-fillrate X voor S_i*-berekening via Poisson-inverse.
+    q_eq          : adoptiekans bij kostenpariteit (logit-intercept).
+    beta_r        : kostenratio-gevoeligheid (vaste waarde; voor een band over
+                    β_r run deze functie meerdere keren).
+    epsilon       : kans-constraint niveau (None = verwachte Z_i; anders
+                    CC-kwantiel Z_i^{1-ε}).
+
+    Returns
+    -------
+    DataFrame met per α-waarde:
+        alpha, q, total_Z, total_inv, total_rev, total_margin, total_cbpa,
+        n_selected, n_total.
+    Leeg DataFrame als er geen data of overzicht beschikbaar is.
+    """
+    if overzicht_df is None or overzicht_df.empty:
+        return pd.DataFrame()
+    _alpha_arr = np.asarray(list(alpha_grid), dtype=float)
+    if _alpha_arr.size == 0:
+        return pd.DataFrame()
+
+    # N_i laden (eenmalig)
+    _n = n_series if n_series is not None else aantal_klanten_per_component(excel_file, codes)
+    if _n is None or _n.empty:
+        # Fallback: gebruik n_klanten uit het overzicht als vaste M_i.
+        base = overzicht_df.copy()
+        _n_base_v = base['n_klanten'].astype(float).values
+    else:
+        base = overzicht_df.loc[overzicht_df.index.isin(_n.index)].copy()
+        if base.empty:
+            return pd.DataFrame()
+        _n_base_v = _n.reindex(base.index).fillna(0.0).values
+
+    _base_n   = base['n_klanten'].astype(float).replace(0, np.nan)
+    _base_lam = base['lambda_jr'].astype(float)
+    _lam_pc   = (_base_lam / _base_n).fillna(0.0).values  # λ per klant
+    _lt_yr    = base['LT_dagen'].astype(float).values / 365.0
+    _ip       = base['IP'].astype(float).values
+    _vp_col   = 'VP' if 'VP' in base.columns else 'IP'
+    _vp       = base[_vp_col].astype(float).values
+    _N        = len(base)
+
+    rijen = []
+    for _a in _alpha_arr:
+        _q = adoptie_kans(float(_a), float(kappa_c), float(q_eq), float(beta_r))
+
+        # Z_i: verwachte abonnees of CC-kwantiel per component
+        if epsilon is not None:
+            _lvl = 1.0 - float(epsilon)
+            _z = np.array([
+                float(binomiale_quantile(int(round(float(_n_base_v[_j]))), _q, _lvl))
+                for _j in range(_N)
+            ], dtype=float)
+        else:
+            _z = _n_base_v * _q
+
+        # S_i* per component via Poisson inverse (volledig herschaald op Z_i(α))
+        _s_star = np.array([
+            float(BPAOptimizationModel.inverse_service_level(
+                float(service_level),
+                float(_z[_j]) * float(_lam_pc[_j]),
+                float(_lt_yr[_j]),
+            ))
+            for _j in range(_N)
+        ], dtype=float)
+
+        _inv_v    = _s_star * _ip
+        _rev_v    = _z * float(_a) * _vp
+        _cbpa_v   = float(kappa_bpa) * _ip * _s_star
+        _margin_v = _rev_v - _cbpa_v
+        _roi_v    = np.where(_inv_v > 0, _margin_v / _inv_v, np.inf)
+
+        # Greedy: primair ROI desc, secundair inv asc (stabiel, idem UI-logica)
+        _order = np.lexsort((_inv_v, -_roi_v))
+        _cum   = np.cumsum(_inv_v[_order])
+        _sel   = np.zeros(_N, dtype=bool)
+        _sel[_order[_cum <= float(budget)]] = True
+        # Backfill: kleinere items die nog passen
+        _rest = float(budget) - float(_inv_v[_sel].sum())
+        for _pos in _order:
+            if not _sel[_pos] and float(_inv_v[_pos]) <= _rest:
+                _sel[_pos] = True
+                _rest -= float(_inv_v[_pos])
+
+        rijen.append({
+            'alpha':        float(_a),
+            'q':            float(_q),
+            'total_Z':      float(_z.sum()),
+            'total_inv':    float(_inv_v[_sel].sum()),
+            'total_rev':    float(_rev_v[_sel].sum()),
+            'total_margin': float(_margin_v[_sel].sum()),
+            'total_cbpa':   float(_cbpa_v[_sel].sum()),
+            'n_selected':   int(_sel.sum()),
+            'n_total':      _N,
+        })
+
+    return pd.DataFrame(rijen)
+
+
 def _hermap_adoption_rates(rates: pd.Series, rate_overrides) -> pd.Series:
     """Hermap de twee adoption-rate niveaus (Benelux hoog / overig laag).
 
