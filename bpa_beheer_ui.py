@@ -36,6 +36,7 @@ from bpa_beheer import (
     pareto_alpha_X,
     optimale_alpha_bij_X,
     beta_r_winstband,
+    greedy_alpha_sweep,
     winst_voor_wtp_grid,
     metrieken_voor_wtp_grid,
     SERVICE_LEVELS,
@@ -3706,6 +3707,175 @@ with tab_budget:
                 _fig_b.tight_layout()
                 st.pyplot(_fig_b)
                 _plt_bud.close(_fig_b)
+
+            # ── α-sweep: adoptie-bewuste greedy (stochastic scenario) ─────
+            with st.expander(
+                "📊 α-sweep — adoption-aware greedy (per α recomputed)",
+                expanded=False,
+            ):
+                st.caption(
+                    "De bovenstaande greedy gebruikt een vaste $Z$ en vaste $α$. "
+                    "Dat is **niet consistent**: zowel de revenue ($Z_i\\cdot α\\cdot VP_i$) "
+                    "als de investering ($S_i^*(X,\\Lambda_i(α))\\cdot IP_i$) hangen af "
+                    "van $α$ via de adoptiekans $q(α)$. Een hogere $α$ verlaagt $q$, "
+                    "waardoor $Z_i$ daalt, $S_i^*$ daalt en de geïnvesteerde waarde "
+                    "verandert — de greedy-rangschikking én de geselecteerde set "
+                    "kunnen daardoor per $α$ anders zijn. "
+                    "Deze sweep herschrijft voor elk $α$ de volledige keten "
+                    "$q(α)\\to Z_i(α)\\to S_i^*\\to$ greedy."
+                )
+                _kp_gs = st.session_state.get("kosten_params", {})
+                _kappa_c_gs  = float(_kp_gs.get("kappa_c",  0.25))
+                _kappa_bpa_gs = float(_kp_gs.get("kappa_bpa", 0.20))
+                st.caption(
+                    f"κ_BPA = **{_kappa_bpa_gs:.0%}**, κ_c = **{_kappa_c_gs:.0%}** "
+                    f"_(uit Kostenanalyse)_. Service level uit boven­staande keuze: "
+                    f"**{_sl_keuze}**. Budget: **€ {_budget:,.0f}**."
+                )
+                _gs_c1, _gs_c2, _gs_c3 = st.columns(3)
+                with _gs_c1:
+                    _gs_amin = st.number_input(
+                        "α-bereik min", min_value=0.0001, max_value=1.0,
+                        value=0.05, step=0.01, format="%.2f", key="gs_amin")
+                    _gs_amax = st.number_input(
+                        "α-bereik max", min_value=0.01, max_value=1.0,
+                        value=0.40, step=0.01, format="%.2f", key="gs_amax")
+                with _gs_c2:
+                    _gs_an = st.slider(
+                        "Aantal α-waarden", 5, 80, 30, key="gs_an")
+                    _gs_q_eq = st.number_input(
+                        "q_eq (adoptie bij pariteit)", min_value=0.01, max_value=0.99,
+                        value=float(st.session_state.get("subsim_q_eq", 0.55)),
+                        step=0.05, format="%.2f", key="gs_qeq")
+                with _gs_c3:
+                    _gs_beta_r = st.number_input(
+                        "β_r (kostenratio-gevoeligheid)", min_value=0.0, max_value=20.0,
+                        value=float(st.session_state.get("subsim_beta_r", 1.0)),
+                        step=0.1, format="%.2f", key="gs_beta_r")
+                    _gs_cc = st.checkbox(
+                        "Chance-constraint ε",
+                        value=False, key="gs_cc",
+                        help="Stock op (1-ε)-kwantiel Z_i^{1-ε} i.p.v. E[Z_i].")
+                if _gs_cc:
+                    _gs_eps = st.slider(
+                        "ε", min_value=0.01, max_value=0.50, value=0.10,
+                        step=0.01, format="%.2f", key="gs_eps")
+                else:
+                    _gs_eps = None
+
+                # Bron-Excel (zelfde als subsim-tab)
+                _gs_excel = st.session_state.get("subsim_upload") or (
+                    SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None
+                )
+                def _gs_excel_arg():
+                    if _gs_excel is None:
+                        return None
+                    try:
+                        _gs_excel.seek(0)
+                    except (AttributeError, ValueError):
+                        pass
+                    return _gs_excel
+
+                if st.button(
+                    "📊 Bereken α-sweep greedy", key="gs_btn",
+                    disabled=not _cls_codes if (_cls_codes := sorted(
+                        get_classificatie_info().get("items", {}).keys())) else False,
+                ):
+                    try:
+                        _ov_gs = get_overzicht_df(cfg)
+                        if _ov_gs is None or _ov_gs.empty:
+                            st.warning("Geen overzicht — laad eerst tab 📊.")
+                        else:
+                            _gs_grid = list(np.linspace(
+                                float(_gs_amin), float(_gs_amax), int(_gs_an)))
+                            _sl_val = float(_sl_keuze.replace("s@", "").replace("%", "")) / 100
+                            with st.spinner(
+                                f"Greedy α-sweep ({int(_gs_an)} α-waarden, "
+                                f"β_r = {_gs_beta_r:.2f})…"
+                            ):
+                                _gs_res = greedy_alpha_sweep(
+                                    _ov_gs, _gs_grid, float(_budget),
+                                    _sl_val,
+                                    float(_gs_q_eq), float(_gs_beta_r),
+                                    _kappa_bpa_gs, _kappa_c_gs,
+                                    excel_file=_gs_excel_arg(),
+                                    codes=_cls_codes or None,
+                                    epsilon=_gs_eps,
+                                )
+                            if _gs_res is None or _gs_res.empty:
+                                st.warning("Geen resultaten — controleer Adoptie-tab en selectie.")
+                                st.session_state.pop("gs_data", None)
+                            else:
+                                st.session_state["gs_data"] = _gs_res
+                    except (ValueError, FileNotFoundError, OSError) as _gs_err:
+                        st.warning(f"α-sweep mislukt: {_gs_err}")
+                        st.session_state.pop("gs_data", None)
+
+                _gs_df = st.session_state.get("gs_data")
+                if _gs_df is not None and not _gs_df.empty:
+                    import matplotlib.pyplot as _plt_gs
+                    _gs_opt_idx = int(_gs_df["total_margin"].idxmax())
+                    _gs_opt_a   = float(_gs_df.loc[_gs_opt_idx, "alpha"])
+                    _gs_opt_m   = float(_gs_df.loc[_gs_opt_idx, "total_margin"])
+                    _gs_opt_n   = int(_gs_df.loc[_gs_opt_idx, "n_selected"])
+
+                    _gc1, _gc2, _gc3 = st.columns(3)
+                    _gc1.metric("α* (max greedy margin)", f"{_gs_opt_a:.1%}")
+                    _gc2.metric("Greedy margin at α*", f"€ {_gs_opt_m:,.0f}")
+                    _gc3.metric("# selected at α*", f"{_gs_opt_n}")
+                    st.caption(
+                        "At α = "
+                        f"**{_gs_opt_a:.1%}** the greedy selection within "
+                        f"budget **€ {_budget:,.0f}** yields the highest "
+                        f"annual margin (**€ {_gs_opt_m:,.0f}**, "
+                        f"{_gs_opt_n} components). "
+                        "Note: the selected set changes with α because both "
+                        "revenue and required stock investment depend on q(α)."
+                    )
+
+                    _fig_gs, _ax_gs = _plt_gs.subplots(figsize=(9, 4.5))
+                    _ax_gs.plot(
+                        _gs_df["alpha"], _gs_df["total_margin"],
+                        color="#1f77b4", lw=2, marker="o", ms=4,
+                        label="Greedy annual margin (€)")
+                    _ax_gs.axvline(
+                        _gs_opt_a, color="#d62728", ls="--", lw=1.5,
+                        label=f"α* = {_gs_opt_a:.1%}")
+                    _ax_gs.axvline(
+                        float(_alpha_b), color="#ff7f0e", ls=":", lw=1.4,
+                        label=f"current α = {_alpha_b:.1%}")
+                    _ax_gs.axhline(0, color="grey", lw=0.8, ls=":")
+                    _ax_gs.set_xlabel("price percentage α")
+                    _ax_gs.set_ylabel("annual margin of greedy selection (€)")
+                    _ax_gs.set_title(
+                        f"Adoption-aware greedy margin vs. α  "
+                        f"(budget = € {_budget:,.0f}, X = {_sl_keuze}, "
+                        f"β_r = {_gs_beta_r:.2f})"
+                    )
+                    _ax_gs.grid(True, alpha=0.3)
+
+                    _ax_gs2 = _ax_gs.twinx()
+                    _ax_gs2.plot(
+                        _gs_df["alpha"], _gs_df["n_selected"],
+                        color="#2ca02c", lw=1.5, ls="-.", alpha=0.8,
+                        label="# components selected")
+                    _ax_gs2.set_ylabel("# components selected", color="#2ca02c")
+                    _ax_gs2.tick_params(axis="y", labelcolor="#2ca02c")
+                    _ax_gs2.yaxis.set_major_locator(
+                        _plt_gs.matplotlib.ticker.MaxNLocator(integer=True))
+
+                    _l1, _lb1 = _ax_gs.get_legend_handles_labels()
+                    _l2, _lb2 = _ax_gs2.get_legend_handles_labels()
+                    _ax_gs.legend(_l1 + _l2, _lb1 + _lb2, loc="best", fontsize=9)
+                    _fig_gs.tight_layout()
+                    st.pyplot(_fig_gs)
+                    _plt_gs.close(_fig_gs)
+
+                    st.download_button(
+                        "⬇️ Download α-sweep greedy (CSV)",
+                        _gs_df.to_csv(index=False).encode("utf-8"),
+                        file_name="greedy_alpha_sweep.csv", mime="text/csv",
+                        key="gs_dl")
 
             # ── Toepassen als uitsluitingen ──
             st.divider()
