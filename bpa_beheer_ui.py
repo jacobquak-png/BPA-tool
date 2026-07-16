@@ -2662,13 +2662,10 @@ with tab_classificatie:
         "doorgezet naar het tabblad 📊 Overzicht."
     )
 
-    # ── Bron-Excel (optioneel uploaden, anders EXCEL_PATH uit repo) ──
-    _cls_upload = st.file_uploader(
-        "Optioneel: upload een andere bron-Excel (anders wordt de repo-Excel gebruikt)",
-        type=["xlsx"],
-        key="cls_upload",
-    )
-    _cls_bron = _cls_upload if _cls_upload is not None else EXCEL_PATH
+    # ── Bron-Excel: vaste repo-Excel ────────────────────────────────────
+    _cls_upload = None  # upload niet meer nodig; bestand staat in de repo
+    _cls_bron = EXCEL_PATH
+    st.caption(f"Bron-Excel: `{os.path.basename(EXCEL_PATH)}`")
     _cls_sheet = st.text_input(
         "Sheet-naam (leeg = eerste sheet)",
         value="Filtered ",
@@ -4292,21 +4289,10 @@ with tab_subsim:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    # ── Bron-Excel met de subscriptie-dataset ────────────────────────────
-    _subsim_upload = st.file_uploader(
-        "Bron-Excel met de subscriptie-dataset (leeg = standaard dataset zonder RSPL)",
-        type=["xlsx"],
-        key="subsim_upload",
-    )
-    _subsim_default = SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None
-    _excel_bron = _subsim_upload or _subsim_default
-    if _subsim_upload is not None:
-        _bron_naam = getattr(_excel_bron, "name", "geüploade Excel")
-        st.caption(f"Bron-Excel: **{_bron_naam}**")
-    elif _subsim_default is not None:
-        st.caption(f"Bron-Excel: subscriptie-dataset (`{os.path.basename(SUBSCRIPTIES_PATH)}`)")
-    else:
-        st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(EXCEL_PATH)}`) — upload de subscriptie-dataset voor RSPL-vrije analyse")
+    # ── Bron-Excel: vaste subscriptie-dataset uit de repo ────────────────
+    _subsim_upload = None  # upload niet meer nodig; bestand staat in de repo
+    _excel_bron = SUBSCRIPTIES_PATH
+    st.caption(f"Bron-Excel: `{os.path.basename(SUBSCRIPTIES_PATH)}`")
 
     def _excel_arg():
         """Geef een leesbare bron terug; reset de upload-buffer naar het begin."""
@@ -5241,12 +5227,17 @@ with tab_sensitivity:
 
     # Bron-Excel met de tab 'Adoptie': zelfde resolutie als de Subscriptie-
     # simulatie-tab — eerst de daar geüploade Excel (`subsim_upload`), dan de
-    # classificatie-upload (`cls_upload`), anders de repo-Excel.
-    _excel_se = st.session_state.get("subsim_upload") or st.session_state.get("cls_upload")
-    if _excel_se is not None:
-        st.caption(f"Bron-Excel: **{getattr(_excel_se, 'name', 'geüploade Excel')}**")
+    # classificatie-upload (`cls_upload`), anders SUBSCRIPTIES_PATH uit de repo,
+    # en als laatste redmiddel EXCEL_PATH.
+    _excel_se = (
+        st.session_state.get("subsim_upload")
+        or st.session_state.get("cls_upload")
+        or (SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else EXCEL_PATH)
+    )
+    if hasattr(_excel_se, "name"):
+        st.caption(f"Bron-Excel: **{_excel_se.name}**")
     else:
-        st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(EXCEL_PATH)}`)")
+        st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(_excel_se)}`)")
 
     def _excel_arg_se():
         if _excel_se is None:
