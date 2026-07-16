@@ -1,5 +1,5 @@
 """
-BPA Jaarlijks Beheer Tool – Streamlit UI
+BPA Jaarlijks Beheer Tool â€“ Streamlit UI
 =========================================
 Start met:
     streamlit run src/bpa_beheer_ui.py
@@ -62,14 +62,14 @@ from classificatie import (
 )
 from model import BPAOptimizationModel
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  CACHE-WRAPPERS  (sterk versnellen Streamlit-reruns)
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #
-# Streamlit voert dit script opnieuw uit bij élke widget-interactie. Zonder
+# Streamlit voert dit script opnieuw uit bij Ã©lke widget-interactie. Zonder
 # caching wordt de (grote) Excel telkens opnieuw geparsed en doorloopt
 # `bereken_overzicht` weer alle componenten. De wrappers hieronder zorgen dat
-# we alleen herrekenen als (a) een bron-bestand op disk gewijzigd is óf
+# we alleen herrekenen als (a) een bron-bestand op disk gewijzigd is Ã³f
 # (b) de gebruiker de config heeft aangepast. Cache wordt automatisch
 # ongeldig zodra een van die inputs verandert.
 
@@ -83,7 +83,7 @@ def _file_mtime(path: str) -> float:
 
 @st.cache_data(show_spinner=False, max_entries=4)
 def _cached_laad_classificatie_selectie(_mtime: float) -> dict:
-    """Cached versie van laad_classificatie_selectie — keyed op bestand-mtime."""
+    """Cached versie van laad_classificatie_selectie â€” keyed op bestand-mtime."""
     return laad_classificatie_selectie()
 
 
@@ -91,11 +91,11 @@ def _cached_laad_classificatie_selectie(_mtime: float) -> dict:
 def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, upload=None) -> pd.DataFrame:
     """Cache de (trage) Excel-parse voor de classificatie.
 
-    Keyed op bestand-mtime + sheet voor de repo-Excel, of op de geüploade
+    Keyed op bestand-mtime + sheet voor de repo-Excel, of op de geÃ¼ploade
     file-inhoud (Streamlit hasht een UploadedFile op inhoud, dus de parameter
-    krijgt GEEN underscore-prefix — anders zou een tweede upload met dezelfde
+    krijgt GEEN underscore-prefix â€” anders zou een tweede upload met dezelfde
     sheet-naam onterecht de vorige cache-hit teruggeven). Hierdoor wordt de
-    Excel maar één keer geparsed per uniek bestand; daarna gaan parameter-tweaks
+    Excel maar Ã©Ã©n keer geparsed per uniek bestand; daarna gaan parameter-tweaks
     razendsnel omdat alleen de gevectoriseerde scoring opnieuw draait.
     """
     if upload is not None:
@@ -113,7 +113,7 @@ def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, upload=None) -> p
 
 @st.cache_data(show_spinner=False, max_entries=4)
 def _cached_bereken_overzicht(cfg_json: str, _excel_mtime: float, _selectie_mtime: float) -> pd.DataFrame:
-    """Cached versie van bereken_overzicht — keyed op JSON-config + bestand-mtimes."""
+    """Cached versie van bereken_overzicht â€” keyed op JSON-config + bestand-mtimes."""
     return bereken_overzicht(json.loads(cfg_json))
 
 
@@ -146,7 +146,7 @@ def invalidate_caches() -> None:
     _cached_aantal_klanten.clear()
 
 
-@st.cache_data(show_spinner="Gewichten-sweep berekenen…", max_entries=8)
+@st.cache_data(show_spinner="Gewichten-sweep berekenenâ€¦", max_entries=8)
 def _cached_weight_sweep(_df_scored: pd.DataFrame, params_json: str, step: float,
                          versie: int = 2):
     """Cached gewicht-sweep. `_df_scored` (leidende underscore) wordt NIET
@@ -188,13 +188,13 @@ def representatieve_z(default: int = 1) -> int:
     return default
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  PAGINA-INSTELLINGEN
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 st.set_page_config(
     page_title="BPA Beheer Tool",
-    page_icon="⚙️",
+    page_icon="âš™ï¸",
     layout="wide",
 )
 
@@ -207,47 +207,47 @@ with col_title:
     st.title("BPA Jaarlijks Beheer Tool")
     st.caption(f"Configuratiebestand: `{CONFIG_PATH}`")
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  CONFIG IN SESSION STATE LADEN
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 if "cfg" not in st.session_state:
     st.session_state.cfg = laad_config()
 
 cfg = st.session_state.cfg
 
-# ── Excel altijd uit de repository ────────────────────────────────────────
+# â”€â”€ Excel altijd uit de repository â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _excel_file = None  # gebruik altijd EXCEL_PATH uit de repo
 
 # Overzicht altijd vers berekenen bij opstarten van de sessie
 if "overzicht_df" not in st.session_state:
-    with st.spinner("Excel laden en basisvoorraden berekenen…"):
+    with st.spinner("Excel laden en basisvoorraden berekenenâ€¦"):
         _df = get_overzicht_df(cfg)
     if not _df.empty:
         st.session_state.overzicht_df = _df
 
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #  TABS
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget, tab_subsim, tab_sensitivity = st.tabs([
-    "📊 Overzicht",
-    "✏️ Subscripties aanpassen",
-    "➕ Component toevoegen",
-    "🗑️ Component verwijderen",
-    "⚙️ Configuratie",
-    "📈 Historiek",
-    "💰 Kostenanalyse",
-    "🔢 Subscriptiedrempel",
-    "🏷️ Classificatie",
-    "💼 Budget-scenario",
-    "📈 Verwachte subscripties",
-    "📐 Sensitivity (WTP)",
+    "ðŸ“Š Overzicht",
+    "âœï¸ Subscripties aanpassen",
+    "âž• Component toevoegen",
+    "ðŸ—‘ï¸ Component verwijderen",
+    "âš™ï¸ Configuratie",
+    "ðŸ“ˆ Historiek",
+    "ðŸ’° Kostenanalyse",
+    "ðŸ”¢ Subscriptiedrempel",
+    "ðŸ·ï¸ Classificatie",
+    "ðŸ’¼ Budget-scenario",
+    "ðŸ“ˆ Verwachte subscripties",
+    "ðŸ“ Sensitivity (WTP)",
 ])
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 1 – OVERZICHT
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 1 â€“ OVERZICHT
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_overzicht:
     st.subheader("Basisvoorraden per component")
@@ -260,31 +260,31 @@ with tab_overzicht:
         _excel_mtime = "onbekend"
 
     st.write(
-        f"Configuratie bijgewerkt: **{cfg['aangepast']}** · "
+        f"Configuratie bijgewerkt: **{cfg['aangepast']}** Â· "
         f"Excel gewijzigd: **{_excel_mtime}**"
     )
 
-    # ── Classificatie-koppeling status ────────────────────────────────────
+    # â”€â”€ Classificatie-koppeling status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _cls_info = get_classificatie_info()
     if _cls_info:
         _lt_ov = _cls_info.get('lt_overzicht', {})
         _n_cls = len(_cls_info.get('items', {}))
         st.success(
-            f"🔗 Classificatie-koppeling actief — **{_n_cls}** componenten geselecteerd "
+            f"ðŸ”— Classificatie-koppeling actief â€” **{_n_cls}** componenten geselecteerd "
             f"(gegenereerd {_cls_info.get('gegenereerd', '?')}). "
-            f"LT-bron: ✅ geupdate **{_lt_ov.get('geupdate', 0)}**  ·  "
-            f"⚠️ ERP-default **{_lt_ov.get('default', 0)}**  ·  "
-            f"❌ ontbreekt **{_lt_ov.get('ontbreekt', 0)}**"
+            f"LT-bron: âœ… geupdate **{_lt_ov.get('geupdate', 0)}**  Â·  "
+            f"âš ï¸ ERP-default **{_lt_ov.get('default', 0)}**  Â·  "
+            f"âŒ ontbreekt **{_lt_ov.get('ontbreekt', 0)}**"
         )
     else:
         st.info(
-            f"ℹ️  Geen classificatie-selectie gevonden ({SELECTIE_PATH}). "
+            f"â„¹ï¸  Geen classificatie-selectie gevonden ({SELECTIE_PATH}). "
             f"Draai `classificatie_scoring.py` om de koppeling te activeren."
         )
 
-    if st.button("🔄 Herbereken (laadt Excel opnieuw)"):
+    if st.button("ðŸ”„ Herbereken (laadt Excel opnieuw)"):
         invalidate_caches()
-        with st.spinner("Berekenen…"):
+        with st.spinner("Berekenenâ€¦"):
             df = get_overzicht_df(cfg)
         if df.empty:
             st.warning("Geen onderdelen gevonden.")
@@ -301,25 +301,25 @@ with tab_overzicht:
         st.write("**Totale basisvoorraad:**  " +
                  "  |  ".join(f"`{c}` = **{totals[c]}**" for c in sl_cols))
 
-        # Aandeel S* > 1 — extra voorraadkosten bovenop S*=1
+        # Aandeel S* > 1 â€” extra voorraadkosten bovenop S*=1
         if sl_cols and 'IP' in df.columns:
             _parts = []
             for _sc in sl_cols:
                 _ip_vals     = df['IP'].fillna(0)
                 _extra_units = (df[_sc] - 1).clip(lower=0)          # max(S*-1, 0) per component
-                _base_cost   = _ip_vals.sum()                        # Σ 1 × IP (S*=1 scenario)
-                _extra_cost  = (_extra_units * _ip_vals).sum()       # Σ (S*-1) × IP
+                _base_cost   = _ip_vals.sum()                        # Î£ 1 Ã— IP (S*=1 scenario)
+                _extra_cost  = (_extra_units * _ip_vals).sum()       # Î£ (S*-1) Ã— IP
                 _total_cost  = (df[_sc] * _ip_vals).sum()
                 _pct_extra   = _extra_cost / _total_cost * 100 if _total_cost > 0 else 0.0
                 _n_gt1       = int((df[_sc] > 1).sum())
                 _parts.append(
-                    f"`{_sc}` → **{_n_gt1}** comp. met S\u002a > 1, "
-                    f"extra kost boven S\u002a=1: **€ {_extra_cost:,.0f}** (**{_pct_extra:.1f}%** van totale inv.)"
+                    f"`{_sc}` â†’ **{_n_gt1}** comp. met S\u002a > 1, "
+                    f"extra kost boven S\u002a=1: **â‚¬ {_extra_cost:,.0f}** (**{_pct_extra:.1f}%** van totale inv.)"
                 )
             if _parts:
                 st.caption("Extra inv. bovenop S\u002a=1:  \n" + "  \n".join(_parts))
 
-        # Laad vorige snapshot voor Δ-kolommen
+        # Laad vorige snapshot voor Î”-kolommen
         _prev_comp = {}
         _prev_datum = None
         # 1) Voorkeur: vorige overzicht_df uit session_state (vastgelegd bij opslaan)
@@ -344,12 +344,12 @@ with tab_overzicht:
             except Exception:
                 pass
 
-        # Bouw weergave-df met Δ-kolommen
+        # Bouw weergave-df met Î”-kolommen
         _df_disp = df.reset_index().copy()
         _delta_cols = []
-        # Vectoriseer: bouw één lookup-DataFrame van vorige S*-waarden per Code,
+        # Vectoriseer: bouw Ã©Ã©n lookup-DataFrame van vorige S*-waarden per Code,
         # zodat we per SL-kolom alleen een Series-aftrekking nodig hebben
-        # (i.p.v. .apply(axis=1) — orde van grootte sneller bij veel rijen).
+        # (i.p.v. .apply(axis=1) â€” orde van grootte sneller bij veel rijen).
         if _prev_comp and sl_cols:
             _prev_df_lookup = (
                 pd.DataFrame.from_dict(_prev_comp, orient="index")
@@ -365,7 +365,7 @@ with tab_overzicht:
                     pd.to_numeric(_df_disp[_sc], errors="coerce") - _prev_series
                 )
         else:
-            # Geen vorige snapshot beschikbaar — vul Δ-kolommen met NaN
+            # Geen vorige snapshot beschikbaar â€” vul Î”-kolommen met NaN
             for _sc in sl_cols:
                 _dc = f"\u0394{_sc}"
                 _delta_cols.append(_dc)
@@ -387,7 +387,7 @@ with tab_overzicht:
         else:
             st.caption("\u0394-kolommen beschikbaar na eerste snapshot (tabblad \U0001f4c8 Historiek).")
 
-        # ── Investering per component ──────────────────────────────────────
+        # â”€â”€ Investering per component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _kp_ov = st.session_state.get('kosten_params', {})
         _sl_ov = _kp_ov.get('service_level', 0.990)
         _sl_ov_col = f"s@{_sl_ov:.1%}"
@@ -396,23 +396,23 @@ with tab_overzicht:
             _sl_ov_col = sl_cols[0]
             _sl_ov = float(_sl_ov_col[2:-1]) / 100
         if _sl_ov_col in df.columns and 'IP' in df.columns:
-            _df_disp['Inv. (€)'] = (_df_disp[_sl_ov_col] * df['IP'].values).round(2)
-            _inv_totaal = _df_disp['Inv. (€)'].sum()
+            _df_disp['Inv. (â‚¬)'] = (_df_disp[_sl_ov_col] * df['IP'].values).round(2)
+            _inv_totaal = _df_disp['Inv. (â‚¬)'].sum()
             _df_disp['Inv. %'] = (
-                (_df_disp['Inv. (€)'] / _inv_totaal * 100).round(1)
+                (_df_disp['Inv. (â‚¬)'] / _inv_totaal * 100).round(1)
                 if _inv_totaal > 0 else 0.0
             )
-            _inv_cols = ['Inv. (€)', 'Inv. %']
+            _inv_cols = ['Inv. (â‚¬)', 'Inv. %']
             st.caption(
-                f"Inv. (€) = S\u002a × IP bij **{_sl_ov_col}** · "
-                f"Totale voorraadwaarde: **€ {_inv_totaal:,.0f}** · "
-                f"_(pas service level aan via tabblad 💰 Kostenanalyse)_"
+                f"Inv. (â‚¬) = S\u002a Ã— IP bij **{_sl_ov_col}** Â· "
+                f"Totale voorraadwaarde: **â‚¬ {_inv_totaal:,.0f}** Â· "
+                f"_(pas service level aan via tabblad ðŸ’° Kostenanalyse)_"
             )
         else:
             _inv_cols = []
 
         # Tabel
-        _fmt_inv  = {c: "{:.0f}" for c in _inv_cols if 'Inv. (€)' in c}
+        _fmt_inv  = {c: "{:.0f}" for c in _inv_cols if 'Inv. (â‚¬)' in c}
         _fmt_inv |= {c: "{:.1f}%" for c in _inv_cols if 'Inv. %' in c}
 
         def _style_inv_share(v):
@@ -421,15 +421,15 @@ with tab_overzicht:
             intensity = min(int(v / 100 * 255), 255)
             return f'background-color: rgba(25, 118, 210, {v/100:.2f}); color: {"white" if v > 50 else "black"}'
 
-        # ── LT-status kolom (vanuit classificatie-koppeling) ──────────────
+        # â”€â”€ LT-status kolom (vanuit classificatie-koppeling) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _LT_ICOON = {
-            'geupdate':  '✅ geupdate',
-            'override':  '✏️ override',
-            'default':   '⚠️ ERP-default',
-            'ontbreekt': '❌ ontbreekt',
-            'handmatig': '🛠 handmatig',
-            'onbekend':  '❔ onbekend',
-            'nul→30':   '🔵 0→30 dagen',
+            'geupdate':  'âœ… geupdate',
+            'override':  'âœï¸ override',
+            'default':   'âš ï¸ ERP-default',
+            'ontbreekt': 'âŒ ontbreekt',
+            'handmatig': 'ðŸ›  handmatig',
+            'onbekend':  'â” onbekend',
+            'nulâ†’30':   'ðŸ”µ 0â†’30 dagen',
         }
         if 'LT_bron' in _df_disp.columns:
             _df_disp['LT-status'] = (
@@ -438,20 +438,20 @@ with tab_overzicht:
 
             def _kleur_lt(v):
                 s = str(v)
-                if '🔵' in s:             return 'background-color: #bbdefb'  # blauw: LT was 0 → 30
-                if '✅' in s or '✏️' in s: return 'background-color: #e8f5e9'
-                if '⚠️' in s:              return 'background-color: #fff8e1'
-                if '❌' in s:              return 'background-color: #ffebee'
-                if '🛠' in s:              return 'background-color: #e3f2fd'
+                if 'ðŸ”µ' in s:             return 'background-color: #bbdefb'  # blauw: LT was 0 â†’ 30
+                if 'âœ…' in s or 'âœï¸' in s: return 'background-color: #e8f5e9'
+                if 'âš ï¸' in s:              return 'background-color: #fff8e1'
+                if 'âŒ' in s:              return 'background-color: #ffebee'
+                if 'ðŸ› ' in s:              return 'background-color: #e3f2fd'
                 return ''
 
-            _n_bevest = _df_disp['LT_bron'].isin(['geupdate', 'override', 'handmatig', 'nul→30']).sum()
+            _n_bevest = _df_disp['LT_bron'].isin(['geupdate', 'override', 'handmatig', 'nulâ†’30']).sum()
             _n_warn   = len(_df_disp) - _n_bevest
             if _n_warn > 0:
                 st.warning(
-                    f"⚠️ {_n_warn}/{len(_df_disp)} componenten hebben een niet-bevestigde "
+                    f"âš ï¸ {_n_warn}/{len(_df_disp)} componenten hebben een niet-bevestigde "
                     f"levertijd (ERP-default of ontbrekend). Corrigeer via tab "
-                    f"**✏️ Subscripties aanpassen** — een ingevulde LT-override telt als bevestigd."
+                    f"**âœï¸ Subscripties aanpassen** â€” een ingevulde LT-override telt als bevestigd."
                 )
 
         styled = (
@@ -461,7 +461,7 @@ with tab_overzicht:
                     "mu":        "{:.4f}",
                     **{c: "{:.0f}" for c in sl_cols},
                     **{dc: _fmt_delta for dc in _delta_cols},
-                    **({'Inv. (€)': '€ {:,.0f}', 'Inv. %': '{:.1f}%'} if _inv_cols else {}),
+                    **({'Inv. (â‚¬)': 'â‚¬ {:,.0f}', 'Inv. %': '{:.1f}%'} if _inv_cols else {}),
                 })
                 .map(_style_delta, subset=_delta_cols)
         )
@@ -475,41 +475,41 @@ with tab_overzicht:
         # Download
         csv = df.to_csv(sep=";", decimal=",").encode("utf-8")
         st.download_button(
-            label="⬇️ Download als CSV",
+            label="â¬‡ï¸ Download als CSV",
             data=csv,
             file_name=f"bpa_base_stock_{date.today()}.csv",
             mime="text/csv",
         )
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 2 – SUBSCRIPTIES / IP / LEVERTIJD AANPASSEN
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 2 â€“ SUBSCRIPTIES / IP / LEVERTIJD AANPASSEN
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_subscripties:
     st.subheader("Subscripties per component")
     st.info(
         "Het aantal subscripties (Z) per component komt automatisch uit het "
-        "werkelijke aantal klantlocaties; varieer prijs α en service level X in "
+        "werkelijke aantal klantlocaties; varieer prijs Î± en service level X in "
         "de tabs Verwachte subscripties / Sensitivity om het verwachte aantal abonnees te zien. "
         "Een vaste override per component kun je hieronder bij 'IP / Levertijd / "
         "Z aanpassen' instellen.",
-        icon="ℹ️",
+        icon="â„¹ï¸",
     )
 
     st.divider()
-    st.subheader("Snelle actie — alle componenten in één keer")
+    st.subheader("Snelle actie â€” alle componenten in Ã©Ã©n keer")
     _bulk_col1, _bulk_col2 = st.columns([1, 2])
     with _bulk_col1:
         _bulk_z = st.number_input(
             "Z voor alle componenten", min_value=1, value=1, step=1, key="bulk_z_value",
         )
     with _bulk_col2:
-        st.caption("Zet het aantal subscripties (Z) in één keer gelijk voor "
+        st.caption("Zet het aantal subscripties (Z) in Ã©Ã©n keer gelijk voor "
                    "alle componenten uit het huidige overzicht.")
-    if st.button(f"🔁 Zet Z = {int(st.session_state.get('bulk_z_value', 1))} voor alle componenten"):
+    if st.button(f"ðŸ” Zet Z = {int(st.session_state.get('bulk_z_value', 1))} voor alle componenten"):
         _df_bulk = st.session_state.get("overzicht_df")
         if _df_bulk is None or _df_bulk.empty:
-            st.warning("Geen overzicht beschikbaar — bereken eerst het overzicht in de tab 'Overzicht'.")
+            st.warning("Geen overzicht beschikbaar â€” bereken eerst het overzicht in de tab 'Overzicht'.")
         else:
             # De artikelcode staat in de index van het overzicht (of in een 'Code'-kolom)
             if "Code" in _df_bulk.columns:
@@ -520,23 +520,23 @@ with tab_subscripties:
             _codes = [str(c) for c in _code_vals.dropna().unique()]
             _z = int(_bulk_z)
             cfg["n_klanten_overrides"] = {c: _z for c in _codes}
-            # Snapshot vóór recompute (zelfde patroon als bij 'Opslaan overrides')
+            # Snapshot vÃ³Ã³r recompute (zelfde patroon als bij 'Opslaan overrides')
             if "overzicht_df" in st.session_state:
                 st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
             sla_config_op(cfg)
-            st.toast(f"Z = {_z} gezet voor {len(_codes)} componenten.", icon="✅")
+            st.toast(f"Z = {_z} gezet voor {len(_codes)} componenten.", icon="âœ…")
             st.session_state.pop("overzicht_df", None)
             st.rerun()
 
     st.divider()
     st.subheader("Overrides per artikelcode")
-    st.caption("Z = aantal subscripties, IP = inkoopprijs (€), LT = levertijd (dagen). "
+    st.caption("Z = aantal subscripties, IP = inkoopprijs (â‚¬), LT = levertijd (dagen). "
                "Laat een cel leeg om de Excel-waarde te gebruiken.")
 
     cfg.setdefault("ip_overrides", {})
     cfg.setdefault("lt_overrides", {})
 
-    # Bouw gecombineerde tabel van alle codes met minstens één override
+    # Bouw gecombineerde tabel van alle codes met minstens Ã©Ã©n override
     alle_codes = sorted(
         set(cfg["n_klanten_overrides"]) |
         set(cfg["ip_overrides"]) |
@@ -546,7 +546,7 @@ with tab_subscripties:
         {
             "Artikelcode": c,
             "N":           cfg["n_klanten_overrides"].get(c),
-            "IP (€)":      cfg["ip_overrides"].get(c),
+            "IP (â‚¬)":      cfg["ip_overrides"].get(c),
             "LT (dagen)":  cfg["lt_overrides"].get(c),
         }
         for c in alle_codes
@@ -554,20 +554,20 @@ with tab_subscripties:
 
     edited = st.data_editor(
         pd.DataFrame(override_rows) if override_rows else pd.DataFrame(
-            columns=["Artikelcode", "N", "IP (€)", "LT (dagen)"]
+            columns=["Artikelcode", "N", "IP (â‚¬)", "LT (dagen)"]
         ),
         num_rows="dynamic",
         use_container_width=True,
         column_config={
             "Artikelcode": st.column_config.TextColumn("Artikelcode", required=True),
             "N":           st.column_config.NumberColumn("Z (subscripties)", min_value=1, step=1),
-            "IP (€)":      st.column_config.NumberColumn("IP (€)", min_value=0.0, format="%.2f"),
+            "IP (â‚¬)":      st.column_config.NumberColumn("IP (â‚¬)", min_value=0.0, format="%.2f"),
             "LT (dagen)":  st.column_config.NumberColumn("LT (dagen)", min_value=1, step=1),
         },
         key="overrides_editor",
     )
 
-    if st.button("💾 Opslaan overrides"):
+    if st.button("ðŸ’¾ Opslaan overrides"):
         n_ov, ip_ov, lt_ov = {}, {}, {}
         for _, row in edited.iterrows():
             code = row.get("Artikelcode")
@@ -576,24 +576,24 @@ with tab_subscripties:
             code = str(code)
             if pd.notna(row["N"]):
                 n_ov[code]  = int(row["N"])
-            if pd.notna(row["IP (€)"]):
-                ip_ov[code] = float(row["IP (€)"])
+            if pd.notna(row["IP (â‚¬)"]):
+                ip_ov[code] = float(row["IP (â‚¬)"])
             if pd.notna(row["LT (dagen)"]):
                 lt_ov[code] = int(row["LT (dagen)"])
         cfg["n_klanten_overrides"] = n_ov
         cfg["ip_overrides"]        = ip_ov
         cfg["lt_overrides"]        = lt_ov
-        # Bewaar huidige overzicht_df als vorige snapshot vóór recompute
+        # Bewaar huidige overzicht_df als vorige snapshot vÃ³Ã³r recompute
         if "overzicht_df" in st.session_state:
             st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
         sla_config_op(cfg)
-        st.toast(f"Overrides opgeslagen — {len(n_ov)} Z, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="✅")
+        st.toast(f"Overrides opgeslagen â€” {len(n_ov)} Z, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="âœ…")
         st.session_state.pop("overzicht_df", None)
         st.rerun()
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 3 – COMPONENT TOEVOEGEN
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 3 â€“ COMPONENT TOEVOEGEN
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_toevoegen:
     st.subheader("Nieuw component toevoegen")
@@ -605,12 +605,12 @@ with tab_toevoegen:
             f_code  = st.text_input("Artikelcode *")
             f_descr = st.text_input("Omschrijving")
             f_lam   = st.number_input(
-                "Lambda – vraag per jaar *",
+                "Lambda â€“ vraag per jaar *",
                 min_value=0.0001, value=1.0, step=0.1, format="%.4f",
             )
         with col2:
             f_lt = st.number_input(
-                "Levertijd leverancier → BPA (dagen) *",
+                "Levertijd leverancier â†’ BPA (dagen) *",
                 min_value=1, value=30, step=1,
             )
             f_n = st.number_input(
@@ -618,9 +618,9 @@ with tab_toevoegen:
                 min_value=1, value=1, step=1,
             )
             f_ip = st.number_input(
-                "Inkoopprijs (€)", min_value=0.0, value=0.0, step=10.0, format="%.2f",
+                "Inkoopprijs (â‚¬)", min_value=0.0, value=0.0, step=10.0, format="%.2f",
             )
-        submitted = st.form_submit_button("➕ Component opslaan")
+        submitted = st.form_submit_button("âž• Component opslaan")
 
     if submitted:
         if not f_code:
@@ -647,9 +647,9 @@ with tab_toevoegen:
             st.write("**Berekende basisvoorraden voor dit component:**")
             st.dataframe(pd.DataFrame([preview]), use_container_width=False)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 4 – COMPONENT VERWIJDEREN
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 4 â€“ COMPONENT VERWIJDEREN
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_verwijderen:
     st.subheader("Component verwijderen uit model")
@@ -694,18 +694,18 @@ with tab_verwijderen:
         bron_keuze = next(bron for c, bron, _ in opties if c == keuze)
         if bron_keuze == "handmatig":
             v = handmatig[keuze]
-            st.write(f"**{keuze}** (handmatig) &nbsp;|&nbsp; λ = {v['lambda_per_jaar']:.4f}/jr "
+            st.write(f"**{keuze}** (handmatig) &nbsp;|&nbsp; Î» = {v['lambda_per_jaar']:.4f}/jr "
                      f"&nbsp;|&nbsp; LT = {v['lt_dagen']} d")
             st.warning("Dit component wordt permanent verwijderd.")
-            if st.button("🗑️ Verwijder permanent", type="primary"):
+            if st.button("ðŸ—‘ï¸ Verwijder permanent", type="primary"):
                 del cfg["handmatige_componenten"][keuze]
                 sla_config_op(cfg)
                 st.success(f"'{keuze}' verwijderd.")
                 st.rerun()
         else:
-            st.write(f"**{keuze}** (uit Excel) – wordt uitgesloten van berekeningen.")
+            st.write(f"**{keuze}** (uit Excel) â€“ wordt uitgesloten van berekeningen.")
             st.info("Het artikel blijft in de Excel staan maar telt niet meer mee in het model.")
-            if st.button("🚫 Uitsluiten van model", type="primary"):
+            if st.button("ðŸš« Uitsluiten van model", type="primary"):
                 if keuze not in uitgesloten:
                     uitgesloten.append(keuze)
                 sla_config_op(cfg)
@@ -721,15 +721,15 @@ with tab_verwijderen:
             options=uitgesloten,
             key="terugzetten_selectbox",
         )
-        if st.button("↩️ Zet terug in model"):
+        if st.button("â†©ï¸ Zet terug in model"):
             uitgesloten.remove(terugzetten)
             sla_config_op(cfg)
             st.success(f"'{terugzetten}' is weer actief.")
             st.rerun()
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 5 – CONFIGURATIE
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 5 â€“ CONFIGURATIE
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_config:
     st.subheader("Huidige configuratie")
@@ -757,10 +757,10 @@ with tab_config:
                 {
                     "Code":        k,
                     "Omschrijving": v.get("descr", ""),
-                    "λ/jr":        v["lambda_per_jaar"],
+                    "Î»/jr":        v["lambda_per_jaar"],
                     "LT(d)":       v["lt_dagen"],
                     "Z":           v.get("n_klanten", "std"),
-                    "IP(€)":       v.get("ip", 0),
+                    "IP(â‚¬)":       v.get("ip", 0),
                 }
                 for k, v in cfg["handmatige_componenten"].items()
             ]),
@@ -771,9 +771,9 @@ with tab_config:
     st.write("**Ruwe JSON:**")
     st.json(cfg)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 6 – HISTORIEK
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 6 â€“ HISTORIEK
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_historie:
     st.subheader("Historiek basisvoorraden")
@@ -827,18 +827,18 @@ with tab_historie:
 
             # Snapshot handmatig toevoegen (huidige staat)
             st.divider()
-            if st.button("📸 Voeg snapshot toe van huidige staat"):
+            if st.button("ðŸ“¸ Voeg snapshot toe van huidige staat"):
                 from bpa_beheer import _sla_history_snapshot
                 _sla_history_snapshot(cfg)
                 st.success("Snapshot toegevoegd.")
                 st.rerun()
 
-    # ── Sensitivity grafieken ──────────────────────────────────────────────
+    # â”€â”€ Sensitivity grafieken â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     st.divider()
     st.subheader("Sensitivity grafieken")
 
     if "overzicht_df" not in st.session_state or st.session_state.overzicht_df.empty:
-        st.info("Laad het overzicht (tabblad 📊) om de sensitivity grafieken te berekenen.")
+        st.info("Laad het overzicht (tabblad ðŸ“Š) om de sensitivity grafieken te berekenen.")
     else:
         # Haal draaiknoppen op uit Kostenanalyse; gebruik defaults als nog niet berekend
         _kp = st.session_state.get('kosten_params', {})
@@ -848,9 +848,9 @@ with tab_historie:
 
         st.caption(
             f"Vaste waarden buiten de gesweepte parameter: "
-            f"α = **{_ALPHA_DEF:.0%}**, κ\\_BPA = **{_KAPPA_BPA_DEF:.0%}**, "
-            f"κ\\_c = **{_KAPPA_C_DEF:.0%}**, N = standaard uit overzicht. "
-            f"_(pas aan via tabblad 💰 Kostenanalyse)_"
+            f"Î± = **{_ALPHA_DEF:.0%}**, Îº\\_BPA = **{_KAPPA_BPA_DEF:.0%}**, "
+            f"Îº\\_c = **{_KAPPA_C_DEF:.0%}**, N = standaard uit overzicht. "
+            f"_(pas aan via tabblad ðŸ’° Kostenanalyse)_"
         )
 
         _SL_SWEEP_S     = SERVICE_LEVELS
@@ -858,13 +858,13 @@ with tab_historie:
         _ALPHA_SWEEP_S  = [0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30]
         _SL_ALPHA       = [sl for sl in SERVICE_LEVELS if sl >= 0.98]
 
-        if st.button("📊 Bereken sensitivity grafieken"):
+        if st.button("ðŸ“Š Bereken sensitivity grafieken"):
             _ov = st.session_state.overzicht_df
             _g1 = {n: [] for n in _N_VALS}
             _g2 = []
             _g3 = {sl: [] for sl in _SL_ALPHA}
 
-            with st.spinner("Berekenen (kan even duren)…"):
+            with st.spinner("Berekenen (kan even duren)â€¦"):
                 # Grafieken 1 & 2: sweep over service levels
                 for _sl in _SL_SWEEP_S:
                     try:
@@ -881,7 +881,7 @@ with tab_historie:
                             _g1[_n].append({'sl': _sl, 'marge': _r1['bpa_margin']})
                         except Exception:
                             _g1[_n].append({'sl': _sl, 'marge': None})
-                # Grafiek 3: sweep over alpha per SL ≥ 98%
+                # Grafiek 3: sweep over alpha per SL â‰¥ 98%
                 for _sl in _SL_ALPHA:
                     for _a in _ALPHA_SWEEP_S:
                         try:
@@ -900,10 +900,10 @@ with tab_historie:
 
             _COLORS5 = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2', '#D32F2F']
             _COLORS4 = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
-            _fmt_eur = _mt.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            _fmt_eur = _mt.FuncFormatter(lambda v, _: f'â‚¬{v:,.0f}')
             _fmt_sl  = _mt.FuncFormatter(lambda v, _: f'{v:.2f}%')
 
-            # ── Grafiek 1: service level vs marge per N ────────────────────
+            # â”€â”€ Grafiek 1: service level vs marge per N â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig1, _ax1 = _plt.subplots(figsize=(10, 5))
             for _n, _col in zip(_N_VALS, _COLORS5):
                 _pts = [(r['sl']*100, r['marge'])
@@ -913,10 +913,10 @@ with tab_historie:
                               marker='o', linewidth=2, color=_col, label=f'N = {_n}')
             _ax1.axhline(0, color='grey', linewidth=0.8)
             _ax1.set_xlabel('Service level (%)', fontsize=11)
-            _ax1.set_ylabel('Annual margin (€)', fontsize=11)
+            _ax1.set_ylabel('Annual margin (â‚¬)', fontsize=11)
             _ax1.set_title(
                 f'Margin vs. service level  '
-                f'(α = {_ALPHA_DEF:.0%}, κ_BPA = {_KAPPA_BPA_DEF:.0%})',
+                f'(Î± = {_ALPHA_DEF:.0%}, Îº_BPA = {_KAPPA_BPA_DEF:.0%})',
                 fontsize=12,
             )
             _ax1.yaxis.set_major_formatter(_fmt_eur)
@@ -929,7 +929,7 @@ with tab_historie:
             st.pyplot(_fig1)
             _plt.close(_fig1)
 
-            # ── Grafiek 2: service level vs basisvoorraad ──────────────────
+            # â”€â”€ Grafiek 2: service level vs basisvoorraad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig2, _ax2 = _plt.subplots(figsize=(10, 4))
             _pts2 = [(r['sl']*100, r['base'])
                      for r in st.session_state.sens_g2 if r['base'] is not None]
@@ -944,7 +944,7 @@ with tab_historie:
             _ax2.set_ylabel('Total base stock (units)', fontsize=11)
             _ax2.set_title(
                 f'Base stock vs. service level  '
-                f'(α = {_ALPHA_DEF:.0%}, N = standard)',
+                f'(Î± = {_ALPHA_DEF:.0%}, N = standard)',
                 fontsize=12,
             )
             _ax2.xaxis.set_major_formatter(_fmt_sl)
@@ -957,7 +957,7 @@ with tab_historie:
             st.pyplot(_fig2)
             _plt.close(_fig2)
 
-            # ── Grafiek 3: alpha vs marge per service level ────────────────
+            # â”€â”€ Grafiek 3: alpha vs marge per service level â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig3, _ax3 = _plt.subplots(figsize=(10, 5))
             for _sl3, _col3 in zip(_SL_ALPHA, _COLORS4):
                 _pts3 = [(r['alpha']*100, r['marge'])
@@ -966,11 +966,11 @@ with tab_historie:
                     _ax3.plot([p[0] for p in _pts3], [p[1] for p in _pts3],
                               marker='o', linewidth=2, color=_col3, label=f'SL = {_sl3:.1%}')
             _ax3.axhline(0, color='grey', linewidth=0.8)
-            _ax3.set_xlabel('Subscription rate α (%)', fontsize=11)
-            _ax3.set_ylabel('Annual margin (€)', fontsize=11)
+            _ax3.set_xlabel('Subscription rate Î± (%)', fontsize=11)
+            _ax3.set_ylabel('Annual margin (â‚¬)', fontsize=11)
             _ax3.set_title(
                 f'Margin vs. subscription rate  '
-                f'(κ_BPA = {_KAPPA_BPA_DEF:.0%}, N = standard)',
+                f'(Îº_BPA = {_KAPPA_BPA_DEF:.0%}, N = standard)',
                 fontsize=12,
             )
             _ax3.yaxis.set_major_formatter(_fmt_eur)
@@ -983,13 +983,13 @@ with tab_historie:
             st.pyplot(_fig3)
             _plt.close(_fig3)
 
-        # ── N vs. haalbaarheid per α ──────────────────────────────────────────────
+        # â”€â”€ N vs. haalbaarheid per Î± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.divider()
-        st.subheader("Z vs. haalbaarheid per α")
+        st.subheader("Z vs. haalbaarheid per Î±")
         st.caption(
             "Effect van het aantal subscripties op de BPA-marge en haalbaarheid "
             "voor verschillende abonnementstarieven. "
-            "SL, κ_BPA en κ_c worden overgenomen uit tabblad 💰 Kostenanalyse."
+            "SL, Îº_BPA en Îº_c worden overgenomen uit tabblad ðŸ’° Kostenanalyse."
         )
 
         _N_FEAS_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
@@ -999,14 +999,14 @@ with tab_historie:
             '#1976D2', '#7B1FA2', '#0097A7', '#5D4037',
         ]
 
-        if st.button("📊 Bereken N vs. haalbaarheid"):
+        if st.button("ðŸ“Š Bereken N vs. haalbaarheid"):
             _kp_f = st.session_state.get('kosten_params', {})
             _sl_f = _kp_f.get('service_level', 0.990)
             _kb_f = _kp_f.get('kappa_bpa',    0.20)
             _kc_f = _kp_f.get('kappa_c',      0.25)
 
             _nfeas = {a: [] for a in _ALPHA_FEAS}
-            with st.spinner("Berekenen N vs. haalbaarheid…"):
+            with st.spinner("Berekenen N vs. haalbaarheidâ€¦"):
                 for _a_f in _ALPHA_FEAS:
                     for _n_f in _N_FEAS_VALS:
                         try:
@@ -1037,28 +1037,28 @@ with tab_historie:
             _nfp   = st.session_state.sens_nfeas_params
             _n_std = representatieve_z()
 
-            # ── Grafiek 1: marge vs N per α ──────────────────────────────────────────
+            # â”€â”€ Grafiek 1: marge vs N per Î± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig_nf, _ax_nf = _plt_nf.subplots(figsize=(11, 6))
             for _a_f, _col_f in zip(_ALPHA_FEAS, _COLORS_FEAS):
                 _pts_nf = [(p['n'], p['marge']) for p in _nfd[_a_f] if p['marge'] is not None]
                 if _pts_nf:
                     _xs_nf, _ys_nf = zip(*_pts_nf)
                     _ax_nf.plot(_xs_nf, _ys_nf, marker='o', linewidth=2,
-                                color=_col_f, label=f'α = {_a_f:.0%}')
+                                color=_col_f, label=f'Î±â€¯=â€¯{_a_f:.0%}')
             _ax_nf.axhline(0, color='grey', linewidth=1.2, linestyle='--', label='Break-even')
             _ax_nf.axvline(_n_std, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z current = {_n_std}')
+                           label=f'Z currentâ€¯=â€¯{_n_std}')
             _ax_nf.set_xlabel('Number of subscriptions (Z)', fontsize=11)
-            _ax_nf.set_ylabel('Annual BPA margin (€)', fontsize=11)
+            _ax_nf.set_ylabel('Annual BPA margin (â‚¬)', fontsize=11)
             _ax_nf.set_title(
-                f'BPA margin vs. Z per α  '
-                f'(SL = {_nfp["sl"]:.1%}, '
-                f'κ_BPA = {_nfp["kappa_bpa"]:.0%}, '
-                f'κ_c = {_nfp["kappa_c"]:.0%})',
+                f'BPA margin vs. Z per Î±  '
+                f'(SLâ€¯=â€¯{_nfp["sl"]:.1%}, '
+                f'Îº_BPAâ€¯=â€¯{_nfp["kappa_bpa"]:.0%}, '
+                f'Îº_câ€¯=â€¯{_nfp["kappa_c"]:.0%})',
                 fontsize=12,
             )
             _ax_nf.yaxis.set_major_formatter(
-                _mt_nf.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+                _mt_nf.FuncFormatter(lambda v, _: f'â‚¬{v:,.0f}')
             )
             _ax_nf.set_xticks(_N_FEAS_VALS)
             _plt_nf.setp(_ax_nf.get_xticklabels(), rotation=30, ha='right')
@@ -1068,7 +1068,7 @@ with tab_historie:
             st.pyplot(_fig_nf)
             _plt_nf.close(_fig_nf)
 
-            # ── Grafiek 2: haalbaarheids-heatmap (N × α) ───────────────────────────────
+            # â”€â”€ Grafiek 2: haalbaarheids-heatmap (N Ã— Î±) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _heat = _np_nf.array([
                 [1.0 if p['feasible'] else 0.0 for p in _nfd[_a_f]]
                 for _a_f in _ALPHA_FEAS
@@ -1080,15 +1080,15 @@ with tab_historie:
             _ax_hm.set_yticks(range(len(_ALPHA_FEAS)))
             _ax_hm.set_yticklabels([f'{a:.0%}' for a in _ALPHA_FEAS], fontsize=9)
             _ax_hm.set_xlabel('Number of subscriptions (Z)', fontsize=11)
-            _ax_hm.set_ylabel('α', fontsize=12)
+            _ax_hm.set_ylabel('Î±', fontsize=12)
             _ax_hm.set_title(
-                'BPA feasibility per (N, α)  (✓ = feasible, ✗ = infeasible)',
+                'BPA feasibility per (N, Î±)  (âœ“â€¯=â€¯feasible, âœ—â€¯=â€¯infeasible)',
                 fontsize=12,
             )
             for _i in range(len(_ALPHA_FEAS)):
                 for _j in range(len(_N_FEAS_VALS)):
                     _ax_hm.text(_j, _i,
-                                '✓' if _heat[_i, _j] else '✗',
+                                'âœ“' if _heat[_i, _j] else 'âœ—',
                                 ha='center', va='center', fontsize=11,
                                 color='#1a5c1a' if _heat[_i, _j] else '#7a0000')
             try:
@@ -1101,24 +1101,24 @@ with tab_historie:
             _fig_hm.tight_layout()
             st.pyplot(_fig_hm)
             _plt_nf.close(_fig_hm)
-        # ── Haalbaarheid BPA per (N, SL) – heatmap ────────────────────────────────
+        # â”€â”€ Haalbaarheid BPA per (N, SL) â€“ heatmap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.divider()
         st.subheader("Haalbaarheid BPA per (Z, serviceniveau)")
         st.caption(
-            "Groen = BPA is haalbaar (marge ≥ 0), rood = niet haalbaar. "
-            "α wordt overgenomen uit tabblad 💰 Kostenanalyse; κ_BPA en κ_c idem."
+            "Groen = BPA is haalbaar (marge â‰¥ 0), rood = niet haalbaar. "
+            "Î± wordt overgenomen uit tabblad ðŸ’° Kostenanalyse; Îº_BPA en Îº_c idem."
         )
 
         _N_NSL_VALS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
 
-        if st.button("📊 Bereken haalbaarheid (N × SL)"):
+        if st.button("ðŸ“Š Bereken haalbaarheid (N Ã— SL)"):
             _kp_nsl = st.session_state.get('kosten_params', {})
             _a_nsl  = _kp_nsl.get('alpha',     0.15)
             _kb_nsl = _kp_nsl.get('kappa_bpa', 0.20)
             _kc_nsl = _kp_nsl.get('kappa_c',   0.25)
 
             _nsl_grid = {}
-            with st.spinner("Berekenen haalbaarheid (N × SL)…"):
+            with st.spinner("Berekenen haalbaarheid (N Ã— SL)â€¦"):
                 for _n_nsl in _N_NSL_VALS:
                     _nsl_grid[_n_nsl] = {}
                     for _sl_nsl in SERVICE_LEVELS:
@@ -1163,7 +1163,7 @@ with tab_historie:
                     if _cell.get('margin') is not None:
                         _marg_mat[_ri, _ci] = _cell['margin']
 
-            # Kleurschaal: rood → geel → groen via marge-waarden
+            # Kleurschaal: rood â†’ geel â†’ groen via marge-waarden
             _valid = _marg_mat[~_np_nsl.isnan(_marg_mat)]
             if len(_valid) > 0:
                 _abs_max = max(abs(_valid.min()), abs(_valid.max()), 1)
@@ -1179,7 +1179,7 @@ with tab_historie:
                 cmap='RdYlGn', norm=_norm_nsl,
                 interpolation='nearest',
             )
-            _plt_nsl.colorbar(_im_nsl, ax=_ax_nsl, label='BPA margin (€)', fraction=0.03, pad=0.02)
+            _plt_nsl.colorbar(_im_nsl, ax=_ax_nsl, label='BPA margin (â‚¬)', fraction=0.03, pad=0.02)
 
             # Annotaties per cel
             for _ri, _sl_v in enumerate(_rows_nsl):
@@ -1187,13 +1187,13 @@ with tab_historie:
                     _cell = _grid.get(_n_v, {}).get(_sl_v, {})
                     _feas = _cell.get('feasible', False)
                     _mg   = _cell.get('margin')
-                    _sym  = '✓' if _feas else '✗'
+                    _sym  = 'âœ“' if _feas else 'âœ—'
                     _tc   = '#1a5c1a' if _feas else '#7a0000'
                     _ax_nsl.text(_ci, _ri, _sym,
                                  ha='center', va='center' if _mg is None else 'bottom',
                                  fontsize=13, color=_tc, fontweight='bold')
                     if _mg is not None:
-                        _ax_nsl.text(_ci, _ri + 0.28, f'€{_mg:,.0f}',
+                        _ax_nsl.text(_ci, _ri + 0.28, f'â‚¬{_mg:,.0f}',
                                      ha='center', va='center', fontsize=6.5, color=_tc)
 
             # Assen
@@ -1205,7 +1205,7 @@ with tab_historie:
             _ax_nsl.set_ylabel('Service level', fontsize=11)
             _ax_nsl.set_title(
                 f'BPA feasibility per (Z, service level)  '
-                f'(α = {_a_lbl:.0%}, κ_BPA = {_kb_lbl:.0%})',
+                f'(Î± = {_a_lbl:.0%}, Îº_BPA = {_kb_lbl:.0%})',
                 fontsize=12,
             )
 
@@ -1223,22 +1223,22 @@ with tab_historie:
             st.pyplot(_fig_nsl)
             _plt_nsl.close(_fig_nsl)
 
-        # ── N vs. maximaal haalbaar serviceniveau ───────────────────────────────────
+        # â”€â”€ N vs. maximaal haalbaar serviceniveau â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.divider()
         st.subheader("Z vs. maximaal haalbaar serviceniveau")
         st.caption(
             "Voor elk aantal subscripties (Z): wat is het hoogste service level waarbij het "
-            "model nog haalbaar is? α, κ_BPA en κ_c worden overgenomen uit tabblad 💰 Kostenanalyse."
+            "model nog haalbaar is? Î±, Îº_BPA en Îº_c worden overgenomen uit tabblad ðŸ’° Kostenanalyse."
         )
 
-        if st.button("📊 Bereken N vs. max. haalbaar SL"):
+        if st.button("ðŸ“Š Bereken N vs. max. haalbaar SL"):
             _kp_sl  = st.session_state.get('kosten_params', {})
             _a_sl   = _kp_sl.get('alpha',    0.15)
             _kb_sl  = _kp_sl.get('kappa_bpa', 0.20)
             _kc_sl  = _kp_sl.get('kappa_c',   0.25)
 
             _nsl_results = []
-            with st.spinner("Berekenen N vs. max. haalbaar SL…"):
+            with st.spinner("Berekenen N vs. max. haalbaar SLâ€¦"):
                 for _n_sl in _N_FEAS_VALS:
                     _row_sl = {'n': _n_sl}
                     _max_sl = None
@@ -1275,7 +1275,7 @@ with tab_historie:
             _nsl_p    = st.session_state.sens_nsl_params
             _n_std_sl = representatieve_z()
 
-            # ── Grafiek 2: totale S* vs N per service level ─────────────────────────
+            # â”€â”€ Grafiek 2: totale S* vs N per service level â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _COLORS_SL = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
             _fig_bs, _ax_bs = _plt_sl.subplots(figsize=(11, 5))
             for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
@@ -1285,18 +1285,18 @@ with tab_historie:
                 if _bs_pts:
                     _xb, _yb = zip(*_bs_pts)
                     _ax_bs.plot(_xb, _yb, marker='o', linewidth=2,
-                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                                color=_col_sl, label=f'SLâ€¯=â€¯{_sl_v:.1%}')
                     for _xv, _yv in zip(_xb, _yb):
                         _ax_bs.annotate(str(int(_yv)), (_xv, _yv),
                                         textcoords='offset points', xytext=(0, 7),
                                         ha='center', fontsize=8)
             _ax_bs.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z current = {_n_std_sl}')
+                           label=f'Z currentâ€¯=â€¯{_n_std_sl}')
             _ax_bs.set_xlabel('Number of subscriptions (Z)', fontsize=11)
             _ax_bs.set_ylabel('Total base stock S* (units)', fontsize=11)
             _ax_bs.set_title(
                 f'Total S* vs. Z per service level  '
-                f'(α = {_nsl_p["alpha"]:.0%})',
+                f'(Î±â€¯=â€¯{_nsl_p["alpha"]:.0%})',
                 fontsize=12,
             )
             _ax_bs.set_xticks(_N_FEAS_VALS)
@@ -1309,7 +1309,7 @@ with tab_historie:
             _plt_sl.close(_fig_bs)
 
 
-            # ── ΔS* per extra subscriptie (pooling-effect) ────────────────────────────
+            # â”€â”€ Î”S* per extra subscriptie (pooling-effect) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig_ds, _ax_ds = _plt_sl.subplots(figsize=(11, 5))
             for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
                 _bs_all = [
@@ -1323,19 +1323,19 @@ with tab_historie:
                         _nd.append((_n1 + _n2) / 2)
                         _dd.append((_s2 - _s1) / (_n2 - _n1))
                     _ax_ds.plot(_nd, _dd, marker='o', linewidth=2,
-                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                                color=_col_sl, label=f'SLâ€¯=â€¯{_sl_v:.1%}')
                     for _xv, _yv in zip(_nd, _dd):
                         _ax_ds.annotate(f'{_yv:.3f}', (_xv, _yv),
                                         textcoords='offset points', xytext=(0, 7),
                                         ha='center', fontsize=7)
             _ax_ds.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_ds.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z current = {_n_std_sl}')
+                           label=f'Z currentâ€¯=â€¯{_n_std_sl}')
             _ax_ds.set_xlabel('Number of subscriptions Z (interval midpoint)', fontsize=11)
-            _ax_ds.set_ylabel('ΔS* / ΔN  (units per extra subscription)', fontsize=11)
+            _ax_ds.set_ylabel('Î”S* / Î”N  (units per extra subscription)', fontsize=11)
             _ax_ds.set_title(
                 f'Pooling effect: extra stock per extra subscription  '
-                f'(α = {_nsl_p["alpha"]:.0%})',
+                f'(Î±â€¯=â€¯{_nsl_p["alpha"]:.0%})',
                 fontsize=12,
             )
             _ax_ds.legend(fontsize=9)
@@ -1344,7 +1344,7 @@ with tab_historie:
             st.pyplot(_fig_ds)
             _plt_sl.close(_fig_ds)
 
-            # ── Pooling-effect: analytische curves ──────────────────────────────
+            # â”€â”€ Pooling-effect: analytische curves â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             # Bereken mu_per_sub = sum_i( lambda_i/N_i * L_i ) uit overzicht
             _ov_pa = st.session_state.overzicht_df.reset_index()
             _mu_per_sub = 0.0
@@ -1358,7 +1358,7 @@ with tab_historie:
             _N_arr   = [float(r['n']) for r in _nsl_d]
             _mu_arr  = [n * _mu_per_sub for n in _N_arr]  # mu_total(N)
 
-            # ── Plot 1: CV(N) = 1/sqrt(mu_total(N)) ───────────────────────
+            # â”€â”€ Plot 1: CV(N) = 1/sqrt(mu_total(N)) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             import math as _math_pa
             _cv_arr = [1.0 / _math_pa.sqrt(mu) if mu > 0 else None for mu in _mu_arr]
 
@@ -1367,18 +1367,18 @@ with tab_historie:
             _cv_ok   = [cv for cv in _cv_arr if cv is not None]
             if _n_cv_ok:
                 _ax_cv.plot(_n_cv_ok, _cv_ok, marker='o', linewidth=2.5,
-                            color='#1976D2', label='CV(Z) = 1/√(μₜₒₜ(Z))')
+                            color='#1976D2', label='CV(Z) = 1/âˆš(Î¼â‚œâ‚’â‚œ(Z))')
                 for _xv, _yv in zip(_n_cv_ok, _cv_ok):
                     _ax_cv.annotate(f'{_yv:.3f}', (_xv, _yv),
                                     textcoords='offset points', xytext=(0, 7),
                                     ha='center', fontsize=8)
             _ax_cv.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z current = {_n_std_sl}')
+                           label=f'Z currentâ€¯=â€¯{_n_std_sl}')
             _ax_cv.set_xlabel('Number of subscriptions (Z)', fontsize=11)
             _ax_cv.set_ylabel('CV lead-time demand', fontsize=11)
             _ax_cv.set_title(
                 'Relative uncertainty lead-time demand  '
-                'CV(Z) = 1 / √(Z · Σ λᵢ · Lᵢ / Zᵢ)',
+                'CV(Z) = 1â€¯/â€¯âˆš(Zâ€¯Â·â€¯Î£ Î»áµ¢â€¯Â·â€¯Láµ¢ / Záµ¢)',
                 fontsize=12,
             )
             _ax_cv.set_xticks(_N_FEAS_VALS)
@@ -1389,7 +1389,7 @@ with tab_historie:
             st.pyplot(_fig_cv)
             _plt_sl.close(_fig_cv)
 
-            # ── Plot 2: S*(X,N) / N per service level ──────────────────────
+            # â”€â”€ Plot 2: S*(X,N) / N per service level â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig_sp, _ax_sp = _plt_sl.subplots(figsize=(11, 5))
             for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
                 _sp_pts = [
@@ -1400,19 +1400,19 @@ with tab_historie:
                 if _sp_pts:
                     _xp, _yp = zip(*_sp_pts)
                     _ax_sp.plot(_xp, _yp, marker='o', linewidth=2,
-                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                                color=_col_sl, label=f'SLâ€¯=â€¯{_sl_v:.1%}')
                     for _xv, _yv in zip(_xp, _yp):
                         _ax_sp.annotate(f'{_yv:.2f}', (_xv, _yv),
                                         textcoords='offset points', xytext=(0, 7),
                                         ha='center', fontsize=7)
             # Also plot mu/N = mu_per_sub as reference (pooling limit)
             _ax_sp.axhline(_mu_per_sub, color='grey', linewidth=1.0,
-                           linestyle='--', label=f'μ/Z (lead-time demand per sub., ≈{_mu_per_sub:.3f})')
+                           linestyle='--', label=f'Î¼/Z (lead-time demand per sub., â‰ˆ{_mu_per_sub:.3f})')
             _ax_sp.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z current = {_n_std_sl}')
+                           label=f'Z currentâ€¯=â€¯{_n_std_sl}')
             _ax_sp.set_xlabel('Number of subscriptions (Z)', fontsize=11)
             _ax_sp.set_ylabel('S*(X,Z) / Z  (stock per subscription)', fontsize=11)
-            _ax_sp.set_title('Required stock per subscription  S*(X,Z) / Z',
+            _ax_sp.set_title('Required stock per subscription  S*(X,Z)â€¯/â€¯Z',
                              fontsize=12)
             _ax_sp.set_xticks(_N_FEAS_VALS)
             _plt_sl.setp(_ax_sp.get_xticklabels(), rotation=30, ha='right')
@@ -1422,12 +1422,12 @@ with tab_historie:
             st.pyplot(_fig_sp)
             _plt_sl.close(_fig_sp)
 
-            # ── S*(X,N)/N detail: N = 1 … 20 ────────────────────────────────
+            # â”€â”€ S*(X,N)/N detail: N = 1 â€¦ 20 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.caption(
-                "Detail: S*(X,Z) / Z voor Z = 1 … 20, "
+                "Detail: S*(X,Z)â€¯/â€¯Z voor Zâ€¯=â€¯1â€¯â€¦â€¯20, "
                 "berekend per component via inverse_service_level."
             )
-            if st.button("📊 Bereken S*/Z voor Z = 1 … 20"):
+            if st.button("ðŸ“Š Bereken S*/Z voor Z = 1 â€¦ 20"):
                 _ov_det = st.session_state.overzicht_df.reset_index()
                 # Collect (lambda_per_N, lt_jr) per component
                 _comp_det = []
@@ -1440,7 +1440,7 @@ with tab_historie:
 
                 _N_DET = list(range(1, 21))
                 _det_results = {sl: [] for sl in SERVICE_LEVELS}
-                with st.spinner("Berekenen S*/Z voor Z = 1 … 20…"):
+                with st.spinner("Berekenen S*/Z voor Z = 1â€¯â€¦â€¯20â€¦"):
                     for _n_det in _N_DET:
                         for _sl_det in SERVICE_LEVELS:
                             _s_tot = sum(
@@ -1466,19 +1466,19 @@ with tab_historie:
                     if _pts_det:
                         _xd, _yd = zip(*_pts_det)
                         _ax_det.plot(_xd, _yd, marker='o', linewidth=2,
-                                     color=_col_det, label=f'SL = {_sl_det:.1%}')
+                                     color=_col_det, label=f'SLâ€¯=â€¯{_sl_det:.1%}')
                         for _xv, _yv in zip(_xd, _yd):
                             _ax_det.annotate(f'{_yv:.2f}', (_xv, _yv),
                                              textcoords='offset points', xytext=(0, 7),
                                              ha='center', fontsize=7)
                 _ax_det.axhline(_mu_ref, color='grey', linewidth=1.0, linestyle='--',
-                                label=f'μ/Z (lower bound, ≈{_mu_ref:.3f})')
+                                label=f'Î¼/Z (lower bound, â‰ˆ{_mu_ref:.3f})')
                 _ax_det.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                                label=f'Z current = {_n_std_sl}')
+                                label=f'Z currentâ€¯=â€¯{_n_std_sl}')
                 _ax_det.set_xlabel('Number of subscriptions Z', fontsize=11)
-                _ax_det.set_ylabel('S*(X,Z) / Z  (stock per subscription)', fontsize=11)
+                _ax_det.set_ylabel('S*(X,Z)â€¯/â€¯Z  (stock per subscription)', fontsize=11)
                 _ax_det.set_title(
-                    'Required stock per subscription  S*(X,Z) / Z  (Z = 1… 20)',
+                    'Required stock per subscription  S*(X,Z)â€¯/â€¯Z  (Zâ€¯=â€¯1â€¦â€¯20)',
                     fontsize=12,
                 )
                 _ax_det.set_xticks(_N_DET_x)
@@ -1489,7 +1489,7 @@ with tab_historie:
                 _plt_sl.close(_fig_det)
 
 
-            # ── Plot 3: Safety stock / N per service level ──────────────────
+            # â”€â”€ Plot 3: Safety stock / N per service level â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fig_ss, _ax_ss = _plt_sl.subplots(figsize=(11, 5))
             for _sl_v, _col_sl in zip(SERVICE_LEVELS, _COLORS_SL):
                 _ss_pts = []
@@ -1501,19 +1501,19 @@ with tab_historie:
                 if _ss_pts:
                     _xs, _ys = zip(*_ss_pts)
                     _ax_ss.plot(_xs, _ys, marker='o', linewidth=2,
-                                color=_col_sl, label=f'SL = {_sl_v:.1%}')
+                                color=_col_sl, label=f'SLâ€¯=â€¯{_sl_v:.1%}')
                     for _xv, _yv in zip(_xs, _ys):
                         _ax_ss.annotate(f'{_yv:.3f}', (_xv, _yv),
                                         textcoords='offset points', xytext=(0, 7),
                                         ha='center', fontsize=7)
             _ax_ss.axhline(0, color='grey', linewidth=0.8, linestyle='--')
             _ax_ss.axvline(_n_std_sl, color='black', linewidth=1.0, linestyle=':',
-                           label=f'Z current = {_n_std_sl}')
+                           label=f'Z currentâ€¯=â€¯{_n_std_sl}')
             _ax_ss.set_xlabel('Number of subscriptions (Z)', fontsize=11)
-            _ax_ss.set_ylabel('(S*(X,Z) − μ(Z)) / Z  (safety stock per subscription)',
+            _ax_ss.set_ylabel('(S*(X,Z) âˆ’ Î¼(Z)) / Z  (safety stock per subscription)',
                               fontsize=11)
             _ax_ss.set_title(
-                'Safety stock per subscription  (S*(X,Z) − Z · ΣλᵢLᵢ/Zᵢ) / Z',
+                'Safety stock per subscription  (S*(X,Z) âˆ’ Zâ€¯Â·â€¯Î£Î»áµ¢Láµ¢/Záµ¢)â€¯/â€¯Z',
                 fontsize=12,
             )
             _ax_ss.set_xticks(_N_FEAS_VALS)
@@ -1524,27 +1524,27 @@ with tab_historie:
             st.pyplot(_fig_ss)
             _plt_sl.close(_fig_ss)
 
-        # ── Marginale kosten vs. N (pooling-effect) ─────────────────────
+        # â”€â”€ Marginale kosten vs. N (pooling-effect) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.divider()
         st.subheader("Marginale kosten vs. Z")
         st.caption(
             "Hoe nemen de incrementele kosten per extra subscriptie af naarmate N groeit? "
             "Dit visualiseert het pooling-effect: elke extra subscriptie vereist minder "
             "extra inventariskosten dan de vorige. "
-            "α, κ_BPA, κ_c en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
+            "Î±, Îº_BPA, Îº_c en SL worden overgenomen uit tabblad ðŸ’° Kostenanalyse."
         )
 
         _N_MC_VALS   = [1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100]
         _SL_MC_COLORS = ['#2ca02c', '#ff7f0e', '#1f77b4', '#d62728', '#9467bd', '#8c564b']
 
-        if st.button("📊 Bereken marginale kosten vs. Z"):
+        if st.button("ðŸ“Š Bereken marginale kosten vs. Z"):
             _kp_mc = st.session_state.get('kosten_params', {})
             _a_mc  = _kp_mc.get('alpha',     0.15)
             _kb_mc = _kp_mc.get('kappa_bpa', 0.20)
             _kc_mc = _kp_mc.get('kappa_c',   0.25)
 
             _mc_results_by_sl = {}
-            with st.spinner("Berekenen marginale kosten voor alle serviceniveaus…"):
+            with st.spinner("Berekenen marginale kosten voor alle serviceniveausâ€¦"):
                 for _sl_mc in SERVICE_LEVELS:
                     _mc_rows = []
                     for _n_mc in _N_MC_VALS:
@@ -1575,9 +1575,9 @@ with tab_historie:
             _mc_by_sl = st.session_state.sens_mc
             _mc_p     = st.session_state.sens_mc_params
             _n_std_mc = representatieve_z()
-            _fmt_mc   = _mt_mc.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            _fmt_mc   = _mt_mc.FuncFormatter(lambda v, _: f'â‚¬{v:,.0f}')
 
-            # Backward compatibility: oud formaat was een lijst voor één SL
+            # Backward compatibility: oud formaat was een lijst voor Ã©Ã©n SL
             if isinstance(_mc_by_sl, list):
                 _mc_by_sl = {0.990: _mc_by_sl}
 
@@ -1604,10 +1604,10 @@ with tab_historie:
 
             _ax_mc1.axvline(_n_std_mc, color='black', linewidth=1.0,
                             linestyle=':', label=f'Z current = {_n_std_mc}')
-            _ax_mc1.set_ylabel('Total BPA cost (€)', fontsize=11)
+            _ax_mc1.set_ylabel('Total BPA cost (â‚¬)', fontsize=11)
             _ax_mc1.set_title(
                 f'BPA cost vs. Z  '
-                f'(α = {_mc_p["alpha"]:.0%}, κ_BPA = {_mc_p["kappa_bpa"]:.0%})',
+                f'(Î± = {_mc_p["alpha"]:.0%}, Îº_BPA = {_mc_p["kappa_bpa"]:.0%})',
                 fontsize=12,
             )
             _ax_mc1.yaxis.set_major_formatter(_fmt_mc)
@@ -1619,7 +1619,7 @@ with tab_historie:
             _ax_mc2.axvline(_n_std_mc, color='black', linewidth=1.0,
                             linestyle=':', label=f'Z current = {_n_std_mc}')
             _ax_mc2.set_xlabel('Number of subscriptions (Z)', fontsize=11)
-            _ax_mc2.set_ylabel('ΔC / ΔZ  (extra cost per extra subscription, €)',
+            _ax_mc2.set_ylabel('Î”C / Î”Z  (extra cost per extra subscription, â‚¬)',
                                fontsize=11)
             _ax_mc2.set_title(
                 'Pooling effect: marginal inventory cost per extra subscription',
@@ -1634,11 +1634,11 @@ with tab_historie:
             st.pyplot(_fig_mc)
             _plt_mc.close(_fig_mc)
 
-        # ── Investering vs. N ─────────────────────────────────────────────────
+        # â”€â”€ Investering vs. N â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.divider()
         st.subheader("Investering vs. aantal subscripties")
         st.caption(
-            "Totale voorraadwaarde (Σ S\u002a × inkoopprijs) als functie van het aantal "
+            "Totale voorraadwaarde (Î£ S\u002a Ã— inkoopprijs) als functie van het aantal "
             "subscripties per service level. Toont hoeveel kapitaal BPA in voorraad "
             "moet investeren naarmate het klantenbestand groeit. De x-as toont het "
             "TOTALE aantal subscripties over alle componenten en start bij de som van "
@@ -1647,7 +1647,7 @@ with tab_historie:
         )
 
         # Baseline per component = het geconfigureerde n_klanten, dat de
-        # verwachte E[Z_i(α,X)] weergeeft zodra die via de tab Verwachte
+        # verwachte E[Z_i(Î±,X)] weergeeft zodra die via de tab Verwachte
         # subscripties is doorgezet. De x-as toont het TOTAAL aantal
         # subscripties over alle componenten (= som van de baselines bij
         # factor 1.0); alle componenten schalen proportioneel mee.
@@ -1656,7 +1656,7 @@ with tab_historie:
         _INV_FACTORS = [round(1.0 + 0.1 * _k, 1) for _k in range(20)]
         _COLORS_INV = ['#1976D2', '#388E3C', '#F57C00', '#7B1FA2']
 
-        if st.button("📊 Bereken investering vs. totaal subs"):
+        if st.button("ðŸ“Š Bereken investering vs. totaal subs"):
             _ov_inv = st.session_state.overzicht_df.reset_index()
             # Verzamel per component: lambda per subscriptie, baseline-subs, LT, IP, VP, code
             _comp_inv = []
@@ -1686,7 +1686,7 @@ with tab_historie:
             _sl_top = st.session_state.get('kosten_params', {}).get('service_level', 0.990)
             _inv_per_comp = {sl: {c['code']: [] for c in _comp_inv} for sl in SERVICE_LEVELS}
 
-            with st.spinner("Berekenen investering vs. totaal subs…"):
+            with st.spinner("Berekenen investering vs. totaal subsâ€¦"):
                 for _f_inv in _INV_FACTORS:
                     _tot_subs = int(round(_T0_inv * _f_inv))   # x-waarde: totaal subscripties
                     for _sl_inv in SERVICE_LEVELS:
@@ -1723,7 +1723,7 @@ with tab_historie:
             _inv_d    = st.session_state.sens_inv
             _tot0_inv = int(st.session_state.get('sens_inv_t0', 0))
             _x_ticks_inv = [r['n'] for r in _inv_d[SERVICE_LEVELS[0]]]
-            _fmt_inv  = _mt_inv.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            _fmt_inv  = _mt_inv.FuncFormatter(lambda v, _: f'â‚¬{v:,.0f}')
 
             _fig_inv, _ax_inv = _plt_inv.subplots(figsize=(11, 5))
             for _sl_inv, _col_inv in zip(SERVICE_LEVELS, _COLORS_INV):
@@ -1736,7 +1736,7 @@ with tab_historie:
             _ax_inv.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
                             label=f'Total subs (sim) = {_tot0_inv}')
             _ax_inv.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
-            _ax_inv.set_ylabel('Total inventory value (€)', fontsize=11)
+            _ax_inv.set_ylabel('Total inventory value (â‚¬)', fontsize=11)
             _ax_inv.set_title(
                 'Required investment in base stock vs. total number of subscriptions',
                 fontsize=12,
@@ -1756,20 +1756,20 @@ with tab_historie:
                 _row_t = {'Totaal subs': _n_v}
                 for _sl_v in SERVICE_LEVELS:
                     _pts = [r for r in _inv_d[_sl_v] if r['n'] == _n_v]
-                    _row_t[f'SL {_sl_v:.1%}'] = f"€{_pts[0]['inv']:,.0f}" if _pts else '—'
+                    _row_t[f'SL {_sl_v:.1%}'] = f"â‚¬{_pts[0]['inv']:,.0f}" if _pts else 'â€”'
                 _inv_tbl_rows.append(_row_t)
             st.dataframe(pd.DataFrame(_inv_tbl_rows).set_index('Totaal subs'), use_container_width=False)
 
-            # ── Top-5 duurste componenten per VP ──────────────────────────
+            # â”€â”€ Top-5 duurste componenten per VP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if 'sens_inv_top5' in st.session_state:
                 _top5    = st.session_state.sens_inv_top5
                 _comp_d  = st.session_state.sens_inv_comp
                 _sl_lbl  = st.session_state.sens_inv_sl_top
 
                 _COLORS_TOP5 = ['#D32F2F', '#F57C00', '#FBC02D', '#388E3C', '#1976D2']
-                st.subheader("Top 5 duurste componenten (VP) — investering vs. totaal subs (per service level)")
+                st.subheader("Top 5 duurste componenten (VP) â€” investering vs. totaal subs (per service level)")
                 st.caption(
-                    "Gesommeerde investeringswaarde (S\u002a × IP) van de top 5 duurste componenten "
+                    "Gesommeerde investeringswaarde (S\u002a Ã— IP) van de top 5 duurste componenten "
                     "(op verkoopprijs) als functie van het totaal aantal subscripties, per service level."
                 )
 
@@ -1798,7 +1798,7 @@ with tab_historie:
                     _ax_t5.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
                                    label=f'Total subs (sim) = {_tot0_inv}')
                     _ax_t5.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
-                    _ax_t5.set_ylabel('Summed investment value top 5 (€)', fontsize=11)
+                    _ax_t5.set_ylabel('Summed investment value top 5 (â‚¬)', fontsize=11)
                     _ax_t5.set_title(
                         'Top 5 most expensive components (VP): summed investment vs. total subs per SL',
                         fontsize=12,
@@ -1812,7 +1812,7 @@ with tab_historie:
                     st.pyplot(_fig_t5)
                     _plt_inv.close(_fig_t5)
 
-            # ── Top-10 duurste componenten — gesommeerde lijnen per SL ──────
+            # â”€â”€ Top-10 duurste componenten â€” gesommeerde lijnen per SL â”€â”€â”€â”€â”€â”€
             if 'sens_inv_top10' in st.session_state:
                 import matplotlib as _mpl_inv
                 _top10   = st.session_state.sens_inv_top10
@@ -1821,9 +1821,9 @@ with tab_historie:
                 _comp_d_sl0_t10 = _comp_d.get(SERVICE_LEVELS[0], {})
                 _x10_sum_vals = [p['n'] for p in _comp_d_sl0_t10.get(_top10[0]['code'], [])] if _top10 else []
 
-                st.subheader("Top 10 duurste componenten (VP) — gesommeerde investering vs. totaal subs (per service level)")
+                st.subheader("Top 10 duurste componenten (VP) â€” gesommeerde investering vs. totaal subs (per service level)")
                 st.caption(
-                    "Gesommeerde investeringswaarde (S\u002a × IP) van de top 10 duurste componenten "
+                    "Gesommeerde investeringswaarde (S\u002a Ã— IP) van de top 10 duurste componenten "
                     "(op verkoopprijs) als functie van het totaal aantal subscripties, per service level."
                 )
 
@@ -1846,7 +1846,7 @@ with tab_historie:
                     _ax_t10s.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
                                      label=f'Total subs (sim) = {_tot0_inv}')
                     _ax_t10s.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
-                    _ax_t10s.set_ylabel('Summed investment value top 10 (€)', fontsize=11)
+                    _ax_t10s.set_ylabel('Summed investment value top 10 (â‚¬)', fontsize=11)
                     _ax_t10s.set_title(
                         'Top 10 most expensive components (VP): summed investment vs. total subs per SL',
                         fontsize=12,
@@ -1860,7 +1860,7 @@ with tab_historie:
                     st.pyplot(_fig_t10s)
                     _plt_inv.close(_fig_t10s)
 
-                # ── Top-10 duurste componenten — individuele lijnen ──────────
+                # â”€â”€ Top-10 duurste componenten â€” individuele lijnen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 _sl_opts_t10 = [f'SL {s:.1%}' for s in SERVICE_LEVELS]
                 _sl_sel_t10  = st.selectbox(
                     'Service level voor top-10 grafiek',
@@ -1870,7 +1870,7 @@ with tab_historie:
                 )
                 _sl_val_t10 = SERVICE_LEVELS[_sl_opts_t10.index(_sl_sel_t10)]
 
-                st.subheader("Top 10 duurste componenten (VP) — investering per component vs. totaal subs")
+                st.subheader("Top 10 duurste componenten (VP) â€” investering per component vs. totaal subs")
                 st.caption(
                     "Investeringswaarde (S\u002a \u00d7 IP) per component als functie van het totaal aantal subscripties "
                     "voor het geselecteerde service level."
@@ -1886,7 +1886,7 @@ with tab_historie:
                     for _ci, _c10 in enumerate(_top10):
                         _pts10 = [p['inv'] for p in _cd10_sl.get(_c10['code'], [])]
                         if _pts10:
-                            _lbl10 = f"{_c10['code']} – {_c10.get('descr', '')[:25]}"
+                            _lbl10 = f"{_c10['code']} â€“ {_c10.get('descr', '')[:25]}"
                             _ax_t10.plot(
                                 _x10_vals, _pts10,
                                 color=_cmap10(_ci / 10),
@@ -1897,9 +1897,9 @@ with tab_historie:
                     _ax_t10.axvline(_tot0_inv, color='black', linewidth=1.0, linestyle=':',
                                     label=f'Total subs (sim) = {_tot0_inv}')
                     _ax_t10.set_xlabel('Total number of subscriptions (all components)', fontsize=11)
-                    _ax_t10.set_ylabel('Investment value per component (€)', fontsize=11)
+                    _ax_t10.set_ylabel('Investment value per component (â‚¬)', fontsize=11)
                     _ax_t10.set_title(
-                        f'Top 10 most expensive components — investment vs. total subs  ({_sl_sel_t10})',
+                        f'Top 10 most expensive components â€” investment vs. total subs  ({_sl_sel_t10})',
                         fontsize=12,
                     )
                     _ax_t10.yaxis.set_major_formatter(_fmt_inv)
@@ -1911,14 +1911,14 @@ with tab_historie:
                     st.pyplot(_fig_t10)
                     _plt_inv.close(_fig_t10)
 
-        # ── Marge over tijd (groeiend klantenbestand) ─────────────────────────
+        # â”€â”€ Marge over tijd (groeiend klantenbestand) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.divider()
         st.subheader("Marge over tijd (groeiend klantenbestand)")
         st.caption(
-            "Cumulatieve cashflow rekening houdend met de initiële investering in basisvoorraad, "
-            "jaarlijkse voorraadkosten (κ\\_BPA × S\\* × IP) en groeiende abonnementsinkomsten "
-            "(α × VP × Z). Z groeit lineair van start naar doelstelling. "
-            "α, κ\\_BPA en SL worden overgenomen uit tabblad 💰 Kostenanalyse."
+            "Cumulatieve cashflow rekening houdend met de initiÃ«le investering in basisvoorraad, "
+            "jaarlijkse voorraadkosten (Îº\\_BPA Ã— S\\* Ã— IP) en groeiende abonnementsinkomsten "
+            "(Î± Ã— VP Ã— Z). Z groeit lineair van start naar doelstelling. "
+            "Î±, Îº\\_BPA en SL worden overgenomen uit tabblad ðŸ’° Kostenanalyse."
         )
 
         _col_mt1, _col_mt2, _col_mt3 = st.columns(3)
@@ -1941,7 +1941,7 @@ with tab_historie:
                 key="marge_tijd_T",
             )
 
-        if st.button("📊 Bereken marge over tijd"):
+        if st.button("ðŸ“Š Bereken marge over tijd"):
             _kp_mt    = st.session_state.get('kosten_params', {})
             _alpha_mt = _kp_mt.get('alpha',         0.15)
             _kbpa_mt  = _kp_mt.get('kappa_bpa',     0.20)
@@ -2019,7 +2019,7 @@ with tab_historie:
                 'T':         int(_T_mt),
             }
 
-            with st.spinner("Berekenen marge over tijd…"):
+            with st.spinner("Berekenen marge over tijdâ€¦"):
                 _inv_mt_arr, _hold_mt_arr, _rev_mt_arr, _cum_mt_arr, _N_mt_arr = \
                     _calc_cashflow(_comp_mt)
 
@@ -2062,7 +2062,7 @@ with tab_historie:
 
             _mtd    = st.session_state.sens_marge_tijd
             _mtp    = _mtd['params']
-            _fmt_mt = _mt_tick.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            _fmt_mt = _mt_tick.FuncFormatter(lambda v, _: f'â‚¬{v:,.0f}')
 
             _t_arr    = _mtd['t']
             _x_pos    = _np_mt.arange(len(_t_arr))
@@ -2075,7 +2075,7 @@ with tab_historie:
 
             _fig_mt, (_ax_mt1, _ax_mt2) = _plt_mt.subplots(2, 1, figsize=(12, 10))
 
-            # ── Grafiek 1: jaarlijkse cashflow ──────────────────────────────────
+            # â”€â”€ Grafiek 1: jaarlijkse cashflow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _w = 0.55
             _ax_mt1.bar(_x_pos, _rev_arr,  _w,
                         label='Revenue',      color='#388E3C', alpha=0.85)
@@ -2095,11 +2095,11 @@ with tab_historie:
 
             _ax_mt1.set_xticks(_x_pos)
             _ax_mt1.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
-            _ax_mt1.set_ylabel('Cash flow per year (€)', fontsize=11)
+            _ax_mt1.set_ylabel('Cash flow per year (â‚¬)', fontsize=11)
             _ax_mt1.set_title(
-                f'Annual cash flow  (α = {_mtp["alpha"]:.0%}, '
-                f'κ_BPA = {_mtp["kappa_bpa"]:.0%}, SL = {_mtp["sl"]:.1%}, '
-                f'Z: {_mtp["N_start"]} → {_mtp["N_end"]})',
+                f'Annual cash flow  (Î± = {_mtp["alpha"]:.0%}, '
+                f'Îº_BPA = {_mtp["kappa_bpa"]:.0%}, SL = {_mtp["sl"]:.1%}, '
+                f'Z: {_mtp["N_start"]} â†’ {_mtp["N_end"]})',
                 fontsize=12,
             )
             _ax_mt1.yaxis.set_major_formatter(_fmt_mt)
@@ -2108,7 +2108,7 @@ with tab_historie:
             _ax_mt1.legend(_h1 + _h2, _l1 + _l2, fontsize=9, loc='lower right')
             _ax_mt1.grid(True, axis='y', alpha=0.3)
 
-            # ── Grafiek 2: cumulatieve cashflow ─────────────────────────────────
+            # â”€â”€ Grafiek 2: cumulatieve cashflow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _bar_colors_mt = ['#388E3C' if v >= 0 else '#D32F2F' for v in _cum_arr]
             _ax_mt2.bar(_x_pos, _cum_arr, _w, color=_bar_colors_mt, alpha=0.65)
             _ax_mt2.plot(_x_pos, _cum_arr, color='#1976D2', marker='o',
@@ -2120,7 +2120,7 @@ with tab_historie:
                 if _cum_arr[_bi - 1] < 0 <= _cum_arr[_bi]:
                     _frac     = -_cum_arr[_bi - 1] / (_cum_arr[_bi] - _cum_arr[_bi - 1])
                     _be_x     = _bi - 1 + _frac
-                    _be_titel = f'Break-even ≈ year {_be_x:.1f}'
+                    _be_titel = f'Break-even â‰ˆ year {_be_x:.1f}'
                     _ax_mt2.axvline(_be_x, color='#F57C00', linewidth=1.8,
                                     linestyle=':', label=_be_titel)
                     break
@@ -2129,8 +2129,8 @@ with tab_historie:
 
             _ax_mt2.set_xticks(_x_pos)
             _ax_mt2.set_xticklabels(_x_lbl, rotation=30, ha='right', fontsize=9)
-            _ax_mt2.set_ylabel('Cumulative cash flow (€)', fontsize=11)
-            _ax_mt2.set_title(f'Cumulative cash flow — {_be_titel}', fontsize=12)
+            _ax_mt2.set_ylabel('Cumulative cash flow (â‚¬)', fontsize=11)
+            _ax_mt2.set_title(f'Cumulative cash flow â€” {_be_titel}', fontsize=12)
             _ax_mt2.yaxis.set_major_formatter(_fmt_mt)
             _ax_mt2.legend(fontsize=9)
             _ax_mt2.grid(True, axis='y', alpha=0.3)
@@ -2143,16 +2143,16 @@ with tab_historie:
                 {
                     'Jaar':               _t_arr[_ti],
                     'Z':                  _mtd['N'][_ti],
-                    'Investering (€)':    f"€{-_inv_arr[_ti]:,.0f}",
-                    'Voorraadkosten (€)': f"€{-_hold_arr[_ti]:,.0f}",
-                    'Inkomsten (€)':      f"€{_rev_arr[_ti]:,.0f}",
-                    'Netto (€)':          f"€{_net_arr[_ti]:+,.0f}",
-                    'Cumulatief (€)':     f"€{_cum_arr[_ti]:+,.0f}",
+                    'Investering (â‚¬)':    f"â‚¬{-_inv_arr[_ti]:,.0f}",
+                    'Voorraadkosten (â‚¬)': f"â‚¬{-_hold_arr[_ti]:,.0f}",
+                    'Inkomsten (â‚¬)':      f"â‚¬{_rev_arr[_ti]:,.0f}",
+                    'Netto (â‚¬)':          f"â‚¬{_net_arr[_ti]:+,.0f}",
+                    'Cumulatief (â‚¬)':     f"â‚¬{_cum_arr[_ti]:+,.0f}",
                 }
                 for _ti in range(len(_t_arr))
             ]).set_index('Jaar'), use_container_width=False)
 
-        # ── Marge over tijd — top 10 duurste componenten ───────────────────────
+        # â”€â”€ Marge over tijd â€” top 10 duurste componenten â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if 'sens_marge_tijd_top10' in st.session_state:
             import matplotlib.pyplot as _plt_mt10
             import matplotlib.ticker as _mt10_tick
@@ -2161,7 +2161,7 @@ with tab_historie:
 
             _mt10d  = st.session_state.sens_marge_tijd_top10
             _mt10p  = _mt10d['params']
-            _fmt10  = _mt10_tick.FuncFormatter(lambda v, _: f'€{v:,.0f}')
+            _fmt10  = _mt10_tick.FuncFormatter(lambda v, _: f'â‚¬{v:,.0f}')
             _t10arr = _mt10d['t']
             _xp10   = _np_mt10.arange(len(_t10arr))
             _xl10   = [f'Jaar {t}' for t in _t10arr]
@@ -2175,11 +2175,11 @@ with tab_historie:
             _net10 = _sr10 + _sh10 + _si10
 
             st.divider()
-            st.subheader("Marge over tijd — top 10 duurste componenten (gesommeerd)")
+            st.subheader("Marge over tijd â€” top 10 duurste componenten (gesommeerd)")
             st.caption(
                 f"Dezelfde cashflow-analyse maar enkel voor de 10 duurste componenten op VP. "
-                f"SL = {_mt10p['sl']:.1%}, α = {_mt10p['alpha']:.0%}, "
-                f"κ_BPA = {_mt10p['kappa_bpa']:.0%}."
+                f"SL = {_mt10p['sl']:.1%}, Î± = {_mt10p['alpha']:.0%}, "
+                f"Îº_BPA = {_mt10p['kappa_bpa']:.0%}."
             )
 
             _fig10s, (_ax10s1, _ax10s2) = _plt_mt10.subplots(2, 1, figsize=(12, 10))
@@ -2195,11 +2195,11 @@ with tab_historie:
             _ax10s1b.tick_params(axis='y', labelcolor='#1976D2')
             _ax10s1.set_xticks(_xp10)
             _ax10s1.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
-            _ax10s1.set_ylabel('Cash flow per year (€)', fontsize=11)
+            _ax10s1.set_ylabel('Cash flow per year (â‚¬)', fontsize=11)
             _ax10s1.set_title(
-                f'Annual cash flow top 10  (α={_mt10p["alpha"]:.0%}, '
-                f'κ_BPA={_mt10p["kappa_bpa"]:.0%}, SL={_mt10p["sl"]:.1%}, '
-                f'Z: {_mt10p["N_start"]} → {_mt10p["N_end"]})', fontsize=12)
+                f'Annual cash flow top 10  (Î±={_mt10p["alpha"]:.0%}, '
+                f'Îº_BPA={_mt10p["kappa_bpa"]:.0%}, SL={_mt10p["sl"]:.1%}, '
+                f'Z: {_mt10p["N_start"]} â†’ {_mt10p["N_end"]})', fontsize=12)
             _ax10s1.yaxis.set_major_formatter(_fmt10)
             _h10a, _l10a = _ax10s1.get_legend_handles_labels()
             _h10b, _l10b = _ax10s1b.get_legend_handles_labels()
@@ -2215,15 +2215,15 @@ with tab_historie:
                 if _sc10[_bi10 - 1] < 0 <= _sc10[_bi10]:
                     _f10   = -_sc10[_bi10 - 1] / (_sc10[_bi10] - _sc10[_bi10 - 1])
                     _bex10 = _bi10 - 1 + _f10
-                    _be10t = f'Break-even ≈ year {_bex10:.1f}'
+                    _be10t = f'Break-even â‰ˆ year {_bex10:.1f}'
                     _ax10s2.axvline(_bex10, color='#F57C00', linewidth=1.8, linestyle=':', label=_be10t)
                     break
             if _sc10[0] >= 0:
                 _be10t = 'Break-even in year 0 (immediately positive margin)'
             _ax10s2.set_xticks(_xp10)
             _ax10s2.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
-            _ax10s2.set_ylabel('Cumulative cash flow (€)', fontsize=11)
-            _ax10s2.set_title(f'Cumulative cash flow top 10 — {_be10t}', fontsize=12)
+            _ax10s2.set_ylabel('Cumulative cash flow (â‚¬)', fontsize=11)
+            _ax10s2.set_title(f'Cumulative cash flow top 10 â€” {_be10t}', fontsize=12)
             _ax10s2.yaxis.set_major_formatter(_fmt10)
             _ax10s2.legend(fontsize=9)
             _ax10s2.grid(True, axis='y', alpha=0.3)
@@ -2231,9 +2231,9 @@ with tab_historie:
             st.pyplot(_fig10s)
             _plt_mt10.close(_fig10s)
 
-            # ── Cumulatieve cashflow per component ──────────────────────────
+            # â”€â”€ Cumulatieve cashflow per component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.subheader("Cumulatieve cashflow per component (top 10)")
-            st.caption("Elke lijn toont de cumulatieve netto cashflow van één component afzonderlijk.")
+            st.caption("Elke lijn toont de cumulatieve netto cashflow van Ã©Ã©n component afzonderlijk.")
 
             _comp_cf10 = _mt10d['comp']
             _cmap10mt  = _mt10_mpl.colormaps['tab10']
@@ -2241,15 +2241,15 @@ with tab_historie:
             _fig10c, _ax10c = _plt_mt10.subplots(figsize=(12, 5))
             for _ci10, (_code10, _cdata10) in enumerate(_comp_cf10.items()):
                 _cum10c = _np_mt10.array(_cdata10['cum'])
-                _lbl10c = f"{_code10} – {_cdata10['descr'][:25]}"
+                _lbl10c = f"{_code10} â€“ {_cdata10['descr'][:25]}"
                 _ax10c.plot(_xp10, _cum10c, color=_cmap10mt(_ci10 / 10),
                             marker='o', linewidth=1.8, markersize=5, label=_lbl10c)
             _ax10c.axhline(0, color='grey', linewidth=1.0, linestyle='--')
             _ax10c.set_xticks(_xp10)
             _ax10c.set_xticklabels(_xl10, rotation=30, ha='right', fontsize=9)
-            _ax10c.set_ylabel('Cumulative cash flow (€)', fontsize=11)
+            _ax10c.set_ylabel('Cumulative cash flow (â‚¬)', fontsize=11)
             _ax10c.set_title(
-                f'Cumulative cash flow per component — top 10  (SL={_mt10p["sl"]:.1%})',
+                f'Cumulative cash flow per component â€” top 10  (SL={_mt10p["sl"]:.1%})',
                 fontsize=12,
             )
             _ax10c.yaxis.set_major_formatter(_fmt10)
@@ -2260,38 +2260,38 @@ with tab_historie:
             _plt_mt10.close(_fig10c)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 7 – KOSTENANALYSE
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 7 â€“ KOSTENANALYSE
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_kosten:
     st.subheader("Kostenanalyse BPA")
     st.caption(
-        "Berekent BPA-kosten, omzet, marge en α-interval per component "
+        "Berekent BPA-kosten, omzet, marge en Î±-interval per component "
         "op basis van het huidige overzicht en de gekozen draaiknoppen."
     )
 
     if "overzicht_df" not in st.session_state or st.session_state.overzicht_df.empty:
-        st.warning("Laad eerst het overzicht via het tabblad 📊 Overzicht.")
+        st.warning("Laad eerst het overzicht via het tabblad ðŸ“Š Overzicht.")
     else:
         col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
             k_alpha = st.number_input(
-                "α (abonnementstarief, %)",
+                "Î± (abonnementstarief, %)",
                 min_value=1.0, max_value=50.0, value=15.0, step=1.0, format="%.0f",
                 help="Abonnementsprijs als percentage van verkoopprijs",
             ) / 100
         with col_b:
             k_kappa_bpa = st.number_input(
-                "κ_BPA (%)",
+                "Îº_BPA (%)",
                 min_value=1.0, max_value=100.0, value=20.0, step=1.0, format="%.0f",
-                help="κ_BPA = financiering + opslag + obsolescence (BPA)",
+                help="Îº_BPA = financiering + opslag + obsolescence (BPA)",
             ) / 100
         with col_c:
             k_kappa_c = st.number_input(
-                "κ_c (%)",
+                "Îº_c (%)",
                 min_value=1.0, max_value=100.0, value=25.0, step=1.0, format="%.0f",
-                help="κ_c = financiering + opslag + obsolescence (klant)",
+                help="Îº_c = financiering + opslag + obsolescence (klant)",
             ) / 100
         with col_d:
             k_sl = st.selectbox(
@@ -2308,21 +2308,21 @@ with tab_kosten:
                 min_value=0.01, max_value=0.99,
                 value=float(st.session_state.get("subsim_q_eq", 0.55)),
                 step=0.05, format="%.2f", key="kost_q_eq",
-                help="Adoptiekans bij kostenpariteit α = κ_c.",
+                help="Adoptiekans bij kostenpariteit Î± = Îº_c.",
             )
         with _kost_ad2:
             k_beta_r = st.number_input(
-                "β_r (kostenratio-gevoeligheid)",
+                "Î²_r (kostenratio-gevoeligheid)",
                 min_value=0.0, max_value=20.0,
                 value=float(st.session_state.get("subsim_beta_r", 1.0)),
                 step=0.1, format="%.2f", key="kost_beta_r",
-                help="Gevoeligheid adoptie voor kostenratio ln(κ_c/α).",
+                help="Gevoeligheid adoptie voor kostenratio ln(Îº_c/Î±).",
             )
 
-        if st.button("💰 Bereken kosten"):
-            with st.spinner("Kostenmodel berekenen…"):
+        if st.button("ðŸ’° Bereken kosten"):
+            with st.spinner("Kostenmodel berekenenâ€¦"):
                 try:
-                    # Adoptie-bewuste overzicht: vervang n_klanten/lambda_jr door Z_i(α)
+                    # Adoptie-bewuste overzicht: vervang n_klanten/lambda_jr door Z_i(Î±)
                     _k_ov = st.session_state.overzicht_df.copy()
                     try:
                         _k_excel_src = st.session_state.get("subsim_upload") or (
@@ -2362,22 +2362,22 @@ with tab_kosten:
             _iv = _r['alpha_intervals']
             _p  = st.session_state.kosten_params
 
-            # ── Samenvatting ───────────────────────────────────────────────
+            # â”€â”€ Samenvatting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _c1, _c2, _c3, _c4 = st.columns(4)
-            _c1.metric("Haalbaar",    "✓ JA"  if _r['feasible'] else "✗ NEE")
-            _c2.metric("Totale omzet",  f"€ {_r['total_revenue']:,.0f}")
-            _c3.metric("BPA kosten",    f"€ {_r['bpa_costs']:,.0f}")
-            _c4.metric("Marge",         f"€ {_r['bpa_margin']:+,.0f}")
+            _c1.metric("Haalbaar",    "âœ“ JA"  if _r['feasible'] else "âœ— NEE")
+            _c2.metric("Totale omzet",  f"â‚¬ {_r['total_revenue']:,.0f}")
+            _c3.metric("BPA kosten",    f"â‚¬ {_r['bpa_costs']:,.0f}")
+            _c4.metric("Marge",         f"â‚¬ {_r['bpa_margin']:+,.0f}")
 
             _al = _iv['universal_alpha_L']
             _au = _iv['universal_alpha_U']
             if _al is not None:
                 st.info(
-                    f"Universeel α-interval: **[{_al:.4%} – {_au:.4%}]**  "
-                    f"{'✓ Haalbaar' if _iv['universal_feasible'] else '✗ Niet haalbaar'}"
+                    f"Universeel Î±-interval: **[{_al:.4%} â€“ {_au:.4%}]**  "
+                    f"{'âœ“ Haalbaar' if _iv['universal_feasible'] else 'âœ— Niet haalbaar'}"
                 )
 
-            # ── Per-component kosten tabel ─────────────────────────────────
+            # â”€â”€ Per-component kosten tabel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.subheader("Kosten per component")
             _det = _m.calculate_detailed_bpa_costs()
             _bsl = _m.calculate_base_stock_levels()
@@ -2397,71 +2397,71 @@ with tab_kosten:
                 _rows.append({
                     'Code':       _code,
                     'S*':         _bsl.get(_code, 0),
-                    'Λ_BPA':      round(_d['demand'], 4),
-                    'μ=Λ·L':      round(_d['demand'] * _lt.get(_code, 0), 4),
-                    'C_BPA (€)':  round(_d['total'], 2),
-                    'Omzet (€)':  round(_r['revenue_by_part'].get(_code, 0), 2),
-                    'Marge (€)':  round(_r['revenue_by_part'].get(_code, 0) - _d['total'], 2),
-                    'α_L,i':      f"{_al:.3%}" if _al is not None else '—',
-                    'α_U,i':      f"{_au:.3%}" if _au is not None else '—',
-                    'OK':         '✓' if _ok else '✗',
+                    'Î›_BPA':      round(_d['demand'], 4),
+                    'Î¼=Î›Â·L':      round(_d['demand'] * _lt.get(_code, 0), 4),
+                    'C_BPA (â‚¬)':  round(_d['total'], 2),
+                    'Omzet (â‚¬)':  round(_r['revenue_by_part'].get(_code, 0), 2),
+                    'Marge (â‚¬)':  round(_r['revenue_by_part'].get(_code, 0) - _d['total'], 2),
+                    'Î±_L,i':      f"{_al:.3%}" if _al is not None else 'â€”',
+                    'Î±_U,i':      f"{_au:.3%}" if _au is not None else 'â€”',
+                    'OK':         'âœ“' if _ok else 'âœ—',
                 })
             _tbl = pd.DataFrame(_rows).set_index('Code')
 
             st.dataframe(
                 _tbl.style.format({
                     'S*':        '{:.0f}',
-                    'Λ_BPA':    '{:.4f}',
-                    'μ=Λ·L':    '{:.4f}',
-                    'C_BPA (€)': '€ {:,.2f}',
-                    'Omzet (€)': '€ {:,.2f}',
-                    'Marge (€)': '€ {:+,.2f}',
+                    'Î›_BPA':    '{:.4f}',
+                    'Î¼=Î›Â·L':    '{:.4f}',
+                    'C_BPA (â‚¬)': 'â‚¬ {:,.2f}',
+                    'Omzet (â‚¬)': 'â‚¬ {:,.2f}',
+                    'Marge (â‚¬)': 'â‚¬ {:+,.2f}',
                 }),
                 use_container_width=True,
                 height=420,
             )
             st.write(
                 f"**Totaal:** S\\* = {int(_tbl['S*'].sum())}  |  "
-                f"C\\_BPA = € {_tbl['C_BPA (€)'].sum():,.2f}  |  "
-                f"Omzet = € {_tbl['Omzet (€)'].sum():,.2f}  |  "
-                f"Marge = € {_tbl['Marge (€)'].sum():+,.2f}"
+                f"C\\_BPA = â‚¬ {_tbl['C_BPA (â‚¬)'].sum():,.2f}  |  "
+                f"Omzet = â‚¬ {_tbl['Omzet (â‚¬)'].sum():,.2f}  |  "
+                f"Marge = â‚¬ {_tbl['Marge (â‚¬)'].sum():+,.2f}"
             )
 
-            # ── Klantbesparingen ───────────────────────────────────────────
+            # â”€â”€ Klantbesparingen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             with st.expander("Klantbesparingen"):
                 _klant_rows = [
                     {
                         'Klant':              _cust,
-                        'Eigen kosten (€)':   b['self_stocking_cost'],
-                        'BPA abonnement (€)': b['bpa_service_cost'],
-                        'Besparing (€)':      b['savings'],
-                        'Voordeel':           '✓' if b['benefits'] else '✗',
+                        'Eigen kosten (â‚¬)':   b['self_stocking_cost'],
+                        'BPA abonnement (â‚¬)': b['bpa_service_cost'],
+                        'Besparing (â‚¬)':      b['savings'],
+                        'Voordeel':           'âœ“' if b['benefits'] else 'âœ—',
                     }
                     for _cust, b in _r['customer_benefits'].items()
                 ]
                 st.dataframe(
                     pd.DataFrame(_klant_rows).set_index('Klant').style.format({
-                        'Eigen kosten (€)':   '€ {:,.2f}',
-                        'BPA abonnement (€)': '€ {:,.2f}',
-                        'Besparing (€)':      '€ {:+,.2f}',
+                        'Eigen kosten (â‚¬)':   'â‚¬ {:,.2f}',
+                        'BPA abonnement (â‚¬)': 'â‚¬ {:,.2f}',
+                        'Besparing (â‚¬)':      'â‚¬ {:+,.2f}',
                     }),
                     use_container_width=True,
                 )
 
-# ─────────────────────────────────────────────────────────────────────────────────
-#  TAB 8 – SUBSCRIPTIEDREMPEL
-# ─────────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 8 â€“ SUBSCRIPTIEDREMPEL
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_drempel:
     st.subheader("Subscriptiedrempel per component")
     st.caption(
         "Per component: hoeveel extra subscripties zijn er nodig voordat S\u002a met 1 stijgt? "
-        "Aanname: λ schaalt lineair met Z (λ = Z × λ_huidig / Z_huidig). "
+        "Aanname: Î» schaalt lineair met Z (Î» = Z Ã— Î»_huidig / Z_huidig). "
         "Van toepassing op MTBF-gebaseerde componenten."
     )
 
     if "overzicht_df" not in st.session_state or st.session_state.overzicht_df.empty:
-        st.warning("Laad eerst het overzicht via het tabblad 📊 Overzicht.")
+        st.warning("Laad eerst het overzicht via het tabblad ðŸ“Š Overzicht.")
     else:
         _df_ov = st.session_state.overzicht_df.copy().reset_index()
 
@@ -2474,15 +2474,15 @@ with tab_drempel:
         )
         _sl_col = f"s@{_sl_d:.1%}"
 
-        # ── Adoptie-bewuste parameters: bereken Z_i(α) als huidig niveau ──
+        # â”€â”€ Adoptie-bewuste parameters: bereken Z_i(Î±) als huidig niveau â”€â”€
         _drm_c1, _drm_c2, _drm_c3 = st.columns(3)
         with _drm_c1:
             _drm_alpha = st.number_input(
-                "α (abonnementstarief)",
+                "Î± (abonnementstarief)",
                 min_value=0.001, max_value=1.0,
                 value=float(st.session_state.get("kosten_params", {}).get("alpha", 0.15)),
                 step=0.01, format="%.3f", key="drm_alpha",
-                help="Prijspercentage α waarvoor Z_i(α) = M_i·q(α) wordt berekend.",
+                help="Prijspercentage Î± waarvoor Z_i(Î±) = M_iÂ·q(Î±) wordt berekend.",
             )
         with _drm_c2:
             _drm_q_eq = st.number_input(
@@ -2493,7 +2493,7 @@ with tab_drempel:
             )
         with _drm_c3:
             _drm_beta_r = st.number_input(
-                "β_r (kostenratio-gevoeligheid)",
+                "Î²_r (kostenratio-gevoeligheid)",
                 min_value=0.0, max_value=20.0,
                 value=float(st.session_state.get("subsim_beta_r", 1.0)),
                 step=0.1, format="%.2f", key="drm_beta_r",
@@ -2501,7 +2501,7 @@ with tab_drempel:
         _drm_kappa_c = float(st.session_state.get("kosten_params", {}).get("kappa_c", 0.25))
         _drm_q = adoptie_kans(_drm_alpha, _drm_kappa_c, _drm_q_eq, _drm_beta_r)
 
-        # Laad M_i (cached) voor Z_i(α) = M_i·q(α)
+        # Laad M_i (cached) voor Z_i(Î±) = M_iÂ·q(Î±)
         _drm_n_mi = pd.Series(dtype=float)
         try:
             _drm_excel_src = st.session_state.get("subsim_upload") or (
@@ -2515,9 +2515,9 @@ with tab_drempel:
             pass
         if not _drm_n_mi.empty:
             st.caption(
-                f"Adoptie-bewust: q(α={_drm_alpha:.1%}) = {_drm_q:.3f} — "
-                f"Z_i(α) = M_i·q gebruikt als huidig niveau. "
-                f"Drempel = extra abonnees boven Z_i(α) nodig voor S*+1."
+                f"Adoptie-bewust: q(Î±={_drm_alpha:.1%}) = {_drm_q:.3f} â€” "
+                f"Z_i(Î±) = M_iÂ·q gebruikt als huidig niveau. "
+                f"Drempel = extra abonnees boven Z_i(Î±) nodig voor S*+1."
             )
 
         _MAX_N_SEARCH = 100_000
@@ -2529,7 +2529,7 @@ with tab_drempel:
             _lam_orig = float(_row["lambda_jr"])
             _lt_jr    = float(_row["LT_dagen"]) / 365
 
-            # Adoptie-bewust: gebruik Z_i(α) = M_i·q(α) als huidig abonneeniveau
+            # Adoptie-bewust: gebruik Z_i(Î±) = M_iÂ·q(Î±) als huidig abonneeniveau
             _mi  = float(_drm_n_mi.get(str(_code), float(_n_orig))) if not _drm_n_mi.empty else float(_n_orig)
             _n   = int(round(_mi * _drm_q))
             _lam_pn = _lam_orig / _n_orig if _n_orig > 0 else _lam_orig
@@ -2569,8 +2569,8 @@ with tab_drempel:
                 "S* huidig":     _s_now,
                 "Z voor S*+1":   _n_drempel if _n_drempel is not None else f">{_n + _MAX_N_SEARCH}",
                 "Extra Z nodig": _extra,
-                "λ/jr":          round(_lam, 4),
-                "μ = λ·L":       round(_lam * _lt_jr, 4),
+                "Î»/jr":          round(_lam, 4),
+                "Î¼ = Î»Â·L":       round(_lam * _lt_jr, 4),
             })
 
         _tbl_d = pd.DataFrame(_drempel_rows).set_index("Code")
@@ -2599,21 +2599,21 @@ with tab_drempel:
                 .format({
                     "Z huidig":      "{:.0f}",
                     "S* huidig":     "{:.0f}",
-                    "λ/jr":          "{:.4f}",
-                    "μ = λ·L":       "{:.4f}",
-                    "Extra Z nodig": lambda v: f"{int(v)}" if pd.notna(v) else "—",
+                    "Î»/jr":          "{:.4f}",
+                    "Î¼ = Î»Â·L":       "{:.4f}",
+                    "Extra Z nodig": lambda v: f"{int(v)}" if pd.notna(v) else "â€”",
                 }),
             use_container_width=True,
             height=500,
         )
 
-        # ── Bar chart: Extra N nodig per component ─────────────────────────
+        # â”€â”€ Bar chart: Extra N nodig per component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra Z nodig"].notna()].copy()
         if not _plot_d.empty:
             import matplotlib.pyplot as _plt_d
 
             # Cap het aantal balken: bij honderden componenten wordt de grafiek
-            # onleesbaar én PIL gooit een DecompressionBombError zodra het
+            # onleesbaar Ã©n PIL gooit een DecompressionBombError zodra het
             # gerenderde PNG > ~179 megapixels wordt. Toon de top-N met
             # de hoogste drempel (relevante "rode" gevallen eerst).
             _MAX_BARS = 60
@@ -2621,7 +2621,7 @@ with tab_drempel:
             if _n_total > _MAX_BARS:
                 _plot_d = _plot_d.nsmallest(_MAX_BARS, "Extra Z nodig")
                 st.caption(
-                    f"📊 Grafiek toont de **{_MAX_BARS}** componenten met de "
+                    f"ðŸ“Š Grafiek toont de **{_MAX_BARS}** componenten met de "
                     f"laagste drempel (van {_n_total} totaal). Volledige lijst "
                     f"staat in de tabel hierboven."
                 )
@@ -2650,19 +2650,19 @@ with tab_drempel:
             _plt_d.close(_fig_d)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 9 – CLASSIFICATIE
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 9 â€“ CLASSIFICATIE
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_classificatie:
-    st.subheader("Classificatie — selectie voor BPA-beheer")
+    st.subheader("Classificatie â€” selectie voor BPA-beheer")
     st.caption(
         "Score alle artikelen uit de bron-Excel op prijs, klantlocaties en order-frequentie. "
-        "Pas de gewichten en drempel aan; de selectie wordt — na 'Toepassen' — als whitelist "
-        "doorgezet naar het tabblad 📊 Overzicht."
+        "Pas de gewichten en drempel aan; de selectie wordt â€” na 'Toepassen' â€” als whitelist "
+        "doorgezet naar het tabblad ðŸ“Š Overzicht."
     )
 
-    # ── Bron-Excel: vaste repo-Excel ────────────────────────────────────
+    # â”€â”€ Bron-Excel: vaste repo-Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _cls_upload = None  # upload niet meer nodig; bestand staat in de repo
     _cls_bron = EXCEL_PATH
     st.caption(f"Bron-Excel: `{os.path.basename(EXCEL_PATH)}`")
@@ -2674,13 +2674,13 @@ with tab_classificatie:
               "Standaard 'Filtered ' (= zelfde sheet als BPA-overzicht) zodat "
               "MTBF(years) en de andere metadata correct meegenomen worden. "
               "De eerste sheet 'Final_data' bevat slechts een placeholder-MTBF "
-              "in dagen en geeft daardoor te hoge λ-waarden voor "
+              "in dagen en geeft daardoor te hoge Î»-waarden voor "
               "classificatie-only componenten."),
     ).strip() or None
 
     st.divider()
 
-    # ── Parameters ──
+    # â”€â”€ Parameters â”€â”€
     st.markdown("**Gewichten** _(worden automatisch genormaliseerd)_")
     _c1, _c2, _c3 = st.columns(3)
     with _c1:
@@ -2697,23 +2697,23 @@ with tab_classificatie:
         format_func=lambda m: (
             "Top X componenten (hoogste gewogen score)"
             if m == "top_n"
-            else "Drempelwaarde (gewogen score ≥ drempel)"
+            else "Drempelwaarde (gewogen score â‰¥ drempel)"
             if m == "threshold"
-            else "Top X% per criterium (φ én χ én ψ)"
+            else "Top X% per criterium (Ï† Ã©n Ï‡ Ã©n Ïˆ)"
         ),
         horizontal=True,
         key="cls_sel_modus",
         help=("Top X: neem de X componenten met de hoogste gewogen score op. "
-              "Drempelwaarde: neem álle componenten met een score ≥ drempel op. "
+              "Drempelwaarde: neem Ã¡lle componenten met een score â‰¥ drempel op. "
               "Top X% per criterium: neem alleen componenten op die tegelijk in "
-              "de bovenste X% zitten voor prijs (φ), locaties (χ én orders (ψ)."),
+              "de bovenste X% zitten voor prijs (Ï†), locaties (Ï‡ Ã©n orders (Ïˆ)."),
     )
     _sm1, _sm2 = st.columns(2)
     with _sm1:
         if _sel_modus == "top_n":
             _top_n = st.number_input(
                 "Aantal componenten (top X)", 1, 100_000, 100, 1, key="cls_top_n",
-                help="De X componenten met de hoogste gewogen score (ná de harde "
+                help="De X componenten met de hoogste gewogen score (nÃ¡ de harde "
                      "filters) worden opgenomen in de lijst.",
             )
             _thr = 0.0
@@ -2722,12 +2722,12 @@ with tab_classificatie:
             _top_pct = st.slider(
                 "Top X% per criterium", 1.0, 50.0, 20.0, 1.0, key="cls_top_pct",
                 help="Een component wordt opgenomen als het tegelijk in de bovenste "
-                     "X% valt voor φ (prijs), χ (locaties) én ψ (orders per locatie).",
+                     "X% valt voor Ï† (prijs), Ï‡ (locaties) Ã©n Ïˆ (orders per locatie).",
             )
             _thr = 0.0
             _top_n = 100
         else:
-            _thr = st.number_input("Drempel (≥ opnemen)", 0.0, 100.0, 55.0, 1.0, key="cls_thr")
+            _thr = st.number_input("Drempel (â‰¥ opnemen)", 0.0, 100.0, 55.0, 1.0, key="cls_thr")
             _top_n = 100
             _top_pct = 20.0
 
@@ -2736,12 +2736,12 @@ with tab_classificatie:
 
     st.markdown("**Min-filter drempels**")
     st.caption(
-        "Artikelen onder deze drempels worden uitgesloten vóór de weging wordt toegepast."
+        "Artikelen onder deze drempels worden uitgesloten vÃ³Ã³r de weging wordt toegepast."
     )
     _mf1, _mf2 = st.columns(2)
     with _mf1:
         _min_prijs = st.number_input(
-            "Min. verkoopprijs (€)", 0.0, 100_000.0, 0.0, 10.0,
+            "Min. verkoopprijs (â‚¬)", 0.0, 100_000.0, 0.0, 10.0,
             key="cls_min_prijs",
             help="Artikelen met verkoopprijs < dit bedrag worden uitgesloten (harde filter).",
         )
@@ -2762,17 +2762,17 @@ with tab_classificatie:
         key="cls_score_methode",
         help=(
             "Arithmetisch: gewogen som (lineair compensatoir). "
-            "Geometrisch: gewogen geometrisch gemiddelde — een zeer lage score op "
-            "één dimensie trekt de totaalscore sterker omlaag."
+            "Geometrisch: gewogen geometrisch gemiddelde â€” een zeer lage score op "
+            "Ã©Ã©n dimensie trekt de totaalscore sterker omlaag."
         ),
     )
     if _score_methode == "geometrisch":
         _epsilon = st.number_input(
-            "ε (epsilon, verschuiving)", 0.001, 10.0, 1.0, 0.1,
+            "Îµ (epsilon, verschuiving)", 0.001, 10.0, 1.0, 0.1,
             key="cls_epsilon",
             format="%.3f",
             help="Kleine constante waarmee elke score wordt verschoven voor de machtsverheffing "
-                 "(s̅ᴵ = (s + ε) / (100 + ε)). Standaard 1.0."
+                 "(sÌ…á´µ = (s + Îµ) / (100 + Îµ)). Standaard 1.0."
         )
     else:
         _epsilon = 1.0
@@ -2808,17 +2808,17 @@ with tab_classificatie:
 
     st.divider()
 
-    # ── Run-knop ──
+    # â”€â”€ Run-knop â”€â”€
     _col_run, _col_apply = st.columns([1, 1])
     with _col_run:
-        _run_cls = st.button("🔄 Bereken classificatie", type="primary", key="cls_run")
+        _run_cls = st.button("ðŸ”„ Bereken classificatie", type="primary", key="cls_run")
     with _col_apply:
-        _apply_cls = st.button("✅ Toepassen op BPA-overzicht", key="cls_apply",
+        _apply_cls = st.button("âœ… Toepassen op BPA-overzicht", key="cls_apply",
                                disabled=("cls_result" not in st.session_state))
 
     if _run_cls:
         try:
-            with st.spinner("Classificatie berekenen…"):
+            with st.spinner("Classificatie berekenenâ€¦"):
                 # De (trage) Excel-parse wordt gecachet, zodat alleen de
                 # gevectoriseerde scoring opnieuw draait bij parameter-tweaks.
                 if _cls_upload is not None:
@@ -2833,7 +2833,7 @@ with tab_classificatie:
                 if _miss:
                     raise ValueError(f"Ontbrekende kolommen: {_miss}")
                 # Eerst basis-filteren, daarna scoren: de min-max-normalisatie
-                # gaat zo over de artikelenset NÁ de harde filters. Top-n volgt
+                # gaat zo over de artikelenset NÃ de harde filters. Top-n volgt
                 # op de gescoorde set.
                 _df_basis    = pas_basis_filters_toe(_df_raw, _params)
                 _df_scored   = bereken_scores(_df_basis, _params)
@@ -2848,14 +2848,14 @@ with tab_classificatie:
             _sel_info = (
                 f"top {_params.top_n}" if _params.selectie_modus == "top_n"
                 else f"top {_params.top_pct:.0f}% per criterium" if _params.selectie_modus == "top_pct_all"
-                else f"drempel ≥ {_params.threshold}"
+                else f"drempel â‰¥ {_params.threshold}"
             )
             st.toast(f"{_payload['n_items']} componenten geselecteerd "
-                     f"({_sel_info})", icon="✅")
+                     f"({_sel_info})", icon="âœ…")
         except Exception as e:
             st.error(f"Fout tijdens classificatie: {e}")
 
-    # ── Resultaten ──
+    # â”€â”€ Resultaten â”€â”€
     if "cls_result" in st.session_state:
         _res = st.session_state.cls_result
         _pl  = st.session_state.cls_payload
@@ -2866,12 +2866,12 @@ with tab_classificatie:
         _m1, _m2, _m3, _m4 = st.columns(4)
         _m1.metric("Na harde filters", _n_tot)
         _m2.metric("Opnemen in lijst", int(_n_opnemen),
-                   delta=f"{_n_opnemen/_n_tot*100:.0f}%" if _n_tot else "—")
+                   delta=f"{_n_opnemen/_n_tot*100:.0f}%" if _n_tot else "â€”")
         _m3.metric("LT geupdate",  _pl["lt_overzicht"]["geupdate"])
         _m4.metric("LT default / ontbreekt",
                    _pl["lt_overzicht"]["default"] + _pl["lt_overzicht"]["ontbreekt"])
 
-        # Tabel — sorteer op score, kleurcodering op beslissing
+        # Tabel â€” sorteer op score, kleurcodering op beslissing
         _show_cols = [c for c in [
             "Verkooporderregel artikel.Artikel.Artikelcode", "Artikelcode", "Code",
             "ABC_categorie", "ArticleType",
@@ -2904,16 +2904,16 @@ with tab_classificatie:
         # Download
         _csv = _df_show.to_csv(sep=";", decimal=",", index=False).encode("utf-8")
         st.download_button(
-            "⬇️ Download gescoorde tabel (CSV)",
+            "â¬‡ï¸ Download gescoorde tabel (CSV)",
             data=_csv, file_name=f"classificatie_{date.today()}.csv",
             mime="text/csv",
         )
 
-        # ── Drempel-sweep analyse ──
+        # â”€â”€ Drempel-sweep analyse â”€â”€
         if "cls_raw" in st.session_state:
-            with st.expander("📉 Drempel-sweep: stabiliteit van de selectielijst", expanded=False):
+            with st.expander("ðŸ“‰ Drempel-sweep: stabiliteit van de selectielijst", expanded=False):
                 st.caption(
-                    "Per filter wordt één drempel gevarieerd; de andere twee blijven op hun huidige waarde. "
+                    "Per filter wordt Ã©Ã©n drempel gevarieerd; de andere twee blijven op hun huidige waarde. "
                     "Jaccard-similariteit en Kendall\u2019s \u03c4 meten hoeveel de selectielijst "
                     "afwijkt t.o.v. de huidige instelling (referentie = rode stippellijn)."
                 )
@@ -2974,7 +2974,7 @@ with tab_classificatie:
                 import matplotlib.pyplot as _plt_sw
                 _sw_configs = [
                     (_SW_LOC, "Min. klantlocaties",      float(_sw_params.min_klantlocaties)),
-                    (_SW_PRI, "Min. verkoopprijs (€)",   float(_sw_params.min_prijs)),
+                    (_SW_PRI, "Min. verkoopprijs (â‚¬)",   float(_sw_params.min_prijs)),
                     (_SW_ORD, "Min. orders/locatie",     float(_sw_params.min_orders)),
                 ]
                 _sw_fig, _sw_axes = _plt_sw.subplots(2, 3, figsize=(13, 5.5), sharex="col")
@@ -3018,9 +3018,9 @@ with tab_classificatie:
                 st.pyplot(_sw_fig)
                 _plt_sw.close(_sw_fig)
 
-        # ── Verdeling: 3D-visualisatie + bar charts per criterium ──
-        # Twee weergaven: (a) genormaliseerde scores (0–100/200) en
-        # (b) de daadwerkelijke ruwe componentdata (€, #locaties, #orders).
+        # â”€â”€ Verdeling: 3D-visualisatie + bar charts per criterium â”€â”€
+        # Twee weergaven: (a) genormaliseerde scores (0â€“100/200) en
+        # (b) de daadwerkelijke ruwe componentdata (â‚¬, #locaties, #orders).
         _score_cols = ["Score_Prijs", "Score_Locaties", "Score_Orders"]
         _raw_cols   = [
             "Standaard verkoopprijs",
@@ -3032,10 +3032,10 @@ with tab_classificatie:
 
         if _has_scores or _has_raw:
             st.divider()
-            st.markdown("### 📐 Verdeling per criterium")
+            st.markdown("### ðŸ“ Verdeling per criterium")
             st.caption(
                 "Visualiseer hoe de componenten zich verhouden op de drie criteria. "
-                "De 3D-scatter toont de spreiding over álle criteria tegelijk; "
+                "De 3D-scatter toont de spreiding over Ã¡lle criteria tegelijk; "
                 "de histogrammen tonen per criterium hoe scheef (skewed) de verdeling is."
             )
 
@@ -3059,7 +3059,7 @@ with tab_classificatie:
             if _viz_bron == "Ruwe componentdata":
                 _viz_cols  = _raw_cols
                 _crit_meta = {
-                    _raw_cols[0]: ("Price (€)",      "#1976D2"),
+                    _raw_cols[0]: ("Price (â‚¬)",      "#1976D2"),
                     _raw_cols[1]: ("Customer commonality",  "#388E3C"),
                     _raw_cols[2]: ("Orders / location", "#F57C00"),
                 }
@@ -3073,7 +3073,7 @@ with tab_classificatie:
                 }
                 _eenheid_x = "Score"
 
-            # Optionele log-schaal — handig bij sterk scheve ruwe data (prijs).
+            # Optionele log-schaal â€” handig bij sterk scheve ruwe data (prijs).
             _log_schaal = st.checkbox(
                 "Log-schaal op assen (handig bij scheve ruwe data)",
                 value=(_viz_bron == "Ruwe componentdata"),
@@ -3101,7 +3101,7 @@ with tab_classificatie:
                     else pd.Series(True, index=_plot_df.index)
                 )
 
-                # ── 3D-scatter: alle drie de criteria tegelijk ──
+                # â”€â”€ 3D-scatter: alle drie de criteria tegelijk â”€â”€
                 _fig3d = _plt_cls.figure(figsize=(10, 8))
                 _ax3d = _fig3d.add_subplot(111, projection="3d")
 
@@ -3125,14 +3125,14 @@ with tab_classificatie:
                     _ax3d.set_yscale("log")
                     _ax3d.set_zscale("log")
                 _ax3d.set_title(
-                    f"3D distribution — {_viz_bron.lower()} ({len(_plot_df)} components)",
+                    f"3D distribution â€” {_viz_bron.lower()} ({len(_plot_df)} components)",
                     fontsize=12,
                 )
                 _ax3d.legend(fontsize=9, loc="upper left")
                 _ax3d.view_init(elev=22, azim=-58)
                 # tight_layout() knipt de z-as-label (orderfrequentie) van 3D-plots
                 # weg. Zoom de 3D-box iets uit en gebruik ruime, gebalanceerde
-                # marges zodat álle drie de assen + labels zichtbaar blijven
+                # marges zodat Ã¡lle drie de assen + labels zichtbaar blijven
                 # (de z-as 'Orders' staat bij deze kijkhoek aan de linkerkant).
                 try:
                     _ax3d.set_box_aspect(None, zoom=0.82)
@@ -3142,7 +3142,7 @@ with tab_classificatie:
                 st.pyplot(_fig3d)
                 _plt_cls.close(_fig3d)
 
-                # ── Bar charts (histogrammen) per criterium ──
+                # â”€â”€ Bar charts (histogrammen) per criterium â”€â”€
                 st.markdown("**Verdeling per criterium**")
                 _hist_cols = st.columns(3)
                 for _col_name, _slot in zip(_viz_cols, _hist_cols):
@@ -3176,7 +3176,7 @@ with tab_classificatie:
                         st.pyplot(_figh)
                     _plt_cls.close(_figh)
 
-                # ── Scheefheid (skewness) per criterium ──
+                # â”€â”€ Scheefheid (skewness) per criterium â”€â”€
                 _skew_data = {
                     _crit_meta[c][0]: [
                         round(float(_plot_df[c].mean()), 2),
@@ -3191,14 +3191,14 @@ with tab_classificatie:
                 st.markdown("**Scheefheid (skewness) per criterium**")
                 st.caption(
                     "Scheefheid > 0 = rechts-scheef (veel lage waarden, enkele uitschieters); "
-                    "< 0 = links-scheef; ≈ 0 = symmetrisch."
+                    "< 0 = links-scheef; â‰ˆ 0 = symmetrisch."
                 )
                 st.dataframe(_skew_df, use_container_width=True)
 
-    # ── Gewichten-sensitivity sweep ──────────────────────────────────────
+    # â”€â”€ Gewichten-sensitivity sweep â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if "cls_result" in st.session_state:
         st.divider()
-        st.markdown("### ⚖️ Gewichten-sensitivity")
+        st.markdown("### âš–ï¸ Gewichten-sensitivity")
         st.caption(
             "Varieer de drie criteria-gewichten (prijs / locaties / orders) over "
             "een simplex-raster en zie hoe stabiel de selectie is. Alle overige "
@@ -3214,10 +3214,10 @@ with tab_classificatie:
                 value=0.1,
                 key="cls_sweep_step",
                 help="Kleiner = fijner raster en meer combinaties (langzamer). "
-                     "0.1 ≈ 66 combinaties, 0.05 ≈ 231.",
+                     "0.1 â‰ˆ 66 combinaties, 0.05 â‰ˆ 231.",
             )
         with _sw2:
-            _run_sweep = st.button("⚖️ Bereken gewichten-sweep", key="cls_run_sweep")
+            _run_sweep = st.button("âš–ï¸ Bereken gewichten-sweep", key="cls_run_sweep")
 
         if _run_sweep:
             st.session_state.cls_sweep_on = True
@@ -3283,7 +3283,7 @@ with tab_classificatie:
                     _fig1.tight_layout()
                     st.pyplot(_fig1)
                     _plt_sw.close(_fig1)
-                    st.caption("gewicht locaties = 1 − prijs − orders.")
+                    st.caption("gewicht locaties = 1 âˆ’ prijs âˆ’ orders.")
 
                 # (b) Stabiliteitsverdeling
                 with _cc2:
@@ -3320,13 +3320,13 @@ with tab_classificatie:
                 st.pyplot(_fig3)
                 _plt_sw.close(_fig3)
 
-                # ── Rangorde-robuustheid ──────────────────────────────────
+                # â”€â”€ Rangorde-robuustheid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if "spearman" in _per_combo.columns:
-                    st.markdown("#### 🔢 Effect op de volgorde (rangorde)")
+                    st.markdown("#### ðŸ”¢ Effect op de volgorde (rangorde)")
                     st.caption(
-                        "Naast wél/niet in de set (Jaccard) telt ook de volgorde. "
+                        "Naast wÃ©l/niet in de set (Jaccard) telt ook de volgorde. "
                         "Spearman/Kendall = rangcorrelatie over de hele kandidaat-set "
-                        "(1 = identieke volgorde). RBO weegt de **top** zwaar — "
+                        "(1 = identieke volgorde). RBO weegt de **top** zwaar â€” "
                         "relevant voor top-N-prioritering. 'Rank-shift' = aantal "
                         "posities dat een artikel opschuift t.o.v. de baseline."
                     )
@@ -3403,7 +3403,7 @@ with tab_classificatie:
                     _worst = _grp["spearman"].idxmin()
                     _best = _grp["spearman"].idxmax()
                     st.info(
-                        f"➡️ De volgorde is het **gevoeligst** voor het gewicht van "
+                        f"âž¡ï¸ De volgorde is het **gevoeligst** voor het gewicht van "
                         f"**{_worst}** (laagste rangcorrelatie) en het **robuustst** "
                         f"voor **{_best}**. Onderbouw het gewicht van *{_worst}* het "
                         f"zorgvuldigst; daar bepaalt je keuze de prioritering."
@@ -3436,34 +3436,34 @@ with tab_classificatie:
                     sep=";", decimal=",", index=False
                 ).encode("utf-8")
                 st.download_button(
-                    "⬇️ Download sweep-resultaten (CSV)",
+                    "â¬‡ï¸ Download sweep-resultaten (CSV)",
                     data=_sweep_csv,
                     file_name=f"gewichten_sweep_{date.today()}.csv",
                     mime="text/csv",
                     key="cls_sweep_dl",
                 )
 
-    # ── Apply: schrijf bpa_selectie.json + invalideer overzicht ──
+    # â”€â”€ Apply: schrijf bpa_selectie.json + invalideer overzicht â”€â”€
     if _apply_cls and "cls_payload" in st.session_state:
         try:
             schrijf_selectie_json(st.session_state.cls_payload, SELECTIE_PATH)
             st.session_state.pop("overzicht_df", None)
             st.success(
-                f"✅ Selectie opgeslagen in {SELECTIE_PATH}. "
-                f"Open tab 📊 Overzicht — de basisvoorraden worden opnieuw berekend "
+                f"âœ… Selectie opgeslagen in {SELECTIE_PATH}. "
+                f"Open tab ðŸ“Š Overzicht â€” de basisvoorraden worden opnieuw berekend "
                 f"met **{st.session_state.cls_payload['n_items']}** componenten als whitelist."
             )
         except Exception as e:
             st.error(f"Kon bpa_selectie.json niet schrijven: {e}")
 
-    # ── Verwijder bestaande selectie (alle artikelen weer actief) ──
+    # â”€â”€ Verwijder bestaande selectie (alle artikelen weer actief) â”€â”€
     st.divider()
     if os.path.exists(SELECTIE_PATH):
-        if st.button("🗑️ Verwijder huidige classificatie-selectie (BPA gebruikt weer alle Excel-codes)"):
+        if st.button("ðŸ—‘ï¸ Verwijder huidige classificatie-selectie (BPA gebruikt weer alle Excel-codes)"):
             try:
                 os.remove(SELECTIE_PATH)
                 st.session_state.pop("overzicht_df", None)
-                st.toast("Selectie verwijderd — BPA gebruikt weer de standaard Excel-filters.", icon="🗑️")
+                st.toast("Selectie verwijderd â€” BPA gebruikt weer de standaard Excel-filters.", icon="ðŸ—‘ï¸")
                 st.rerun()
             except Exception as e:
                 st.error(f"Kon bestand niet verwijderen: {e}")
@@ -3471,17 +3471,17 @@ with tab_classificatie:
         st.info("Geen actieve classificatie-selectie. De BPA-tool gebruikt momenteel de standaard Excel-filters.")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  TAB 10 – BUDGET-SCENARIO (greedy knapsack)
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 10 â€“ BUDGET-SCENARIO (greedy knapsack)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_budget:
-    st.subheader("Budget-scenario — greedy selectie")
+    st.subheader("Budget-scenario â€” greedy selectie")
     st.caption(
         "Stel een maximaal investeringsbudget in en selecteer greedy de componenten "
-        "met de hoogste **waarde per euro**. Investering per component = `S* × IP` "
-        "bij het gekozen service level. Standaard-criterium = **Winst/jr ÷ investering "
-        "(ROI)**, met `Winst/jr = Z·α·VP − κ_BPA·IP·S*` (identiek aan Kostenanalyse-tab)."
+        "met de hoogste **waarde per euro**. Investering per component = `S* Ã— IP` "
+        "bij het gekozen service level. Standaard-criterium = **Winst/jr Ã· investering "
+        "(ROI)**, met `Winst/jr = ZÂ·Î±Â·VP âˆ’ Îº_BPAÂ·IPÂ·S*` (identiek aan Kostenanalyse-tab)."
     )
 
     _ov_df = st.session_state.get("overzicht_df")
@@ -3500,7 +3500,7 @@ with tab_budget:
         if not _sl_cols_b:
             st.error("Geen service-level kolommen gevonden in het overzicht.")
         else:
-            # ── Parameters ──
+            # â”€â”€ Parameters â”€â”€
             _c1, _c2 = st.columns([1, 1])
             with _c1:
                 _sl_keuze = st.selectbox(
@@ -3514,7 +3514,7 @@ with tab_budget:
 
             with _c2:
                 _budget = st.number_input(
-                    "Maximaal budget (€)",
+                    "Maximaal budget (â‚¬)",
                     min_value=0.0,
                     max_value=max(_totale_inv * 1.2, 1_000_000.0),
                     value=float(round(_totale_inv * 0.5, 0)),
@@ -3522,14 +3522,14 @@ with tab_budget:
                     key="bud_max",
                 )
 
-            # ── Economische parameters (gedeeld met Kostenanalyse-tab) ──
+            # â”€â”€ Economische parameters (gedeeld met Kostenanalyse-tab) â”€â”€
             # Defaults komen uit st.session_state['kosten_params'] indien de
             # Kostenanalyse-tab al een berekening heeft gedaan; anders 15% en 20%.
             _kp = st.session_state.get("kosten_params", {})
             _p1, _p2 = st.columns(2)
             with _p1:
                 _alpha_b = st.number_input(
-                    "α (abonnementstarief, %)",
+                    "Î± (abonnementstarief, %)",
                     min_value=0.1, max_value=50.0,
                     value=float(_kp.get("alpha", 0.15)) * 100,
                     step=0.5, format="%.1f",
@@ -3540,7 +3540,7 @@ with tab_budget:
                 ) / 100
             with _p2:
                 _kappa_b = st.number_input(
-                    "κ_BPA (carrying rate, %)",
+                    "Îº_BPA (carrying rate, %)",
                     min_value=0.1, max_value=100.0,
                     value=float(_kp.get("kappa_bpa", 0.20)) * 100,
                     step=0.5, format="%.1f",
@@ -3550,84 +3550,15 @@ with tab_budget:
                 ) / 100
 
             st.caption(
-                f"Volledige voorraadwaarde bij {_sl_keuze}: **€ {_totale_inv:,.0f}** · "
-                f"Budget = **€ {_budget:,.0f}** "
-                f"({_budget/_totale_inv*100:.0f}% van totaal) · "
-                f"α = **{_alpha_b:.1%}** · κ_BPA = **{_kappa_b:.1%}**"
+                f"Volledige voorraadwaarde bij {_sl_keuze}: **â‚¬ {_totale_inv:,.0f}** Â· "
+                f"Budget = **â‚¬ {_budget:,.0f}** "
+                f"({_budget/_totale_inv*100:.0f}% van totaal) Â· "
+                f"Î± = **{_alpha_b:.1%}** Â· Îº_BPA = **{_kappa_b:.1%}**"
             )
 
-            # ── Adoptie-bewuste parameters ──────────────────────────────
-            _bud_ad1, _bud_ad2, _bud_ad3 = st.columns(3)
-            with _bud_ad1:
-                _bud_q_eq = st.number_input(
-                    "q_eq (adoptie bij pariteit)",
-                    min_value=0.01, max_value=0.99,
-                    value=float(st.session_state.get("subsim_q_eq", 0.55)),
-                    step=0.05, format="%.2f", key="bud_q_eq",
-                    help="Adoptiekans bij kostenpariteit α = κ_c.",
-                )
-            with _bud_ad2:
-                _bud_beta_r = st.number_input(
-                    "β_r (kostenratio-gevoeligheid)",
-                    min_value=0.0, max_value=20.0,
-                    value=float(st.session_state.get("subsim_beta_r", 1.0)),
-                    step=0.1, format="%.2f", key="bud_beta_r",
-                    help="Gevoeligheid adoptie voor kostenratio ln(κ_c/α).",
-                )
-            with _bud_ad3:
-                _bud_kappa_c = st.number_input(
-                    "κ_c (%)",
-                    min_value=0.1, max_value=100.0,
-                    value=float(_kp.get("kappa_c", 0.25)) * 100,
-                    step=0.5, format="%.1f", key="bud_kappa_c",
-                    help="Kostenpariteit κ_c voor adoptie-logit.",
-                ) / 100
-
-            # Laad M_i (cached) voor Z_i(α) = M_i·q(α) correctie
-            _bud_n_mi = pd.Series(dtype=float)
-            try:
-                _bud_excel_src = st.session_state.get("subsim_upload") or (
-                    SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None)
-                if _bud_excel_src is not None:
-                    _bud_n_mi = _cached_aantal_klanten(
-                        _file_mtime(_bud_excel_src if isinstance(_bud_excel_src, str) else ""),
-                        upload=_bud_excel_src,
-                    )
-            except Exception:
-                pass
-
-            # ── Economisch model (adoptie-bewust) ────────────────────────
-            #   Z_i(α) = M_i·q(α)  →  λ_i(α) = Z_i·(λ/N)  →  S*_i herberekend
-            #   Omzet_jr_i = Z_i(α)·α·VP_i      (revenue op verwachte abonnees)
-            #   C_BPA_i    = κ_BPA·IP_i·S*_i     (carrying cost op adoptie-S*)
-            #   Winst_jr_i = Omzet_jr_i − C_BPA_i
+            # â”€â”€ Economisch model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _df_b = _ov_df.copy()
-            if not _bud_n_mi.empty:
-                # Herbereken S* en n_klanten op basis van Z_i(α) = M_i·q(α)
-                _bud_q    = adoptie_kans(_alpha_b, _bud_kappa_c, _bud_q_eq, _bud_beta_r)
-                _bud_base = _ov_df.loc[_ov_df.index.isin(_bud_n_mi.index)].copy()
-                _bud_ez   = _bud_n_mi.reindex(_bud_base.index).fillna(0.0) * _bud_q
-                _bud_lpc  = (_bud_base["lambda_jr"] / _bud_base["n_klanten"].replace(0, np.nan)).fillna(0.0)
-                _sl_val_b = float(_sl_keuze.replace("s@", "").replace("%", "")) / 100
-                _bud_lt   = _bud_base["LT_dagen"].astype(float) / 365.0
-                _bud_sstar = pd.Series([
-                    float(BPAOptimizationModel.inverse_service_level(
-                        _sl_val_b,
-                        float(_bud_ez.iloc[_j]) * float(_bud_lpc.iloc[_j]),
-                        float(_bud_lt.iloc[_j]),
-                    ))
-                    for _j in range(len(_bud_base))
-                ], index=_bud_base.index, dtype=float)
-                _df_b = _bud_base.copy()
-                _df_b["n_klanten"] = _bud_ez.round().clip(lower=0).astype(int)
-                _df_b["S_star"]    = _bud_sstar
-                _df_b[_sl_keuze]   = _bud_sstar  # sync voor tabelkolom S*
-                st.caption(
-                    f"Adoptie-bewust: q(α={_alpha_b:.1%}) = {_bud_q:.3f} → "
-                    f"Z_i = M_i·q(α) · S* herberekend op adoptie-λ."
-                )
-            else:
-                _df_b["S_star"] = _ov_df[_sl_keuze].astype(float)
+            _df_b["S_star"] = _ov_df[_sl_keuze].astype(float)
             _df_b["Inv"]        = _df_b["S_star"] * _df_b["IP"]
             _df_b["Marge_stuk"] = _df_b["VP"] - _df_b["IP"]
             _df_b["Omzet_jr"]   = _df_b["n_klanten"] * _alpha_b * _df_b["VP"]
@@ -3638,12 +3569,12 @@ with tab_budget:
             _n_loss = int((_df_b["Winst_jr"] < 0).sum())
             if _n_loss > 0:
                 st.warning(
-                    f"⚠ {_n_loss} van {len(_df_b)} componenten zijn structureel "
-                    f"verliesgevend bij α = {_alpha_b:.1%} en κ_BPA = {_kappa_b:.1%} "
+                    f"âš  {_n_loss} van {len(_df_b)} componenten zijn structureel "
+                    f"verliesgevend bij Î± = {_alpha_b:.1%} en Îº_BPA = {_kappa_b:.1%} "
                     f"(C_BPA > abonnementsomzet). Ze blijven zichtbaar in de tabel "
                     f"maar krijgen een negatieve ROI; greedy plaatst ze onderaan en "
-                    f"selecteert ze in de regel niet — verhoog eventueel α of "
-                    f"verlaag κ_BPA om ze rendabel te maken."
+                    f"selecteert ze in de regel niet â€” verhoog eventueel Î± of "
+                    f"verlaag Îº_BPA om ze rendabel te maken."
                 )
 
             _waarde_keuze = st.radio(
@@ -3651,13 +3582,13 @@ with tab_budget:
                 options=[
                     "Winst / investering (ROI)",
                     "Classificatie-score",
-                    "λ × LT × VP (uitval-impact)",
+                    "Î» Ã— LT Ã— VP (uitval-impact)",
                     "VP (verkoopprijs)",
                 ],
                 index=0,
                 horizontal=True,
                 key="bud_waarde",
-                help="Standaard: ROI = jaarlijkse winst per geïnvesteerde euro. "
+                help="Standaard: ROI = jaarlijkse winst per geÃ¯nvesteerde euro. "
                      "Greedy selecteert dan de componenten die het hoogste rendement "
                      "op het werkkapitaal opleveren.",
             )
@@ -3668,21 +3599,21 @@ with tab_budget:
                 _df_b["Waarde"] = _df_b["Winst_jr"]
             elif _waarde_keuze == "Classificatie-score":
                 _waarde = pd.to_numeric(_df_b.get("Cls_score"), errors="coerce")
-                # Fallback voor rijen zonder cls_score: λ × LT × VP
+                # Fallback voor rijen zonder cls_score: Î» Ã— LT Ã— VP
                 _fallback = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
                 _df_b["Waarde"] = _waarde.fillna(_fallback)
-            elif _waarde_keuze == "λ × LT × VP (uitval-impact)":
+            elif _waarde_keuze == "Î» Ã— LT Ã— VP (uitval-impact)":
                 _df_b["Waarde"] = _df_b["lambda_jr"] * (_df_b["LT_dagen"] / 365) * _df_b["VP"]
             else:
                 _df_b["Waarde"] = _df_b["VP"]
 
-            # Ratio waarde/€ — bescherming tegen IP=0
+            # Ratio waarde/â‚¬ â€” bescherming tegen IP=0
             _df_b["Ratio"] = np.where(
                 _df_b["Inv"] > 0, _df_b["Waarde"] / _df_b["Inv"], np.inf
             )
 
-            # ── Greedy ──
-            # Primair op Ratio (waarde/€), afgerond op 3 decimalen zodat items
+            # â”€â”€ Greedy â”€â”€
+            # Primair op Ratio (waarde/â‚¬), afgerond op 3 decimalen zodat items
             # met hetzelfde getoonde ROI (1 dec., in %) als gelijk worden beschouwd;
             # bij gelijke afgeronde ratio kiest de greedy het component met de
             # laagste investering. mergesort houdt de volgorde stabiel.
@@ -3697,7 +3628,7 @@ with tab_budget:
             _df_sorted["In_selectie"] = _cum <= _budget
 
             # Probeer optioneel nog kleinere items toe te voegen die nog wel passen
-            # (na de eerste die niet meer past — kan totale waarde verhogen).
+            # (na de eerste die niet meer past â€” kan totale waarde verhogen).
             # Positie-gebaseerd zodat dubbele Code-indexwaarden geen Series geven.
             _resterend = _budget - _df_sorted.loc[_df_sorted["In_selectie"], "Inv"].sum()
             _sel_arr = _df_sorted["In_selectie"].to_numpy().copy()
@@ -3709,7 +3640,7 @@ with tab_budget:
                     _resterend -= _kost
             _df_sorted["In_selectie"] = _sel_arr
 
-            # ── Afgeleide marge- en ROI-kolommen ──
+            # â”€â”€ Afgeleide marge- en ROI-kolommen â”€â”€
             # Marge_stuk, Omzet_jr, C_BPA en Winst_jr zijn al in _df_b berekend
             # en blijven geldig na sortering. Hier alleen de afgeleide ratio's.
             _df_sorted["Marge_pct"] = np.where(
@@ -3736,29 +3667,29 @@ with tab_budget:
             _marge_gem    = (_winst_geko / _omzet_geko * 100) if _omzet_geko > 0 else 0.0
             _roi_port     = (_winst_geko / _inv_gekozen * 100) if _inv_gekozen > 0 else 0.0
 
-            # ── Metrics rij 1 ──
+            # â”€â”€ Metrics rij 1 â”€â”€
             _m1, _m2, _m3, _m4 = st.columns(4)
             _m1.metric("Geselecteerd", f"{len(_in)} / {len(_df_sorted)}")
-            _m2.metric("Investering", f"€ {_inv_gekozen:,.0f}",
-                       delta=f"-€ {(_totale_inv - _inv_gekozen):,.0f}")
+            _m2.metric("Investering", f"â‚¬ {_inv_gekozen:,.0f}",
+                       delta=f"-â‚¬ {(_totale_inv - _inv_gekozen):,.0f}")
             _m3.metric("Waarde behouden",
-                       f"{_waarde_geko/_waarde_tot*100:.1f}%" if _waarde_tot > 0 else "—")
+                       f"{_waarde_geko/_waarde_tot*100:.1f}%" if _waarde_tot > 0 else "â€”")
             _m4.metric("Budget-benutting",
-                       f"{_inv_gekozen/_budget*100:.1f}%" if _budget > 0 else "—")
+                       f"{_inv_gekozen/_budget*100:.1f}%" if _budget > 0 else "â€”")
 
-            # ── Metrics rij 2: economie (BPA-formule) ──
+            # â”€â”€ Metrics rij 2: economie (BPA-formule) â”€â”€
             _w1, _w2, _w3, _w4 = st.columns(4)
-            _w1.metric("Omzet / jaar", f"€ {_omzet_geko:,.0f}",
-                       help="Σ Z·α·VP over geselecteerde componenten")
-            _w2.metric("C_BPA / jaar", f"€ {_cbpa_geko:,.0f}",
-                       help="Σ κ_BPA·IP·S* over geselecteerde componenten")
-            _w3.metric("Winst / jaar", f"€ {_winst_geko:+,.0f}",
+            _w1.metric("Omzet / jaar", f"â‚¬ {_omzet_geko:,.0f}",
+                       help="Î£ ZÂ·Î±Â·VP over geselecteerde componenten")
+            _w2.metric("C_BPA / jaar", f"â‚¬ {_cbpa_geko:,.0f}",
+                       help="Î£ Îº_BPAÂ·IPÂ·S* over geselecteerde componenten")
+            _w3.metric("Winst / jaar", f"â‚¬ {_winst_geko:+,.0f}",
                        delta=(f"{_winst_geko/_winst_tot*100:.1f}% v/h totaal"
                               if _winst_tot != 0 else None))
             _w4.metric("ROI / jaar (portfolio)", f"{_roi_port:+.1f}%",
-                       help="Winst/jaar ÷ totale investering")
+                       help="Winst/jaar Ã· totale investering")
 
-            # ── Per-component tabel (kosten-analyse stijl) ──
+            # â”€â”€ Per-component tabel (kosten-analyse stijl) â”€â”€
             st.subheader("Winst & marge per component")
             _rows_b = []
             for _code, _r in _df_sorted.iterrows():
@@ -3767,70 +3698,70 @@ with tab_budget:
                     'Omschrijving':  str(_r.get('Descr', ''))[:35],
                     'Z':             int(_r['n_klanten']),
                     'S*':            int(_r[_sl_keuze]),
-                    'IP (€)':        round(float(_r['IP']), 2),
-                    'VP (€)':        round(float(_r['VP']), 2),
-                    'λ/jr':          round(float(_r['lambda_jr']), 4),
-                    'Omzet/jr (€)':  round(float(_r['Omzet_jr']), 2),
-                    'C_BPA/jr (€)':  round(float(_r['C_BPA']), 2),
-                    'Winst/jr (€)':  round(float(_r['Winst_jr']), 2),
+                    'IP (â‚¬)':        round(float(_r['IP']), 2),
+                    'VP (â‚¬)':        round(float(_r['VP']), 2),
+                    'Î»/jr':          round(float(_r['lambda_jr']), 4),
+                    'Omzet/jr (â‚¬)':  round(float(_r['Omzet_jr']), 2),
+                    'C_BPA/jr (â‚¬)':  round(float(_r['C_BPA']), 2),
+                    'Winst/jr (â‚¬)':  round(float(_r['Winst_jr']), 2),
                     'Marge %':       (round(float(_r['Marge_pct']), 1)
                                       if pd.notna(_r['Marge_pct']) else np.nan),
-                    'Inv. (€)':      round(float(_r['Inv']), 2),
+                    'Inv. (â‚¬)':      round(float(_r['Inv']), 2),
                     'ROI/jr %':      (round(float(_r['ROI_jr']), 1)
                                       if np.isfinite(_r['ROI_jr']) else np.nan),
                     'Cls_score':     (round(float(_r['Cls_score']), 1)
                                       if pd.notna(_r.get('Cls_score')) else np.nan),
-                    'In selectie':   '✓' if _r['In_selectie'] else '✗',
+                    'In selectie':   'âœ“' if _r['In_selectie'] else 'âœ—',
                 })
             _tbl_b = pd.DataFrame(_rows_b).set_index('Code')
 
             def _kleur_sel2(v):
-                return ("background-color: #c8e6c9" if v == '✓'
+                return ("background-color: #c8e6c9" if v == 'âœ“'
                         else "background-color: #ffcdd2")
 
             st.dataframe(
                 _tbl_b.reset_index().style.format({
-                    'IP (€)':         '€ {:,.2f}',
-                    'VP (€)':         '€ {:,.2f}',
-                    'λ/jr':           '{:.4f}',
-                    'Omzet/jr (€)':   '€ {:,.0f}',
-                    'C_BPA/jr (€)':   '€ {:,.0f}',
-                    'Winst/jr (€)':   '€ {:+,.0f}',
+                    'IP (â‚¬)':         'â‚¬ {:,.2f}',
+                    'VP (â‚¬)':         'â‚¬ {:,.2f}',
+                    'Î»/jr':           '{:.4f}',
+                    'Omzet/jr (â‚¬)':   'â‚¬ {:,.0f}',
+                    'C_BPA/jr (â‚¬)':   'â‚¬ {:,.0f}',
+                    'Winst/jr (â‚¬)':   'â‚¬ {:+,.0f}',
                     'Marge %':        '{:+.1f}%',
-                    'Inv. (€)':       '€ {:,.0f}',
+                    'Inv. (â‚¬)':       'â‚¬ {:,.0f}',
                     'ROI/jr %':       '{:+.1f}%',
                     'Cls_score':      '{:.1f}',
-                }, na_rep="—").map(_kleur_sel2, subset=['In selectie']),
+                }, na_rep="â€”").map(_kleur_sel2, subset=['In selectie']),
                 use_container_width=True,
                 height=420,
             )
 
-            # ── Totaalregels (kosten-stijl) ──
-            _in_tbl  = _tbl_b[_tbl_b['In selectie'] == '✓']
+            # â”€â”€ Totaalregels (kosten-stijl) â”€â”€
+            _in_tbl  = _tbl_b[_tbl_b['In selectie'] == 'âœ“']
             st.markdown(
                 f"**Totaal selectie:** S\\* = {int(_in_tbl['S*'].sum())}  |  "
-                f"Investering = € {_in_tbl['Inv. (€)'].sum():,.0f}  |  "
-                f"Omzet/jr = € {_in_tbl['Omzet/jr (€)'].sum():,.0f}  |  "
-                f"C_BPA/jr = € {_in_tbl['C_BPA/jr (€)'].sum():,.0f}  |  "
-                f"Winst/jr = € {_in_tbl['Winst/jr (€)'].sum():+,.0f}  |  "
+                f"Investering = â‚¬ {_in_tbl['Inv. (â‚¬)'].sum():,.0f}  |  "
+                f"Omzet/jr = â‚¬ {_in_tbl['Omzet/jr (â‚¬)'].sum():,.0f}  |  "
+                f"C_BPA/jr = â‚¬ {_in_tbl['C_BPA/jr (â‚¬)'].sum():,.0f}  |  "
+                f"Winst/jr = â‚¬ {_in_tbl['Winst/jr (â‚¬)'].sum():+,.0f}  |  "
                 f"ROI/jr = {_roi_port:+.1f}%"
             )
             st.markdown(
                 f"**Totaal portfolio:** S\\* = {int(_tbl_b['S*'].sum())}  |  "
-                f"Investering = € {_tbl_b['Inv. (€)'].sum():,.0f}  |  "
-                f"Omzet/jr = € {_tbl_b['Omzet/jr (€)'].sum():,.0f}  |  "
-                f"C_BPA/jr = € {_tbl_b['C_BPA/jr (€)'].sum():,.0f}  |  "
-                f"Winst/jr = € {_tbl_b['Winst/jr (€)'].sum():+,.0f}"
+                f"Investering = â‚¬ {_tbl_b['Inv. (â‚¬)'].sum():,.0f}  |  "
+                f"Omzet/jr = â‚¬ {_tbl_b['Omzet/jr (â‚¬)'].sum():,.0f}  |  "
+                f"C_BPA/jr = â‚¬ {_tbl_b['C_BPA/jr (â‚¬)'].sum():,.0f}  |  "
+                f"Winst/jr = â‚¬ {_tbl_b['Winst/jr (â‚¬)'].sum():+,.0f}"
             )
 
-            # ── Greedy-rangschikking (waarde-criterium) ──
-            with st.expander("📋 Greedy-rangschikking (waarde-criterium)"):
+            # â”€â”€ Greedy-rangschikking (waarde-criterium) â”€â”€
+            with st.expander("ðŸ“‹ Greedy-rangschikking (waarde-criterium)"):
                 _show = _df_sorted[
                     ['Descr', 'LT_dagen', _sl_keuze, 'Inv', 'Waarde',
                      'Ratio', 'Cls_score', 'In_selectie']
                 ].copy()
                 _show.columns = ['Omschrijving', 'LT(d)', f'S* @ {_sl_keuze}',
-                                 'Inv. (€)', 'Waarde', 'Waarde/€',
+                                 'Inv. (â‚¬)', 'Waarde', 'Waarde/â‚¬',
                                  'Cls_score', 'In selectie']
 
                 def _kleur_sel(v):
@@ -3839,317 +3770,54 @@ with tab_budget:
 
                 st.dataframe(
                     _show.reset_index(drop=True).style.format({
-                        'Inv. (€)':  '€ {:,.0f}',
+                        'Inv. (â‚¬)':  'â‚¬ {:,.0f}',
                         'Waarde':    '{:,.1f}',
-                        'Waarde/€':  '{:.4f}',
+                        'Waarde/â‚¬':  '{:.4f}',
                         'Cls_score': '{:.1f}',
-                    }, na_rep="—").map(_kleur_sel, subset=['In selectie']),
+                    }, na_rep="â€”").map(_kleur_sel, subset=['In selectie']),
                     use_container_width=True,
                     height=420,
                 )
 
-            # ── Curve: cumulatieve waarde vs budget ──
-            with st.expander("📈 Cumulatieve waarde vs. cumulatieve investering"):
+            # â”€â”€ Curve: cumulatieve waarde vs budget â”€â”€
+            with st.expander("ðŸ“ˆ Cumulatieve waarde vs. cumulatieve investering"):
                 import matplotlib.pyplot as _plt_bud
                 _cum_inv  = _df_sorted["Inv"].cumsum().values
                 _cum_wrd  = _df_sorted["Waarde"].cumsum().values
                 _fig_b, _ax_b = _plt_bud.subplots(figsize=(9, 4.5))
                 _ax_b.plot(_cum_inv, _cum_wrd, color="#1976D2", lw=2)
                 _ax_b.axvline(_budget, color="#c62828", ls="--",
-                              label=f"Budget € {_budget:,.0f}")
+                              label=f"Budget â‚¬ {_budget:,.0f}")
                 _ax_b.fill_between(_cum_inv, _cum_wrd, where=(_cum_inv <= _budget),
                                    color="#c8e6c9", alpha=0.4, label="In selection")
-                _ax_b.set_xlabel("Cumulative investment (€)")
+                _ax_b.set_xlabel("Cumulative investment (â‚¬)")
                 _ax_b.set_ylabel("Cumulative value")
-                _ax_b.set_title("Greedy selection — value build-up with increasing investment")
+                _ax_b.set_title("Greedy selection â€” value build-up with increasing investment")
                 _ax_b.grid(True, alpha=0.3)
                 _ax_b.legend()
                 _fig_b.tight_layout()
                 st.pyplot(_fig_b)
                 _plt_bud.close(_fig_b)
 
-            # ── α-sweep: adoptie-bewuste greedy (stochastic scenario) ─────
-            with st.expander(
-                "📊 α-sweep — adoption-aware greedy (per α recomputed)",
-                expanded=False,
-            ):
-                st.caption(
-                    "De bovenstaande greedy gebruikt een vaste $Z$ en vaste $α$. "
-                    "Dat is **niet consistent**: zowel de revenue ($Z_i\\cdot α\\cdot VP_i$) "
-                    "als de investering ($S_i^*(X,\\Lambda_i(α))\\cdot IP_i$) hangen af "
-                    "van $α$ via de adoptiekans $q(α)$. Een hogere $α$ verlaagt $q$, "
-                    "waardoor $Z_i$ daalt, $S_i^*$ daalt en de geïnvesteerde waarde "
-                    "verandert — de greedy-rangschikking én de geselecteerde set "
-                    "kunnen daardoor per $α$ anders zijn. "
-                    "Deze sweep herschrijft voor elk $α$ de volledige keten "
-                    "$q(α)\\to Z_i(α)\\to S_i^*\\to$ greedy."
-                )
-                _kp_gs = st.session_state.get("kosten_params", {})
-                _kappa_c_gs  = float(_kp_gs.get("kappa_c",  0.25))
-                _kappa_bpa_gs = float(_kp_gs.get("kappa_bpa", 0.20))
-                st.caption(
-                    f"κ_BPA = **{_kappa_bpa_gs:.0%}**, κ_c = **{_kappa_c_gs:.0%}** "
-                    f"_(uit Kostenanalyse)_. Service level uit boven­staande keuze: "
-                    f"**{_sl_keuze}**. Budget: **€ {_budget:,.0f}**."
-                )
-                _gs_c1, _gs_c2, _gs_c3 = st.columns(3)
-                with _gs_c1:
-                    _gs_amin = st.number_input(
-                        "α-bereik min", min_value=0.0001, max_value=1.0,
-                        value=0.05, step=0.01, format="%.2f", key="gs_amin")
-                    _gs_amax = st.number_input(
-                        "α-bereik max", min_value=0.01, max_value=1.0,
-                        value=0.40, step=0.01, format="%.2f", key="gs_amax")
-                with _gs_c2:
-                    _gs_an = st.slider(
-                        "Aantal α-waarden", 5, 80, 30, key="gs_an")
-                    _gs_q_eq = st.number_input(
-                        "q_eq (adoptie bij pariteit)", min_value=0.01, max_value=0.99,
-                        value=float(st.session_state.get("subsim_q_eq", 0.55)),
-                        step=0.05, format="%.2f", key="gs_qeq")
-                with _gs_c3:
-                    _gs_beta_r = st.number_input(
-                        "β_r (kostenratio-gevoeligheid)", min_value=0.0, max_value=20.0,
-                        value=float(st.session_state.get("subsim_beta_r", 1.0)),
-                        step=0.1, format="%.2f", key="gs_beta_r")
-                    _gs_cc = st.checkbox(
-                        "Chance-constraint ε",
-                        value=False, key="gs_cc",
-                        help="Stock op (1-ε)-kwantiel Z_i^{1-ε} i.p.v. E[Z_i].")
-                if _gs_cc:
-                    _gs_eps = st.slider(
-                        "ε", min_value=0.01, max_value=0.50, value=0.10,
-                        step=0.01, format="%.2f", key="gs_eps")
-                else:
-                    _gs_eps = None
-
-                # Bron-Excel (zelfde als subsim-tab)
-                _gs_excel = st.session_state.get("subsim_upload") or (
-                    SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None
-                )
-                def _gs_excel_arg():
-                    if _gs_excel is None:
-                        return None
-                    try:
-                        _gs_excel.seek(0)
-                    except (AttributeError, ValueError):
-                        pass
-                    return _gs_excel
-
-                if st.button(
-                    "📊 Bereken α-sweep greedy", key="gs_btn",
-                    disabled=not _cls_codes if (_cls_codes := sorted(
-                        get_classificatie_info().get("items", {}).keys())) else False,
-                ):
-                    try:
-                        _ov_gs = get_overzicht_df(cfg)
-                        if _ov_gs is None or _ov_gs.empty:
-                            st.warning("Geen overzicht — laad eerst tab 📊.")
-                        else:
-                            _gs_grid = list(np.linspace(
-                                float(_gs_amin), float(_gs_amax), int(_gs_an)))
-                            _sl_val = float(_sl_keuze.replace("s@", "").replace("%", "")) / 100
-                            with st.spinner(
-                                f"Greedy α-sweep ({int(_gs_an)} α-waarden, "
-                                f"β_r = {_gs_beta_r:.2f})…"
-                            ):
-                                _gs_res = greedy_alpha_sweep(
-                                    _ov_gs, _gs_grid, float(_budget),
-                                    _sl_val,
-                                    float(_gs_q_eq), float(_gs_beta_r),
-                                    _kappa_bpa_gs, _kappa_c_gs,
-                                    excel_file=_gs_excel_arg(),
-                                    codes=_cls_codes or None,
-                                    epsilon=_gs_eps,
-                                )
-                            if _gs_res is None or _gs_res.empty:
-                                st.warning("Geen resultaten — controleer Adoptie-tab en selectie.")
-                                st.session_state.pop("gs_data", None)
-                            else:
-                                st.session_state["gs_data"] = _gs_res
-                    except (ValueError, FileNotFoundError, OSError) as _gs_err:
-                        st.warning(f"α-sweep mislukt: {_gs_err}")
-                        st.session_state.pop("gs_data", None)
-
-                _gs_df = st.session_state.get("gs_data")
-                if _gs_df is not None and not _gs_df.empty:
-                    import matplotlib.pyplot as _plt_gs
-                    _gs_opt_idx = int(_gs_df["total_margin"].idxmax())
-                    _gs_opt_a   = float(_gs_df.loc[_gs_opt_idx, "alpha"])
-                    _gs_opt_m   = float(_gs_df.loc[_gs_opt_idx, "total_margin"])
-                    _gs_opt_n   = int(_gs_df.loc[_gs_opt_idx, "n_selected"])
-
-                    _gc1, _gc2, _gc3 = st.columns(3)
-                    _gc1.metric("α* (max greedy margin)", f"{_gs_opt_a:.1%}")
-                    _gc2.metric("Greedy margin at α*", f"€ {_gs_opt_m:,.0f}")
-                    _gc3.metric("# selected at α*", f"{_gs_opt_n}")
-                    st.caption(
-                        "At α = "
-                        f"**{_gs_opt_a:.1%}** the greedy selection within "
-                        f"budget **€ {_budget:,.0f}** yields the highest "
-                        f"annual margin (**€ {_gs_opt_m:,.0f}**, "
-                        f"{_gs_opt_n} components). "
-                        "Note: the selected set changes with α because both "
-                        "revenue and required stock investment depend on q(α)."
-                    )
-
-                    _fig_gs, _ax_gs = _plt_gs.subplots(figsize=(9, 4.5))
-                    _ax_gs.plot(
-                        _gs_df["alpha"], _gs_df["total_margin"],
-                        color="#1f77b4", lw=2, marker="o", ms=4,
-                        label="Greedy annual margin (€)")
-                    _ax_gs.axvline(
-                        _gs_opt_a, color="#d62728", ls="--", lw=1.5,
-                        label=f"α* = {_gs_opt_a:.1%}")
-                    _ax_gs.axvline(
-                        float(_alpha_b), color="#ff7f0e", ls=":", lw=1.4,
-                        label=f"current α = {_alpha_b:.1%}")
-                    _ax_gs.axhline(0, color="grey", lw=0.8, ls=":")
-                    _ax_gs.set_xlabel("price percentage α")
-                    _ax_gs.set_ylabel("annual margin of greedy selection (€)")
-                    _ax_gs.set_title(
-                        f"Adoption-aware greedy margin vs. α  "
-                        f"(budget = € {_budget:,.0f}, X = {_sl_keuze}, "
-                        f"β_r = {_gs_beta_r:.2f})"
-                    )
-                    _ax_gs.grid(True, alpha=0.3)
-
-                    _ax_gs2 = _ax_gs.twinx()
-                    _ax_gs2.plot(
-                        _gs_df["alpha"], _gs_df["n_selected"],
-                        color="#2ca02c", lw=1.5, ls="-.", alpha=0.8,
-                        label="# components selected")
-                    _ax_gs2.set_ylabel("# components selected", color="#2ca02c")
-                    _ax_gs2.tick_params(axis="y", labelcolor="#2ca02c")
-                    _ax_gs2.yaxis.set_major_locator(
-                        _plt_gs.matplotlib.ticker.MaxNLocator(integer=True))
-
-                    _l1, _lb1 = _ax_gs.get_legend_handles_labels()
-                    _l2, _lb2 = _ax_gs2.get_legend_handles_labels()
-                    _ax_gs.legend(_l1 + _l2, _lb1 + _lb2, loc="best", fontsize=9)
-                    _fig_gs.tight_layout()
-                    st.pyplot(_fig_gs)
-                    _plt_gs.close(_fig_gs)
-
-                    # ── Component selection heatmap ───────────────────────
-                    st.markdown("#### Component selection per α")
-                    if "selected_codes" in _gs_df.columns:
-                        # Bouw boolean matrix: rijen = componenten, kolommen = α
-                        _all_sel_codes = sorted(
-                            {c for row in _gs_df["selected_codes"] for c in row}
-                        )
-                        _alpha_vals = _gs_df["alpha"].tolist()
-                        _mat = pd.DataFrame(
-                            False, index=_all_sel_codes, columns=_alpha_vals
-                        )
-                        for _, _row in _gs_df.iterrows():
-                            _mat.loc[list(_row["selected_codes"]), _row["alpha"]] = True
-
-                        # Sorteer: altijd geselecteerd bovenaan, daarna op eerste α
-                        _freq = _mat.sum(axis=1)
-                        _first = _mat.apply(
-                            lambda r: _alpha_vals[r.values.argmax()] if r.any() else 1.0,
-                            axis=1,
-                        )
-                        _mat = _mat.loc[
-                            _mat.index[
-                                np.lexsort((_first.values, -_freq.values))
-                            ]
-                        ]
-
-                        _n_comp_hm = len(_mat)
-                        _fig_hm, _ax_hm = _plt_gs.subplots(
-                            figsize=(max(8, len(_alpha_vals) * 0.35),
-                                     max(3, _n_comp_hm * 0.28 + 0.8))
-                        )
-                        _ax_hm.imshow(
-                            _mat.values.astype(float),
-                            aspect="auto", cmap="Blues", vmin=0, vmax=1,
-                            interpolation="nearest",
-                        )
-                        _xt = list(range(0, len(_alpha_vals), max(1, len(_alpha_vals) // 10)))
-                        _ax_hm.set_xticks(_xt)
-                        _ax_hm.set_xticklabels(
-                            [f"{_alpha_vals[_i]:.0%}" for _i in _xt], fontsize=8)
-                        _ax_hm.set_yticks(range(_n_comp_hm))
-                        _ax_hm.set_yticklabels(_mat.index.tolist(), fontsize=7)
-                        _ax_hm.set_xlabel("price percentage α", fontsize=9)
-                        _ax_hm.set_ylabel("component", fontsize=9)
-                        _ax_hm.set_title(
-                            "Component in greedy selection (blue = selected)",
-                            fontsize=10,
-                        )
-                        # Markeer α* en huidige α
-                        _ax_hm.axvline(
-                            _alpha_vals.index(
-                                min(_alpha_vals, key=lambda a: abs(a - _gs_opt_a))
-                            ),
-                            color="#d62728", ls="--", lw=1.5, label=f"α* = {_gs_opt_a:.1%}",
-                        )
-                        _ax_hm.axvline(
-                            _alpha_vals.index(
-                                min(_alpha_vals, key=lambda a: abs(a - float(_alpha_b)))
-                            ),
-                            color="#ff7f0e", ls=":", lw=1.4,
-                            label=f"current α = {_alpha_b:.1%}",
-                        )
-                        _ax_hm.legend(loc="lower right", fontsize=8)
-                        _fig_hm.tight_layout()
-                        st.pyplot(_fig_hm)
-                        _plt_gs.close(_fig_hm)
-
-                        # Frequentietabel: hoeveel α-waarden is component geselecteerd
-                        _freq_df = pd.DataFrame({
-                            "component":      _mat.index,
-                            "# α selected":   _freq.loc[_mat.index].values,
-                            "fraction":       (_freq.loc[_mat.index].values / len(_alpha_vals)),
-                            "first α":        _first.loc[_mat.index].apply(lambda x: f"{x:.1%}").values,
-                        }).reset_index(drop=True)
-                        _freq_df["fraction"] = _freq_df["fraction"].map("{:.0%}".format)
-                        st.dataframe(
-                            _freq_df, use_container_width=True,
-                            column_config={
-                                "component":    st.column_config.TextColumn("Component"),
-                                "# α selected": st.column_config.NumberColumn("# α selected"),
-                                "fraction":     st.column_config.TextColumn("% of α-range"),
-                                "first α":      st.column_config.TextColumn("First selected at α"),
-                            },
-                        )
-                        st.caption(
-                            f"**{int((_freq == len(_alpha_vals)).sum())} components** are always "
-                            f"selected (across all {len(_alpha_vals)} α-values). "
-                            f"**{int(((0 < _freq) & (_freq < len(_alpha_vals))).sum())} components** "
-                            "enter or leave the selection as α changes — "
-                            "these are the components whose ROI ranking shifts most with α."
-                        )
-
-                    st.download_button(
-                        "⬇️ Download α-sweep greedy (CSV)",
-                        _gs_df.drop(columns=["selected_codes"], errors="ignore")
-                            .to_csv(index=False).encode("utf-8"),
-                        file_name="greedy_alpha_sweep.csv", mime="text/csv",
-                        key="gs_dl")
-
-            # ── Toepassen als uitsluitingen ──
             st.divider()
             st.markdown("**Selectie toepassen op model**")
             st.caption(
-                "**Optie 1** — voeg de niet-geselecteerde componenten toe aan de "
+                "**Optie 1** â€” voeg de niet-geselecteerde componenten toe aan de "
                 "uitsluitingslijst (handmatige componenten blijven onaangetast). "
-                "**Optie 2** — herschrijf `bpa_selectie.json` zodat de BPA-overzicht-"
+                "**Optie 2** â€” herschrijf `bpa_selectie.json` zodat de BPA-overzicht-"
                 "whitelist alleen de budget-geselecteerde componenten bevat. "
                 "Optie 2 werkt hetzelfde als de knop in de Classificatie-tab."
             )
             _ba_col1, _ba_col2 = st.columns(2)
             with _ba_col1:
                 _btn_excl = st.button(
-                    "🚫 Pas toe via uitsluitingen",
+                    "ðŸš« Pas toe via uitsluitingen",
                     key="bud_apply_excl",
                     help="Voeg niet-geselecteerde codes toe aan uitgesloten_componenten in de config.",
                 )
             with _ba_col2:
                 _btn_sel = st.button(
-                    "✅ Toepassen op BPA-overzicht",
+                    "âœ… Toepassen op BPA-overzicht",
                     type="primary",
                     key="bud_apply_selectie",
                     help="Herschrijft bpa_selectie.json met alleen de budget-geselecteerde codes.",
@@ -4166,7 +3834,7 @@ with tab_budget:
                 st.session_state.pop("overzicht_df", None)
                 st.success(
                     f"{len(_uit_codes)} componenten toegevoegd aan uitsluitingen. "
-                    f"Tab 📊 Overzicht toont nu de budget-conforme selectie."
+                    f"Tab ðŸ“Š Overzicht toont nu de budget-conforme selectie."
                 )
                 st.rerun()
 
@@ -4174,7 +3842,7 @@ with tab_budget:
                 try:
                     _selected_codes = {str(c) for c in _in.index}
                     if not _selected_codes:
-                        st.warning("Geen componenten geselecteerd — selectie niet weggeschreven.")
+                        st.warning("Geen componenten geselecteerd â€” selectie niet weggeschreven.")
                     else:
                         # 1) Probeer bestaande selectie te filteren (behoudt
                         #    threshold/parameters/metadata van de classificatie).
@@ -4240,44 +3908,44 @@ with tab_budget:
                         invalidate_caches()
                         st.session_state.pop("overzicht_df", None)
                         st.success(
-                            f"✅ {len(_new_items)} componenten opgeslagen in "
-                            f"`{SELECTIE_PATH}`. Tab 📊 Overzicht laadt nu alleen "
+                            f"âœ… {len(_new_items)} componenten opgeslagen in "
+                            f"`{SELECTIE_PATH}`. Tab ðŸ“Š Overzicht laadt nu alleen "
                             f"de budget-geselecteerde componenten."
                         )
                         st.rerun()
                 except Exception as e:
                     st.error(f"Kon selectie niet schrijven: {e}")
 
-            # ── Download ──
+            # â”€â”€ Download â”€â”€
             _csv_b = _tbl_b.to_csv(sep=";", decimal=",").encode("utf-8")
             st.download_button(
-                "⬇️ Download greedy-selectie (CSV)",
+                "â¬‡ï¸ Download greedy-selectie (CSV)",
                 data=_csv_b,
                 file_name=f"budget_scenario_{date.today()}.csv",
                 mime="text/csv",
             )
 
-# ─────────────────────────────────────────────────────────────────────────────────
-#  TAB 11 – VERWACHTE SUBSCRIPTIES  (E[Z_i(α,X)] uit adoption rate × historie)
-# ─────────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 11 â€“ VERWACHTE SUBSCRIPTIES  (E[Z_i(Î±,X)] uit adoption rate Ã— historie)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_subsim:
     st.subheader("Verwachte subscripties per component")
     st.markdown(
-        "Het verwachte aantal subscripties per component $E[Z_i(α)]$ wordt "
+        "Het verwachte aantal subscripties per component $E[Z_i(Î±)]$ wordt "
         "**analytisch** bepaald uit de subscriptie-dataset (zonder 231-AS: RSPL) "
-        "— zonder Monte Carlo. Alleen de componenten uit de "
+        "â€” zonder Monte Carlo. Alleen de componenten uit de "
         "**classificatie-selectie** tellen mee.\n\n"
         "Elk van de $N_i$ historische klanten van een component abonneert "
-        "onafhankelijk met de globale **logit-adoptiekans** $q(α)$, dus "
-        "$Z_i(α)\\sim\\mathrm{Binomiaal}(N_i,\\,q(α))$ en "
-        "$E[Z_i(α)]=N_i\\cdot q(α)$. De adoptiekans volgt een "
-        "discrete-keuzemodel op basis van de kostenratio $κ_c/α$:\n\n"
-        "$$q(α)=σ\\!\\big(β_0+β_r\\ln(κ_c/α)\\big),\\qquad "
-        "β_0=\\operatorname{logit}(q_{eq})=\\ln\\tfrac{q_{eq}}{1-q_{eq}}.$$\n\n"
-        "De intercept $β_0$ is geijkt op **kostenpariteit**: bij $α=κ_c$ geldt "
+        "onafhankelijk met de globale **logit-adoptiekans** $q(Î±)$, dus "
+        "$Z_i(Î±)\\sim\\mathrm{Binomiaal}(N_i,\\,q(Î±))$ en "
+        "$E[Z_i(Î±)]=N_i\\cdot q(Î±)$. De adoptiekans volgt een "
+        "discrete-keuzemodel op basis van de kostenratio $Îº_c/Î±$:\n\n"
+        "$$q(Î±)=Ïƒ\\!\\big(Î²_0+Î²_r\\ln(Îº_c/Î±)\\big),\\qquad "
+        "Î²_0=\\operatorname{logit}(q_{eq})=\\ln\\tfrac{q_{eq}}{1-q_{eq}}.$$\n\n"
+        "De intercept $Î²_0$ is geijkt op **kostenpariteit**: bij $Î±=Îº_c$ geldt "
         "$q=q_{eq}$. Het service level $X$ zit in het onwaargenomen nut en "
-        "beïnvloedt $q$ niet direct (alleen de voorraad-/kostenkant)."
+        "beÃ¯nvloedt $q$ niet direct (alleen de voorraad-/kostenkant)."
     )
 
     _cls_codes = sorted(get_classificatie_info().get("items", {}).keys())
@@ -4286,10 +3954,10 @@ with tab_subsim:
     else:
         st.warning(
             "Geen classificatie-selectie (`bpa_selectie.json`) gevonden. "
-            "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
+            "Voer eerst de classificatie uit via tab ðŸ·ï¸ Classificatie."
         )
 
-    # ── Bron-Excel: vaste subscriptie-dataset uit de repo ────────────────
+    # â”€â”€ Bron-Excel: vaste subscriptie-dataset uit de repo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _subsim_upload = None  # upload niet meer nodig; bestand staat in de repo
     _excel_bron = SUBSCRIPTIES_PATH
     st.caption(f"Bron-Excel: `{os.path.basename(SUBSCRIPTIES_PATH)}`")
@@ -4304,53 +3972,53 @@ with tab_subsim:
             pass
         return _excel_bron
 
-    # ── Adoptiemodel: globale logit-kans q(α) ─────────────────────────────
-    st.markdown("**Adoptiemodel — logit discrete-keuze**")
+    # â”€â”€ Adoptiemodel: globale logit-kans q(Î±) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    st.markdown("**Adoptiemodel â€” logit discrete-keuze**")
     _kp_sim        = st.session_state.get("kosten_params", {})
     _alpha_def_sim = float(_kp_sim.get("alpha", 0.15))
     _kappa_c_sim   = float(_kp_sim.get("kappa_c", 0.25))
     _X_def_sim     = float(_kp_sim.get("service_level", 0.99))
     st.caption(
-        f"$κ_c$ komt uit de Kostenanalyse: κ_c = **{_kappa_c_sim:.0%}** "
-        "_(pas aan via 💰 Kostenanalyse)_. $q_{eq}$ en $β_r$ zijn hieronder "
+        f"$Îº_c$ komt uit de Kostenanalyse: Îº_c = **{_kappa_c_sim:.0%}** "
+        "_(pas aan via ðŸ’° Kostenanalyse)_. $q_{eq}$ en $Î²_r$ zijn hieronder "
         "instelbaar en worden meegenomen in de gevoeligheidsanalyse."
     )
 
     col_a1, col_a2, col_a3 = st.columns(3)
     with col_a1:
         _alpha_sim = st.number_input(
-            "α (prijspercentage)", min_value=0.0001, max_value=1.0,
+            "Î± (prijspercentage)", min_value=0.0001, max_value=1.0,
             value=_alpha_def_sim, step=0.01, format="%.2f", key="subsim_alpha",
         )
     with col_a2:
         _q_eq = st.number_input(
-            "q_eq (adoptie bij kostenpariteit α=κ_c)", min_value=0.01, max_value=0.99,
+            "q_eq (adoptie bij kostenpariteit Î±=Îº_c)", min_value=0.01, max_value=0.99,
             value=0.55, step=0.05, format="%.2f", key="subsim_q_eq",
             help="Kans dat een klant abonneert wanneer het abonnement precies "
-                 "even duur is als zelf voorraad houden (α = κ_c).",
+                 "even duur is als zelf voorraad houden (Î± = Îº_c).",
         )
     with col_a3:
         _beta_r = st.number_input(
-            "β_r (gevoeligheid kostenratio)", min_value=0.0, max_value=20.0,
+            "Î²_r (gevoeligheid kostenratio)", min_value=0.0, max_value=20.0,
             value=1.0, step=0.1, format="%.2f", key="subsim_beta_r",
-            help="Hoe sterk de adoptie reageert op de kostenratio ln(κ_c/α). "
-                 "Groter β_r → adoptie daalt sneller als α richting κ_c stijgt.",
+            help="Hoe sterk de adoptie reageert op de kostenratio ln(Îº_c/Î±). "
+                 "Groter Î²_r â†’ adoptie daalt sneller als Î± richting Îº_c stijgt.",
         )
 
     _q_ad = adoptie_kans(_alpha_sim, _kappa_c_sim, _q_eq, _beta_r)
     _c_q1, _c_q2 = st.columns(2)
-    _c_q1.metric("q(α) — adoptiekans", f"{_q_ad:.3f}",
+    _c_q1.metric("q(Î±) â€” adoptiekans", f"{_q_ad:.3f}",
                  delta=f"{_q_ad - _q_eq:+.3f} vs q_eq")
-    _c_q2.metric("κ_c / α — kostenratio", f"{_kappa_c_sim / max(_alpha_sim, 1e-9):.2f}")
+    _c_q2.metric("Îº_c / Î± â€” kostenratio", f"{_kappa_c_sim / max(_alpha_sim, 1e-9):.2f}")
 
-    # ── Verdeling van Z (binomiale verdeling) ─────────────────────────────
-    with st.expander("📊 Verdeling van Z (binomiale verdeling)"):
+    # â”€â”€ Verdeling van Z (binomiale verdeling) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    with st.expander("ðŸ“Š Verdeling van Z (binomiale verdeling)"):
         st.caption(
-            "Achter de verwachtingswaarde $E[Z_i]=N_i\\cdot q(α)$ zit een echte "
-            "kansverdeling: $Z_i(α)\\sim\\mathrm{Binomiaal}(N_i, q(α))$. Omdat "
-            "alle klanten dezelfde globale adoptiekans $q(α)$ delen, is het "
-            "**totaal** $Z_{tot}=\\sum_i Z_i\\sim\\mathrm{Binomiaal}(\\sum_i N_i, q(α))$. "
-            "Hieronder de kansverdeling (PMF) bij de huidige α, q_eq en β_r."
+            "Achter de verwachtingswaarde $E[Z_i]=N_i\\cdot q(Î±)$ zit een echte "
+            "kansverdeling: $Z_i(Î±)\\sim\\mathrm{Binomiaal}(N_i, q(Î±))$. Omdat "
+            "alle klanten dezelfde globale adoptiekans $q(Î±)$ delen, is het "
+            "**totaal** $Z_{tot}=\\sum_i Z_i\\sim\\mathrm{Binomiaal}(\\sum_i N_i, q(Î±))$. "
+            "Hieronder de kansverdeling (PMF) bij de huidige Î±, q_eq en Î²_r."
         )
         try:
             _n_series = aantal_klanten_per_component(_excel_arg(), _cls_codes)
@@ -4366,11 +4034,11 @@ with tab_subsim:
             _mu    = _N_tot * _q_ad
             _sd    = (_N_tot * _q_ad * (1.0 - _q_ad)) ** 0.5
 
-            # Totale verdeling Z_tot ~ Binomiaal(Σ N_i, q).
+            # Totale verdeling Z_tot ~ Binomiaal(Î£ N_i, q).
             _cB1, _cB2, _cB3 = st.columns(3)
             _cB1.metric("N totaal (klanten)", f"{_N_tot:,}")
-            _cB2.metric("E[Z_tot] = N·q", f"{_mu:,.0f}")
-            _cB3.metric("Std. dev. √(N·q·(1−q))", f"{_sd:,.1f}")
+            _cB2.metric("E[Z_tot] = NÂ·q", f"{_mu:,.0f}")
+            _cB3.metric("Std. dev. âˆš(NÂ·qÂ·(1âˆ’q))", f"{_sd:,.1f}")
             _kt, _pt = binomiale_verdeling(_N_tot, _q_ad)
             _figb, _axb = _plt_bin.subplots(figsize=(10, 4))
             _axb.bar(_kt, _pt, width=1.0, color="#1f77b4", alpha=0.75,
@@ -4386,8 +4054,8 @@ with tab_subsim:
             st.pyplot(_figb)
             _plt_bin.close(_figb)
 
-            # Verdeling voor één gekozen component Z_i ~ Binomiaal(N_i, q).
-            st.markdown("**Verdeling voor één component**")
+            # Verdeling voor Ã©Ã©n gekozen component Z_i ~ Binomiaal(N_i, q).
+            st.markdown("**Verdeling voor Ã©Ã©n component**")
             _n_sorted = _n_series.sort_values(ascending=False)
             _codes_sorted = [str(c) for c in _n_sorted.index]
             _sel_code = st.selectbox(
@@ -4411,13 +4079,13 @@ with tab_subsim:
             st.pyplot(_figc)
             _plt_bin.close(_figc)
 
-    # ── Automatische doorwerking naar alle tabs ───────────────────────────
-    # E[Z_i(α)] = N_i · q(α) wordt analytisch (deterministisch) bepaald en als
-    # integer Z-override in de configuratie gezet zodra α, q_eq of β_r wijzigt.
+    # â”€â”€ Automatische doorwerking naar alle tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # E[Z_i(Î±)] = N_i Â· q(Î±) wordt analytisch (deterministisch) bepaald en als
+    # integer Z-override in de configuratie gezet zodra Î±, q_eq of Î²_r wijzigt.
     _auto_z = st.checkbox(
-        "Verwachte Z automatisch doorzetten naar alle tabs bij wijziging van α/q_eq/β_r",
+        "Verwachte Z automatisch doorzetten naar alle tabs bij wijziging van Î±/q_eq/Î²_r",
         value=True, key="subsim_auto_z",
-        help="Schrijft E[Z_i(α)] = N_i·q(α) per component als integer Z-override "
+        help="Schrijft E[Z_i(Î±)] = N_iÂ·q(Î±) per component als integer Z-override "
              "en herberekent de overige tabs.",
     )
     if _auto_z and _cls_codes:
@@ -4447,7 +4115,7 @@ with tab_subsim:
                     st.session_state.pop("overzicht_df", None)
                     st.session_state["subsim_auto_sig"] = _auto_sig
                     st.success(
-                        f"✅ Verwachte Z (α={_alpha_sim:.2f}, q(α)={_q_ad:.3f}) "
+                        f"âœ… Verwachte Z (Î±={_alpha_sim:.2f}, q(Î±)={_q_ad:.3f}) "
                         f"automatisch doorgezet naar {len(_ez)} componenten."
                     )
                     st.rerun()
@@ -4457,28 +4125,28 @@ with tab_subsim:
                     f"geen tab 'Adoptie' of is niet bereikbaar. ({_auto_err})"
                 )
 
-    # ── Gevoeligheidsanalyse: Σ E[Z] vs. α, β_r en q_eq ───────────────────
-    with st.expander("📈 Gevoeligheidsanalyse: verwachte Z vs. α, β_r en q_eq"):
+    # â”€â”€ Gevoeligheidsanalyse: Î£ E[Z] vs. Î±, Î²_r en q_eq â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    with st.expander("ðŸ“ˆ Gevoeligheidsanalyse: verwachte Z vs. Î±, Î²_r en q_eq"):
         st.caption(
             "Toont het totaal verwachte aantal subscripties "
             "$\\sum_i E[Z_i]=q(\\cdot)\\cdot\\sum_i N_i$ als functie van het "
-            "prijspercentage α, de kostenratio-gevoeligheid β_r en de "
+            "prijspercentage Î±, de kostenratio-gevoeligheid Î²_r en de "
             "pariteitskans q_eq. De stippellijn markeert de huidige instelling."
         )
         _cga, _cgb, _cgc = st.columns(3)
         with _cga:
             _a_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "Î±-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_sens_amin")
             _a_max = st.number_input(
-                "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
+                "Î±-bereik max", min_value=0.01, max_value=1.0, value=0.40,
                 step=0.01, format="%.2f", key="subsim_sens_amax")
         with _cgb:
             _br_min = st.number_input(
-                "β_r-bereik min", min_value=0.0, max_value=20.0, value=0.0,
+                "Î²_r-bereik min", min_value=0.0, max_value=20.0, value=0.0,
                 step=0.1, format="%.2f", key="subsim_sens_brmin")
             _br_max = st.number_input(
-                "β_r-bereik max", min_value=0.1, max_value=20.0, value=4.0,
+                "Î²_r-bereik max", min_value=0.1, max_value=20.0, value=4.0,
                 step=0.1, format="%.2f", key="subsim_sens_brmax")
         with _cgc:
             _qe_min = st.number_input(
@@ -4497,7 +4165,7 @@ with tab_subsim:
                 _a_grid  = list(np.linspace(float(_a_min),  float(_a_max),  int(_n_grid)))
                 _br_grid = list(np.linspace(float(_br_min), float(_br_max), int(_n_grid)))
                 _qe_grid = list(np.linspace(float(_qe_min), float(_qe_max), int(_n_grid)))
-                with st.spinner("Gevoeligheid berekenen…"):
+                with st.spinner("Gevoeligheid berekenenâ€¦"):
                     _z_vs_a = gevoeligheid_verwachte_z(
                         _a_grid, 'alpha', float(_alpha_sim), float(_kappa_c_sim),
                         float(_q_eq), float(_beta_r),
@@ -4530,33 +4198,33 @@ with tab_subsim:
             _figs, (_axa, _axb, _axc) = _plt_sens.subplots(1, 3, figsize=(14, 4))
             _axa.plot(_sens["a_grid"], _sens["z_vs_a"], color="#1f77b4", lw=2)
             _axa.axvline(_sens["alpha"], color="grey", ls="--", lw=1)
-            _axa.set_xlabel("price percentage α")
-            _axa.set_ylabel("expected total subscriptions  Σ E[Z]")
-            _axa.set_title(f"Z vs. α  (β_r={_sens['beta_r']:.2f}, q_eq={_sens['q_eq']:.2f})")
+            _axa.set_xlabel("price percentage Î±")
+            _axa.set_ylabel("expected total subscriptions  Î£ E[Z]")
+            _axa.set_title(f"Z vs. Î±  (Î²_r={_sens['beta_r']:.2f}, q_eq={_sens['q_eq']:.2f})")
             _axa.grid(True, alpha=0.3)
             _axb.plot(_sens["br_grid"], _sens["z_vs_br"], color="#ff7f0e", lw=2)
             _axb.axvline(_sens["beta_r"], color="grey", ls="--", lw=1)
-            _axb.set_xlabel("cost-ratio sensitivity β_r")
-            _axb.set_ylabel("Σ E[Z]")
-            _axb.set_title(f"Z vs. β_r  (α={_sens['alpha']:.2f})")
+            _axb.set_xlabel("cost-ratio sensitivity Î²_r")
+            _axb.set_ylabel("Î£ E[Z]")
+            _axb.set_title(f"Z vs. Î²_r  (Î±={_sens['alpha']:.2f})")
             _axb.grid(True, alpha=0.3)
             _axc.plot(_sens["qe_grid"], _sens["z_vs_qe"], color="#2ca02c", lw=2)
             _axc.axvline(_sens["q_eq"], color="grey", ls="--", lw=1)
             _axc.set_xlabel("adoption at parity q_eq")
-            _axc.set_ylabel("Σ E[Z]")
-            _axc.set_title(f"Z vs. q_eq  (α={_sens['alpha']:.2f})")
+            _axc.set_ylabel("Î£ E[Z]")
+            _axc.set_title(f"Z vs. q_eq  (Î±={_sens['alpha']:.2f})")
             _axc.grid(True, alpha=0.3)
             _figs.tight_layout()
             st.pyplot(_figs)
             _plt_sens.close(_figs)
 
-    # ── Pareto-efficiëntie: BPA-winst vs. klantsurplus over (α, X) ─────────
-    with st.expander("🧭 Pareto-efficiëntie: BPA-winst vs. klantsurplus over (α, X)"):
+    # â”€â”€ Pareto-efficiÃ«ntie: BPA-winst vs. klantsurplus over (Î±, X) â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    with st.expander("ðŸ§­ Pareto-efficiÃ«ntie: BPA-winst vs. klantsurplus over (Î±, X)"):
         st.caption(
-            "Elk punt is een combinatie van prijspercentage α en service level X. "
-            "Via de keten $α\\to q(α)\\to E[Z_i]\\to$ kostenmodel worden twee "
-            "concurrerende doelen berekend: de **BPA-marge** (€) en het totale "
-            "**klantsurplus**. De adoptie q(α) hangt alleen van α af; X werkt via "
+            "Elk punt is een combinatie van prijspercentage Î± en service level X. "
+            "Via de keten $Î±\\to q(Î±)\\to E[Z_i]\\to$ kostenmodel worden twee "
+            "concurrerende doelen berekend: de **BPA-marge** (â‚¬) en het totale "
+            "**klantsurplus**. De adoptie q(Î±) hangt alleen van Î± af; X werkt via "
             "de voorraad-/kostenkant. De Pareto-frontier verbindt de "
             "niet-gedomineerde combinaties."
         )
@@ -4564,19 +4232,19 @@ with tab_subsim:
         _kappa_bpa_par = float(_kp_par.get("kappa_bpa", 0.20))
         _kappa_c_par   = float(_kp_par.get("kappa_c", 0.25))
         st.caption(
-            f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_par:.0%}**, "
-            f"κ_c = **{_kappa_c_par:.0%}** _(pas aan via 💰 Kostenanalyse)_."
+            f"Kostenparameters uit Kostenanalyse: Îº_BPA = **{_kappa_bpa_par:.0%}**, "
+            f"Îº_c = **{_kappa_c_par:.0%}** _(pas aan via ðŸ’° Kostenanalyse)_."
         )
 
         _cp1, _cp2 = st.columns(2)
         with _cp1:
             _pa_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "Î±-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_par_amin")
             _pa_max = st.number_input(
-                "α-bereik max", min_value=0.01, max_value=1.0, value=0.30,
+                "Î±-bereik max", min_value=0.01, max_value=1.0, value=0.30,
                 step=0.01, format="%.2f", key="subsim_par_amax")
-            _pa_n = st.slider("Aantal α-waarden", 2, 12, 7, key="subsim_par_na")
+            _pa_n = st.slider("Aantal Î±-waarden", 2, 12, 7, key="subsim_par_na")
         with _cp2:
             _px_min = st.number_input(
                 "X-bereik min", min_value=0.50, max_value=0.9999, value=0.95,
@@ -4591,18 +4259,18 @@ with tab_subsim:
             try:
                 _ov_par = get_overzicht_df(cfg)
                 if _ov_par is None or _ov_par.empty:
-                    st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+                    st.warning("Geen overzicht beschikbaar â€” laad eerst het overzicht (tab ðŸ“Š).")
                 else:
                     _a_vals = list(np.linspace(float(_pa_min), float(_pa_max), int(_pa_n)))
                     _x_vals = list(np.linspace(float(_px_min), float(_px_max), int(_px_n)))
-                    with st.spinner("Pareto-frontier berekenen…"):
+                    with st.spinner("Pareto-frontier berekenenâ€¦"):
                         _par_df = pareto_alpha_X(
                             _ov_par, _a_vals, _x_vals,
                             float(_q_eq), float(_beta_r),
                             _kappa_bpa_par, _kappa_c_par,
                             excel_file=_excel_arg(), codes=_cls_codes)
                     if _par_df.empty:
-                        st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
+                        st.warning("Geen resultaten â€” controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_par_data", None)
                     else:
                         st.session_state["subsim_par_data"] = _par_df
@@ -4618,7 +4286,7 @@ with tab_subsim:
             import matplotlib.pyplot as _plt_par
             _valid = _par_df.dropna(subset=["margin", "surplus"]).reset_index(drop=True)
             if _valid.empty:
-                st.info("Geen geldige (haalbare) (α,X)-combinaties om te plotten.")
+                st.info("Geen geldige (haalbare) (Î±,X)-combinaties om te plotten.")
             else:
                 _m = _valid["margin"].to_numpy()
                 _s = _valid["surplus"].to_numpy()
@@ -4637,7 +4305,7 @@ with tab_subsim:
                     c=_valid["alpha"], cmap="viridis", s=70,
                     edgecolor="white", linewidth=0.6, zorder=3)
                 _cb = _figp.colorbar(_sc, ax=_axp)
-                _cb.set_label("price percentage α")
+                _cb.set_label("price percentage Î±")
                 _front = _valid[_eff].sort_values("margin")
                 _axp.plot(
                     _front["margin"], _front["surplus"],
@@ -4652,47 +4320,47 @@ with tab_subsim:
                         linewidth=1.2, label="infeasible", zorder=5)
                 _axp.axhline(0, color="grey", lw=0.8, ls=":")
                 _axp.axvline(0, color="grey", lw=0.8, ls=":")
-                _axp.set_xlabel("BPA margin (€)")
-                _axp.set_ylabel("total customer surplus (€)")
-                _axp.set_title("Pareto efficiency over (α, X)")
+                _axp.set_xlabel("BPA margin (â‚¬)")
+                _axp.set_ylabel("total customer surplus (â‚¬)")
+                _axp.set_title("Pareto efficiency over (Î±, X)")
                 _axp.grid(True, alpha=0.3)
                 _axp.legend(loc="best", fontsize=9)
                 _figp.tight_layout()
                 st.pyplot(_figp)
                 _plt_par.close(_figp)
 
-                st.markdown("**Pareto-efficiënte (α, X)-combinaties**")
+                st.markdown("**Pareto-efficiÃ«nte (Î±, X)-combinaties**")
                 _tab = _front.copy()
-                _tab["α"]              = _tab["alpha"].map(lambda v: f"{v:.0%}")
+                _tab["Î±"]              = _tab["alpha"].map(lambda v: f"{v:.0%}")
                 _tab["X"]              = _tab["X"].map(lambda v: f"{v:.3f}")
-                _tab["BPA-marge (€)"]  = _tab["margin"].map(lambda v: f"{v:,.0f}")
-                _tab["Klantsurplus (€)"] = _tab["surplus"].map(lambda v: f"{v:,.0f}")
-                _tab["Σ E[Z]"]         = _tab["total_Z"].map(lambda v: f"{v:,.0f}")
-                _tab["Haalbaar"]       = _tab["feasible"].map(lambda b: "✓" if b else "✗")
+                _tab["BPA-marge (â‚¬)"]  = _tab["margin"].map(lambda v: f"{v:,.0f}")
+                _tab["Klantsurplus (â‚¬)"] = _tab["surplus"].map(lambda v: f"{v:,.0f}")
+                _tab["Î£ E[Z]"]         = _tab["total_Z"].map(lambda v: f"{v:,.0f}")
+                _tab["Haalbaar"]       = _tab["feasible"].map(lambda b: "âœ“" if b else "âœ—")
                 st.dataframe(
-                    _tab[["α", "X", "BPA-marge (€)", "Klantsurplus (€)",
-                          "Σ E[Z]", "Haalbaar"]],
+                    _tab[["Î±", "X", "BPA-marge (â‚¬)", "Klantsurplus (â‚¬)",
+                          "Î£ E[Z]", "Haalbaar"]],
                     hide_index=True, use_container_width=True)
                 st.download_button(
-                    "⬇️ Download alle (α,X)-resultaten (CSV)",
+                    "â¬‡ï¸ Download alle (Î±,X)-resultaten (CSV)",
                     _par_df.to_csv(index=False).encode("utf-8"),
                     file_name="pareto_alpha_X.csv", mime="text/csv",
                     key="subsim_par_dl")
 
-    # ── Optimale α bij vast service level X ───────────────────────────────
-    with st.expander("🎯 Optimale α bij vast service level X (marge maximaliseren)"):
+    # â”€â”€ Optimale Î± bij vast service level X â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    with st.expander("ðŸŽ¯ Optimale Î± bij vast service level X (marge maximaliseren)"):
         st.caption(
-            "Zet het service level X vast en zoek het prijspercentage α dat de "
-            "BPA-marge maximaliseert. Een hogere α verhoogt de omzet per klant "
-            "maar verlaagt de adoptie q(α), dus er bestaat doorgaans een "
+            "Zet het service level X vast en zoek het prijspercentage Î± dat de "
+            "BPA-marge maximaliseert. Een hogere Î± verhoogt de omzet per klant "
+            "maar verlaagt de adoptie q(Î±), dus er bestaat doorgaans een "
             "inwendig optimum."
         )
         _kp_opt = st.session_state.get("kosten_params", {})
         _kappa_bpa_opt = float(_kp_opt.get("kappa_bpa", 0.20))
         _kappa_c_opt   = float(_kp_opt.get("kappa_c", 0.25))
         st.caption(
-            f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_opt:.0%}**, "
-            f"κ_c = **{_kappa_c_opt:.0%}** _(pas aan via 💰 Kostenanalyse)_."
+            f"Kostenparameters uit Kostenanalyse: Îº_BPA = **{_kappa_bpa_opt:.0%}**, "
+            f"Îº_c = **{_kappa_c_opt:.0%}** _(pas aan via ðŸ’° Kostenanalyse)_."
         )
 
         _co1, _co2 = st.columns(2)
@@ -4702,44 +4370,44 @@ with tab_subsim:
                 value=float(_X_def_sim), step=0.005, format="%.3f",
                 key="subsim_opt_X")
             _oa_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "Î±-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_opt_amin")
         with _co2:
             _oa_n = st.slider(
-                "Aantal α-waarden", 5, 60, 25, key="subsim_opt_na")
+                "Aantal Î±-waarden", 5, 60, 25, key="subsim_opt_na")
             _oa_max = st.number_input(
-                "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
+                "Î±-bereik max", min_value=0.01, max_value=1.0, value=0.40,
                 step=0.01, format="%.2f", key="subsim_opt_amax")
         _opt_feas = st.checkbox(
-            "Alleen haalbare combinaties meenemen (marge ≥ 0 én alle klanten profiteren)",
+            "Alleen haalbare combinaties meenemen (marge â‰¥ 0 Ã©n alle klanten profiteren)",
             value=False, key="subsim_opt_feas")
         _opt_cc = st.checkbox(
-            "Chance-constraint base stock  P(β_i ≥ X) ≥ 1−ε",
+            "Chance-constraint base stock  P(Î²_i â‰¥ X) â‰¥ 1âˆ’Îµ",
             value=False, key="subsim_opt_cc",
-            help="Stock wordt robuust gedimensioneerd op het (1-ε)-kwantiel van "
+            help="Stock wordt robuust gedimensioneerd op het (1-Îµ)-kwantiel van "
                  "Z_i ~ Binomiaal(M_i, q), i.p.v. de verwachte waarde E[Z_i]. "
                  "Omzet blijft op E[Z_i] (klanten betalen ongeacht gebruik). "
-                 "ε = 0.5 ≈ huidige gemiddelde benadering; ε = 0.10 geeft een "
+                 "Îµ = 0.5 â‰ˆ huidige gemiddelde benadering; Îµ = 0.10 geeft een "
                  "90%-garantie dat het service level X gehaald wordt.")
         if _opt_cc:
             _opt_eps = st.slider(
-                "ε — kans dat service-belofte niet gehaald wordt door hogere adoptie",
+                "Îµ â€” kans dat service-belofte niet gehaald wordt door hogere adoptie",
                 min_value=0.01, max_value=0.50, value=0.10, step=0.01,
                 format="%.2f", key="subsim_opt_eps",
-                help="ε = 0.10: 90%-garantie (ε ∈ {0.05, 0.10} aanbevolen). "
-                     "ε = 0.50: mediaan ≈ huidige gemiddelde benadering.")
+                help="Îµ = 0.10: 90%-garantie (Îµ âˆˆ {0.05, 0.10} aanbevolen). "
+                     "Îµ = 0.50: mediaan â‰ˆ huidige gemiddelde benadering.")
         else:
             _opt_eps = None
 
-        if st.button("🎯 Bereken optimale α", key="subsim_opt_btn",
+        if st.button("ðŸŽ¯ Bereken optimale Î±", key="subsim_opt_btn",
                      disabled=not _cls_codes):
             try:
                 _ov_opt = get_overzicht_df(cfg)
                 if _ov_opt is None or _ov_opt.empty:
-                    st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+                    st.warning("Geen overzicht beschikbaar â€” laad eerst het overzicht (tab ðŸ“Š).")
                 else:
                     _oa_grid = list(np.linspace(float(_oa_min), float(_oa_max), int(_oa_n)))
-                    with st.spinner("Optimale α zoeken…"):
+                    with st.spinner("Optimale Î± zoekenâ€¦"):
                         _opt_curve, _opt_best = optimale_alpha_bij_X(
                             _ov_opt, float(_X_opt), _oa_grid,
                             float(_q_eq), float(_beta_r),
@@ -4748,7 +4416,7 @@ with tab_subsim:
                             alleen_haalbaar=bool(_opt_feas),
                             epsilon=_opt_eps)
                     if _opt_curve is None or _opt_curve.empty or _opt_best is None:
-                        st.warning("Geen geldige marge berekend — controleer de Adoptie-tab en selectie.")
+                        st.warning("Geen geldige marge berekend â€” controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_opt_data", None)
                     else:
                         st.session_state["subsim_opt_data"] = {
@@ -4771,18 +4439,18 @@ with tab_subsim:
             _ocurve = _opt_data["curve"].dropna(subset=["margin"]).sort_values("alpha")
             _obest  = _opt_data["best"]
             _oX     = _opt_data["X"]
-            _z_lbl  = "Σ E[Z] (analytisch)"
+            _z_lbl  = "Î£ E[Z] (analytisch)"
             _cm1, _cm2, _cm3 = st.columns(3)
-            _cm1.metric("Optimale α", f"{_obest['alpha']:.1%}")
-            _cm2.metric("BPA-marge", f"€ {_obest['margin']:,.0f}")
+            _cm1.metric("Optimale Î±", f"{_obest['alpha']:.1%}")
+            _cm2.metric("BPA-marge", f"â‚¬ {_obest['margin']:,.0f}")
             _cm3.metric(_z_lbl, f"{_obest['total_Z']:,.0f}",
                         help=f"Haalbaar: {'ja' if _obest['feasible'] else 'nee'}")
             if _opt_data.get("cc") and _opt_data.get("eps") is not None:
                 _eps_shown = _opt_data["eps"]
                 st.caption(
-                    f"⚙️ Chance-constraint actief (ε = {_eps_shown:.2f}): stock "
+                    f"âš™ï¸ Chance-constraint actief (Îµ = {_eps_shown:.2f}): stock "
                     f"gedimensioneerd op het **{(1-_eps_shown):.0%}-kwantiel** "
-                    f"$Z_i^{{1-ε}}$ van $Z_i \\sim \\text{{Binomiaal}}(M_i, q)$. "
+                    f"$Z_i^{{1-Îµ}}$ van $Z_i \\sim \\text{{Binomiaal}}(M_i, q)$. "
                     f"Omzet blijft op $E[Z_i]$. "
                     f"Het service level $X$ wordt gehaald tenzij adoptie tot de "
                     f"bovenste {_eps_shown:.0%} behoort."
@@ -4792,11 +4460,11 @@ with tab_subsim:
                       color="#1f77b4", lw=2, marker="o", ms=4,
                       label="BPA margin")
             _axo.axvline(_obest["alpha"], color="#d62728", ls="--", lw=1.5,
-                         label=f"optimal α = {_obest['alpha']:.1%}")
+                         label=f"optimal Î± = {_obest['alpha']:.1%}")
             _axo.axhline(0, color="grey", lw=0.8, ls=":")
-            _axo.set_xlabel("price percentage α")
-            _axo.set_ylabel("BPA margin (€)")
-            _axo.set_title(f"Margin vs. α at fixed X = {_oX:.3f}  (analytical E[Z])")
+            _axo.set_xlabel("price percentage Î±")
+            _axo.set_ylabel("BPA margin (â‚¬)")
+            _axo.set_title(f"Margin vs. Î± at fixed X = {_oX:.3f}  (analytical E[Z])")
             _axo.grid(True, alpha=0.3)
             _axo2 = _axo.twinx()
             _axo2.plot(_ocurve["alpha"], _ocurve["total_Z"],
@@ -4811,44 +4479,44 @@ with tab_subsim:
             st.pyplot(_figo)
             _plt_opt.close(_figo)
 
-            st.markdown("**Revenue, costs en stocklevels per α** (bij vast X)")
+            st.markdown("**Revenue, costs en stocklevels per Î±** (bij vast X)")
             _tab_opt = _ocurve.copy()
-            _tab_opt["α"]              = _tab_opt["alpha"].map(lambda v: f"{v:.1%}")
-            _tab_opt["BPA-marge (€)"]  = _tab_opt["margin"].map(lambda v: f"{v:,.0f}")
-            _tab_opt["Revenue (€)"]    = _tab_opt["revenue"].map(lambda v: f"{v:,.0f}")
-            _tab_opt["Costs (€)"]      = _tab_opt["costs"].map(lambda v: f"{v:,.0f}")
+            _tab_opt["Î±"]              = _tab_opt["alpha"].map(lambda v: f"{v:.1%}")
+            _tab_opt["BPA-marge (â‚¬)"]  = _tab_opt["margin"].map(lambda v: f"{v:,.0f}")
+            _tab_opt["Revenue (â‚¬)"]    = _tab_opt["revenue"].map(lambda v: f"{v:,.0f}")
+            _tab_opt["Costs (â‚¬)"]      = _tab_opt["costs"].map(lambda v: f"{v:,.0f}")
             _tab_opt["Stocklevel (units)"] = _tab_opt["stock_level"].map(
-                lambda v: f"{v:,.0f}" if pd.notna(v) else "—")
+                lambda v: f"{v:,.0f}" if pd.notna(v) else "â€”")
             st.dataframe(
-                _tab_opt[["α", "BPA-marge (€)", "Revenue (€)", "Costs (€)",
+                _tab_opt[["Î±", "BPA-marge (â‚¬)", "Revenue (â‚¬)", "Costs (â‚¬)",
                           "Stocklevel (units)"]],
                 hide_index=True, use_container_width=True)
             st.download_button(
-                "⬇️ Download marge-vs-α curve (CSV)",
+                "â¬‡ï¸ Download marge-vs-Î± curve (CSV)",
                 _opt_data["curve"].to_csv(index=False).encode("utf-8"),
                 file_name="optimale_alpha_bij_X.csv", mime="text/csv",
                 key="subsim_opt_dl")
 
-    # ── β_r-onzekerheidsband: uniforme scenario-parameter ─────────────────
-    with st.expander("🎲 β_r-onzekerheidsband: bandbreedte van winst en optimale α"):
+    # â”€â”€ Î²_r-onzekerheidsband: uniforme scenario-parameter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    with st.expander("ðŸŽ² Î²_r-onzekerheidsband: bandbreedte van winst en optimale Î±"):
         st.caption(
-            "$β_r$ kan **niet** uit historische subscriptie-data worden "
+            "$Î²_r$ kan **niet** uit historische subscriptie-data worden "
             "geschat en wordt daarom als **onzekere scenario-parameter** "
             "behandeld. Bij gebrek aan voorkennis over welke waarde binnen een "
             "plausibel bereik het meest waarschijnlijk is, gebruiken we een "
-            "**uniforme** verdeling $β_r\\sim U(β_r^{min}, β_r^{max})$. Per "
+            "**uniforme** verdeling $Î²_r\\sim U(Î²_r^{min}, Î²_r^{max})$. Per "
             "trekking wordt (bij vast $X$) de volledige keten "
-            "$α\\to q(α)\\to E[Z_i]\\to$ kostenmodel doorgerekend. Zo ontstaat "
-            "per α een verdeling van de verwachte BPA-winst $E[Π_{BPA}(α)]$ "
+            "$Î±\\to q(Î±)\\to E[Z_i]\\to$ kostenmodel doorgerekend. Zo ontstaat "
+            "per Î± een verdeling van de verwachte BPA-winst $E[Î _{BPA}(Î±)]$ "
             "(P5/P50/P95-band) en een verdeling van de winst-maximaliserende "
-            "$α^*$."
+            "$Î±^*$."
         )
         _kp_bru = st.session_state.get("kosten_params", {})
         _kappa_bpa_bru = float(_kp_bru.get("kappa_bpa", 0.20))
         _kappa_c_bru   = float(_kp_bru.get("kappa_c", 0.25))
         st.caption(
-            f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_bru:.0%}**, "
-            f"κ_c = **{_kappa_c_bru:.0%}**. $q_{{eq}}$ = **{_q_eq:.2f}** "
+            f"Kostenparameters uit Kostenanalyse: Îº_BPA = **{_kappa_bpa_bru:.0%}**, "
+            f"Îº_c = **{_kappa_c_bru:.0%}**. $q_{{eq}}$ = **{_q_eq:.2f}** "
             "(uit het adoptiemodel hierboven)."
         )
 
@@ -4859,81 +4527,81 @@ with tab_subsim:
                 value=float(_X_def_sim), step=0.005, format="%.3f",
                 key="subsim_bru_X")
             _bra_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "Î±-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_bru_amin")
             _bra_max = st.number_input(
-                "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
+                "Î±-bereik max", min_value=0.01, max_value=1.0, value=0.40,
                 step=0.01, format="%.2f", key="subsim_bru_amax")
         with _cbr2:
             _br_lo = st.number_input(
-                "β_r^min", min_value=0.0, max_value=20.0, value=0.5,
+                "Î²_r^min", min_value=0.0, max_value=20.0, value=0.5,
                 step=0.1, format="%.2f", key="subsim_bru_brlo",
-                help="Ondergrens van het plausibele β_r-bereik.")
+                help="Ondergrens van het plausibele Î²_r-bereik.")
             _br_hi = st.number_input(
-                "β_r^max", min_value=0.1, max_value=20.0, value=3.5,
+                "Î²_r^max", min_value=0.1, max_value=20.0, value=3.5,
                 step=0.1, format="%.2f", key="subsim_bru_brhi",
-                help="Bovengrens van het plausibele β_r-bereik.")
+                help="Bovengrens van het plausibele Î²_r-bereik.")
             _bra_n = st.slider(
-                "Aantal α-waarden", 5, 60, 25, key="subsim_bru_na")
+                "Aantal Î±-waarden", 5, 60, 25, key="subsim_bru_na")
         _cbr3, _cbr4 = st.columns(2)
         with _cbr3:
             _bru_K = st.slider(
-                "Aantal β_r-trekkingen (K)", 20, 1000, 200, step=20,
+                "Aantal Î²_r-trekkingen (K)", 20, 1000, 200, step=20,
                 key="subsim_bru_K",
-                help="Meer trekkingen → gladdere band, maar langere rekentijd.")
+                help="Meer trekkingen â†’ gladdere band, maar langere rekentijd.")
         with _cbr4:
             _bru_feas = st.checkbox(
-                "α* alleen over haalbare α zoeken",
+                "Î±* alleen over haalbare Î± zoeken",
                 value=False, key="subsim_bru_feas",
-                help="Bepaal de optimale α* per trekking alleen over haalbare α "
-                     "(marge ≥ 0 én alle klanten profiteren).")
+                help="Bepaal de optimale Î±* per trekking alleen over haalbare Î± "
+                     "(marge â‰¥ 0 Ã©n alle klanten profiteren).")
         _bru_seed = st.checkbox(
             "Reproduceerbare trekkingen (vaste seed)", value=True,
             key="subsim_bru_seed")
         _bru_cc = st.checkbox(
-            "Chance-constraint base stock  P(β_i ≥ X) ≥ 1−ε",
+            "Chance-constraint base stock  P(Î²_i â‰¥ X) â‰¥ 1âˆ’Îµ",
             value=False, key="subsim_bru_cc",
-            help="Stock robuust op het (1-ε)-kwantiel van Z_i ~ Binomiaal(M_i, q). "
-                 "Omzet blijft op E[Z_i]. Gecombineerd met de β_r-onzekerheid laat "
+            help="Stock robuust op het (1-Îµ)-kwantiel van Z_i ~ Binomiaal(M_i, q). "
+                 "Omzet blijft op E[Z_i]. Gecombineerd met de Î²_r-onzekerheid laat "
                  "dit zien hoe de garantie-eis de winstband omlaag schuift.")
         if _bru_cc:
             _bru_eps = st.slider(
-                "ε — kans dat service-belofte niet gehaald wordt",
+                "Îµ â€” kans dat service-belofte niet gehaald wordt",
                 min_value=0.01, max_value=0.50, value=0.10, step=0.01,
                 format="%.2f", key="subsim_bru_eps",
-                help="ε = 0.10: 90%-garantie. ε = 0.50: mediaan ≈ gemiddelde.")
+                help="Îµ = 0.10: 90%-garantie. Îµ = 0.50: mediaan â‰ˆ gemiddelde.")
         else:
             _bru_eps = None
 
         _bru_greedy = st.checkbox(
-            "📦 Greedy modus (budget-beperkte selectie)",
+            "ðŸ“¦ Greedy modus (budget-beperkte selectie)",
             value=False, key="subsim_bru_greedy",
-            help="Berekent per β_r-trekking de greedy component-selectie binnen "
+            help="Berekent per Î²_r-trekking de greedy component-selectie binnen "
                  "het opgegeven budget. Toont de winst van de daadwerkelijk "
                  "gekozen subset i.p.v. de volledige portfolio.")
         _bru_budget = None
         if _bru_greedy:
             _bru_budget = st.number_input(
-                "Budget (€)", min_value=0.0, value=100_000.0,
+                "Budget (â‚¬)", min_value=0.0, value=100_000.0,
                 step=10_000.0, format="%.0f", key="subsim_bru_budget",
                 help="Maximaal investeringsbudget voor de greedy-selectie. "
                      "Service level X wordt overgenomen van 'Vast service level X' hierboven.")
 
-        if st.button("🎲 Bereken β_r-band", key="subsim_bru_btn",
+        if st.button("ðŸŽ² Bereken Î²_r-band", key="subsim_bru_btn",
                      disabled=not _cls_codes):
             try:
                 _ov_bru = get_overzicht_df(cfg)
                 if _ov_bru is None or _ov_bru.empty:
-                    st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+                    st.warning("Geen overzicht beschikbaar â€” laad eerst het overzicht (tab ðŸ“Š).")
                 elif float(_br_hi) <= float(_br_lo):
-                    st.warning("β_r^max moet groter zijn dan β_r^min.")
+                    st.warning("Î²_r^max moet groter zijn dan Î²_r^min.")
                 else:
                     _bra_grid = list(np.linspace(float(_bra_min), float(_bra_max), int(_bra_n)))
                     with st.spinner(
-                            f"β_r-band berekenen ({int(_bru_K)} trekkingen × "
-                            f"{int(_bra_n)} α-waarden"
-                            + (" — greedy per trekking" if _bru_greedy else "")
-                            + ")…"):
+                            f"Î²_r-band berekenen ({int(_bru_K)} trekkingen Ã— "
+                            f"{int(_bra_n)} Î±-waarden"
+                            + (" â€” greedy per trekking" if _bru_greedy else "")
+                            + ")â€¦"):
                         _bru_res = beta_r_winstband(
                             _ov_bru, float(_X_bru), _bra_grid,
                             float(_q_eq), float(_br_lo), float(_br_hi),
@@ -4945,7 +4613,7 @@ with tab_subsim:
                             epsilon=_bru_eps,
                             budget=float(_bru_budget) if _bru_greedy else None)
                     if _bru_res is None:
-                        st.warning("Geen resultaten — controleer de Adoptie-tab en selectie.")
+                        st.warning("Geen resultaten â€” controleer de Adoptie-tab en selectie.")
                         st.session_state.pop("subsim_bru_data", None)
                     else:
                         _bru_res["X"] = float(_X_bru)
@@ -4959,7 +4627,7 @@ with tab_subsim:
                         st.session_state["subsim_bru_data"] = _bru_res
             except (ValueError, FileNotFoundError, OSError) as _bru_err:
                 st.warning(
-                    "β_r-band niet beschikbaar: de bron-Excel bevat geen tab "
+                    "Î²_r-band niet beschikbaar: de bron-Excel bevat geen tab "
                     f"'Adoptie' of is niet bereikbaar. ({_bru_err})"
                 )
                 st.session_state.pop("subsim_bru_data", None)
@@ -4975,65 +4643,65 @@ with tab_subsim:
             _oap  = _bru["opt_alpha_pct"]
 
             _cbm1, _cbm2, _cbm3 = st.columns(3)
-            _cbm1.metric("α* — P5", f"{_oap.get(5, float('nan')):.1%}")
-            _cbm2.metric("α* — mediaan (P50)", f"{_oap.get(50, float('nan')):.1%}")
-            _cbm3.metric("α* — P95", f"{_oap.get(95, float('nan')):.1%}")
+            _cbm1.metric("Î±* â€” P5", f"{_oap.get(5, float('nan')):.1%}")
+            _cbm2.metric("Î±* â€” mediaan (P50)", f"{_oap.get(50, float('nan')):.1%}")
+            _cbm3.metric("Î±* â€” P95", f"{_oap.get(95, float('nan')):.1%}")
             _cc_suffix = ""
             if _bru.get("cc") and _bru.get("eps") is not None:
                 _cc_suffix = (
-                    f" Met chance-constraint ε = {_bru['eps']:.2f}: stock op "
-                    f"{(1-_bru['eps']):.0%}-kwantiel $Z_i^{{1-ε}}$, omzet op $E[Z_i]$."
+                    f" Met chance-constraint Îµ = {_bru['eps']:.2f}: stock op "
+                    f"{(1-_bru['eps']):.0%}-kwantiel $Z_i^{{1-Îµ}}$, omzet op $E[Z_i]$."
                 )
             _greedy_suffix = ""
             if _bru.get("budget") is not None:
                 _greedy_suffix = (
                     f" **Greedy modus**: winst van budget-gestuurde selectie "
-                    f"binnen **€\u202f{_bru['budget']:,.0f}**."
+                    f"binnen **â‚¬\u202f{_bru['budget']:,.0f}**."
                 )
             st.caption(
-                "Onder onzekerheid in de klantgevoeligheid β_r ligt de optimale "
-                f"α meestal tussen **{_oap.get(5, float('nan')):.1%}** en "
+                "Onder onzekerheid in de klantgevoeligheid Î²_r ligt de optimale "
+                f"Î± meestal tussen **{_oap.get(5, float('nan')):.1%}** en "
                 f"**{_oap.get(95, float('nan')):.1%}** "
                 f"(mediaan **{_oap.get(50, float('nan')):.1%}**), bij "
-                f"X = {_bru['X']:.3f} en β_r ~ U({_bru['beta_r_min']:.2f}, "
+                f"X = {_bru['X']:.3f} en Î²_r ~ U({_bru['beta_r_min']:.2f}, "
                 f"{_bru['beta_r_max']:.2f}).{_cc_suffix}{_greedy_suffix}"
             )
 
-            # ── Grafiek 1: winst-band vs α ────────────────────────────────
+            # â”€â”€ Grafiek 1: winst-band vs Î± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _figbr, _axbr = _plt_bru.subplots(figsize=(9, 4.8))
             if _p5 is not None and _p95 is not None:
                 _axbr.fill_between(
                     _ag, _p5, _p95, color="#1f77b4", alpha=0.20,
-                    label="P5–P95 band")
+                    label="P5â€“P95 band")
             if _p50 is not None:
                 _axbr.plot(_ag, _p50, color="#1f77b4", lw=2.2,
                            label="mediaan (P50)")
             if _mean is not None:
                 _axbr.plot(_ag, _mean, color="#ff7f0e", lw=1.4, ls="--",
-                           label="gemiddelde E[Π]")
+                           label="gemiddelde E[Î ]")
             # Mediaan-optimum markeren.
             if _p50 is not None and np.isfinite(_p50).any():
                 _ix = int(np.nanargmax(_p50))
                 _axbr.axvline(_ag[_ix], color="#d62728", ls=":", lw=1.4,
-                              label=f"α*(P50) = {_ag[_ix]:.1%}")
+                              label=f"Î±*(P50) = {_ag[_ix]:.1%}")
             _axbr.axhline(0, color="grey", lw=0.8, ls=":")
-            _axbr.set_xlabel("price percentage α")
+            _axbr.set_xlabel("price percentage Î±")
             _axbr.set_ylabel(
-                "BPA margin  (Π_BPA) (€)" if _bru.get("budget") is None
-                else f"greedy margin (€, budget ≤ €{_bru['budget']:,.0f})"
+                "BPA margin  (Î _BPA) (â‚¬)" if _bru.get("budget") is None
+                else f"greedy margin (â‚¬, budget â‰¤ â‚¬{_bru['budget']:,.0f})"
             )
             _axbr.set_title(
                 ("Greedy " if _bru.get("budget") is not None else "")
-                + f"Margin band under β_r ~ U({_bru['beta_r_min']:.2f}, "
+                + f"Margin band under Î²_r ~ U({_bru['beta_r_min']:.2f}, "
                 + f"{_bru['beta_r_max']:.2f})  at X = {_bru['X']:.3f}"
-                + (f"  | budget ≤ €{_bru['budget']:,.0f}" if _bru.get("budget") is not None else ""))
+                + (f"  | budget â‰¤ â‚¬{_bru['budget']:,.0f}" if _bru.get("budget") is not None else ""))
             _axbr.grid(True, alpha=0.3)
             _axbr.legend(loc="best", fontsize=9)
             _figbr.tight_layout()
             st.pyplot(_figbr)
             _plt_bru.close(_figbr)
 
-            # ── Grafiek 2: verdeling van optimale α* ──────────────────────
+            # â”€â”€ Grafiek 2: verdeling van optimale Î±* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _opt_a_valid = _bru["opt_alpha"][~np.isnan(_bru["opt_alpha"])]
             if _opt_a_valid.size:
                 _fighx, _axhx = _plt_bru.subplots(figsize=(9, 3.6))
@@ -5044,16 +4712,16 @@ with tab_subsim:
                     _axhx.axvline(_oap.get(_p, float('nan')) * 100.0, color=_c,
                                   ls="--", lw=1.4,
                                   label=f"{_lbl} = {_oap.get(_p, float('nan')):.1%}")
-                _axhx.set_xlabel("optimal price percentage α* (%)")
+                _axhx.set_xlabel("optimal price percentage Î±* (%)")
                 _axhx.set_ylabel("frequency")
-                _axhx.set_title("Distribution of margin-maximising α* over β_r draws")
+                _axhx.set_title("Distribution of margin-maximising Î±* over Î²_r draws")
                 _axhx.grid(True, alpha=0.3)
                 _axhx.legend(loc="best", fontsize=9)
                 _fighx.tight_layout()
                 st.pyplot(_fighx)
                 _plt_bru.close(_fighx)
 
-            # ── Downloadbare band-tabel ───────────────────────────────────
+            # â”€â”€ Downloadbare band-tabel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _band_df = pd.DataFrame({
                 "alpha":      _ag,
                 "P5":         _p5   if _p5   is not None else np.nan,
@@ -5062,14 +4730,14 @@ with tab_subsim:
                 "mean":       _mean if _mean is not None else np.nan,
             })
             st.download_button(
-                "⬇️ Download winst-band per α (CSV)",
+                "â¬‡ï¸ Download winst-band per Î± (CSV)",
                 _band_df.to_csv(index=False).encode("utf-8"),
                 file_name="beta_r_winstband.csv", mime="text/csv",
                 key="subsim_bru_dl")
 
-            # ── Greedy componentdetail ─────────────────────────────────
+            # â”€â”€ Greedy componentdetail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if _bru.get("budget") is not None:
-                with st.expander("🔍 Componentdetail greedy-selectie"):
+                with st.expander("ðŸ” Componentdetail greedy-selectie"):
                     _bdet_lo  = float(_bru["beta_r_min"])
                     _bdet_hi  = float(_bru["beta_r_max"])
                     _bdet_bud = float(_bru["budget"])
@@ -5082,18 +4750,18 @@ with tab_subsim:
                     _bdet_col1, _bdet_col2 = st.columns([1, 1])
                     with _bdet_col1:
                         _bdet_br_pct = st.selectbox(
-                            "β_r scenario",
+                            "Î²_r scenario",
                             options=[5, 50, 95],
                             format_func=lambda p: (
-                                f"P{p} (β_r ≈ {_bdet_lo + p/100*(_bdet_hi-_bdet_lo):.2f})"),
+                                f"P{p} (Î²_r â‰ˆ {_bdet_lo + p/100*(_bdet_hi-_bdet_lo):.2f})"),
                             index=1,
                             key="bru_det_br_pct",
                         )
                     with _bdet_col2:
                         _bdet_a_idx = st.selectbox(
-                            "α waarde",
+                            "Î± waarde",
                             options=range(len(_ag)),
-                            format_func=lambda i: f"α = {_ag[i]:.3f}",
+                            format_func=lambda i: f"Î± = {_ag[i]:.3f}",
                             key="bru_det_alpha",
                         )
 
@@ -5125,13 +4793,13 @@ with tab_subsim:
                     else:
                         _bdet_nsel  = int(_bdet_df["geselecteerd"].sum())
                         _bdet_ntot  = len(_bdet_df)
-                        _bdet_inv   = _bdet_df.loc[_bdet_df["geselecteerd"], "Inv (€)"].sum()
-                        _bdet_mar   = _bdet_df.loc[_bdet_df["geselecteerd"], "Marge (€)"].sum()
+                        _bdet_inv   = _bdet_df.loc[_bdet_df["geselecteerd"], "Inv (â‚¬)"].sum()
+                        _bdet_mar   = _bdet_df.loc[_bdet_df["geselecteerd"], "Marge (â‚¬)"].sum()
                         st.caption(
-                            f"📦 **{_bdet_nsel} / {_bdet_ntot}** componenten geselecteerd — "
-                            f"investering **€{_bdet_inv:,.0f}** / budget €{_bdet_bud:,.0f} — "
-                            f"totale marge **€{_bdet_mar:,.0f}** — "
-                            f"β_r = {_bdet_br:.2f} (P{_bdet_br_pct}), α = {_bdet_a:.3f}"
+                            f"ðŸ“¦ **{_bdet_nsel} / {_bdet_ntot}** componenten geselecteerd â€” "
+                            f"investering **â‚¬{_bdet_inv:,.0f}** / budget â‚¬{_bdet_bud:,.0f} â€” "
+                            f"totale marge **â‚¬{_bdet_mar:,.0f}** â€” "
+                            f"Î²_r = {_bdet_br:.2f} (P{_bdet_br_pct}), Î± = {_bdet_a:.3f}"
                         )
 
                         def _bdet_highlight(row):
@@ -5147,7 +4815,7 @@ with tab_subsim:
                             use_container_width=True, height=450,
                         )
                         st.download_button(
-                            "⬇️ Download componentdetail (CSV)",
+                            "â¬‡ï¸ Download componentdetail (CSV)",
                             data=_bdet_df.to_csv(
                                 sep=";", decimal=",", index=False
                             ).encode("utf-8"),
@@ -5156,11 +4824,11 @@ with tab_subsim:
                             key="bru_det_dl",
                         )
 
-                        # ── Verwachte marge bij ronde α-waarden ──────────
+                        # â”€â”€ Verwachte marge bij ronde Î±-waarden â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         st.divider()
                         st.markdown(
-                            "**📊 Verwachte marge bij ronde α "
-                            f"(gemiddeld over {int(_bru_K)} β_r-trekkingen)**"
+                            "**ðŸ“Š Verwachte marge bij ronde Î± "
+                            f"(gemiddeld over {int(_bru_K)} Î²_r-trekkingen)**"
                         )
                         _int_alphas = [
                             a / 100
@@ -5177,18 +4845,18 @@ with tab_subsim:
                             _int_p95  = np.interp(
                                 _int_alphas, _ag, _bru["margin_pct"][95])
                             _int_tbl = pd.DataFrame({
-                                "α (%)":    [int(round(a * 100)) for a in _int_alphas],
-                                "E[Π] (€)": _int_mean.round(0).astype(int),
-                                "P5 (€)":   _int_p5.round(0).astype(int),
-                                "P50 (€)":  _int_p50.round(0).astype(int),
-                                "P95 (€)":  _int_p95.round(0).astype(int),
+                                "Î± (%)":    [int(round(a * 100)) for a in _int_alphas],
+                                "E[Î ] (â‚¬)": _int_mean.round(0).astype(int),
+                                "P5 (â‚¬)":   _int_p5.round(0).astype(int),
+                                "P50 (â‚¬)":  _int_p50.round(0).astype(int),
+                                "P95 (â‚¬)":  _int_p95.round(0).astype(int),
                             })
                             _int_cur = int(round(_bdet_a * 100))
 
                             def _int_hl(row):
-                                if row["α (%)"] == _int_cur:
+                                if row["Î± (%)"] == _int_cur:
                                     return ["background-color: #fff3cd; font-weight: bold"] * len(row)
-                                if row["E[Π] (€)"] >= 0:
+                                if row["E[Î ] (â‚¬)"] >= 0:
                                     return [""] * len(row)
                                 return ["color: #888"] * len(row)
 
@@ -5199,7 +4867,7 @@ with tab_subsim:
                                 height=min(450, 36 * (len(_int_tbl) + 1)),
                             )
                             st.download_button(
-                                "⬇️ Download margetabel ronde α (CSV)",
+                                "â¬‡ï¸ Download margetabel ronde Î± (CSV)",
                                 data=_int_tbl.to_csv(
                                     sep=";", decimal=",", index=False
                                 ).encode("utf-8"),
@@ -5208,16 +4876,16 @@ with tab_subsim:
                                 key="bru_int_dl",
                             )
 
-                            # Componentdetail voor gekozen integer α, β_r = E[β_r]
+                            # Componentdetail voor gekozen integer Î±, Î²_r = E[Î²_r]
                             st.markdown(
-                                "**Componentdetail bij verwacht β_r "
+                                "**Componentdetail bij verwacht Î²_r "
                                 f"= {(_bdet_lo + _bdet_hi) / 2:.2f} "
-                                f"(= E[β_r] van U({_bdet_lo:.2f}, {_bdet_hi:.2f}))**"
+                                f"(= E[Î²_r] van U({_bdet_lo:.2f}, {_bdet_hi:.2f}))**"
                             )
                             _int_a_sel = st.selectbox(
-                                "α kiezen",
+                                "Î± kiezen",
                                 options=_int_alphas,
-                                format_func=lambda a: f"α = {int(round(a*100))}%",
+                                format_func=lambda a: f"Î± = {int(round(a*100))}%",
                                 index=min(
                                     len(_int_alphas) - 1,
                                     max(0, next(
@@ -5247,13 +4915,13 @@ with tab_subsim:
                                 _int_nsel = int(_int_det_df["geselecteerd"].sum())
                                 _int_ntot = len(_int_det_df)
                                 _int_inv  = _int_det_df.loc[
-                                    _int_det_df["geselecteerd"], "Inv (€)"].sum()
+                                    _int_det_df["geselecteerd"], "Inv (â‚¬)"].sum()
                                 _int_mar  = _int_det_df.loc[
-                                    _int_det_df["geselecteerd"], "Marge (€)"].sum()
+                                    _int_det_df["geselecteerd"], "Marge (â‚¬)"].sum()
                                 st.caption(
-                                    f"📦 **{_int_nsel} / {_int_ntot}** geselecteerd — "
-                                    f"investering **€{_int_inv:,.0f}** — "
-                                    f"marge **€{_int_mar:,.0f}**"
+                                    f"ðŸ“¦ **{_int_nsel} / {_int_ntot}** geselecteerd â€” "
+                                    f"investering **â‚¬{_int_inv:,.0f}** â€” "
+                                    f"marge **â‚¬{_int_mar:,.0f}**"
                                 )
 
                                 def _int_det_hl(row):
@@ -5271,7 +4939,7 @@ with tab_subsim:
                                     height=450,
                                 )
                                 st.download_button(
-                                    "⬇️ Download componentdetail verwacht (CSV)",
+                                    "â¬‡ï¸ Download componentdetail verwacht (CSV)",
                                     data=_int_det_df.to_csv(
                                         sep=";", decimal=",", index=False
                                     ).encode("utf-8"),
@@ -5281,9 +4949,9 @@ with tab_subsim:
                                 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────────
-#  TAB 12 – SENSITIVITY (WTP)  – elementen van de adoptie-/WTP-functie plotten
-# ─────────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+#  TAB 12 â€“ SENSITIVITY (WTP)  â€“ elementen van de adoptie-/WTP-functie plotten
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 with tab_sensitivity:
     st.subheader("Sensitivity-analyse van de WTP-functie")
@@ -5293,20 +4961,20 @@ with tab_sensitivity:
         "element om een familie van curves te tekenen, zodat je twee variabelen direct "
         "tegen elkaar kunt afwegen.\n\n"
         "Per parameterpunt loopt de volledige keten: "
-        "$\\text{parameters}\\to q(α)\\to E[Z_i]\\to$ kostenmodel "
+        "$\\text{parameters}\\to q(Î±)\\to E[Z_i]\\to$ kostenmodel "
         "$\\to$ **BPA-marge / klantsurplus**. De adoptie volgt het globale "
-        "logit-model $q(α)=σ\\!\\big(\\operatorname{logit}(q_{eq})+β_r\\ln(κ_c/α)\\big)$; "
-        "de kans hangt alleen van α af (via κ_c/α), X werkt via de "
+        "logit-model $q(Î±)=Ïƒ\\!\\big(\\operatorname{logit}(q_{eq})+Î²_r\\ln(Îº_c/Î±)\\big)$; "
+        "de kans hangt alleen van Î± af (via Îº_c/Î±), X werkt via de "
         "voorraad-/kostenkant."
     )
 
-    # ── Registry van WTP-elementen (label, grenzen, stap, default) ─────────
+    # â”€â”€ Registry van WTP-elementen (label, grenzen, stap, default) â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _WTP_PARAMS = {
-        "alpha":   {"label": "α — prijspercentage",            "axis": "α — price percentage",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "X":       {"label": "X — service level",              "axis": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
-        "q_eq":    {"label": "q_eq — adoptie bij pariteit",     "axis": "q_eq — adoption at parity",    "min": 0.01,   "max": 0.99,   "step": 0.05,  "fmt": "%.3f"},
-        "beta_r":  {"label": "β_r — kostenratio-gevoeligheid",  "axis": "β_r — cost-ratio sensitivity", "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "kappa_c": {"label": "κ_c — kostenpariteit",            "axis": "κ_c — cost parity",            "min": 0.01,   "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "alpha":   {"label": "Î± â€” prijspercentage",            "axis": "Î± â€” price percentage",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "X":       {"label": "X â€” service level",              "axis": "X â€” service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
+        "q_eq":    {"label": "q_eq â€” adoptie bij pariteit",     "axis": "q_eq â€” adoption at parity",    "min": 0.01,   "max": 0.99,   "step": 0.05,  "fmt": "%.3f"},
+        "beta_r":  {"label": "Î²_r â€” kostenratio-gevoeligheid",  "axis": "Î²_r â€” cost-ratio sensitivity", "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
+        "kappa_c": {"label": "Îº_c â€” kostenpariteit",            "axis": "Îº_c â€” cost parity",            "min": 0.01,   "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
     }
 
     # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
@@ -5325,22 +4993,22 @@ with tab_sensitivity:
 
     _labels_se = {k: v["label"] for k, v in _WTP_PARAMS.items()}
 
-    # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
+    # â”€â”€ Registry van afhankelijke (y-as) uitkomsten â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _Y_METRICS = {
-        "bpa_margin": {"label": "Total BPA margin (€)",              "axis": "total BPA margin (€)",                  "tbl": "BPA margin (€)",    "kind": "euro"},
-        "surplus":    {"label": "Total customer surplus (€)",          "axis": "total customer surplus (€)",            "tbl": "Customer surplus (€)", "kind": "euro"},
+        "bpa_margin": {"label": "Total BPA margin (â‚¬)",              "axis": "total BPA margin (â‚¬)",                  "tbl": "BPA margin (â‚¬)",    "kind": "euro"},
+        "surplus":    {"label": "Total customer surplus (â‚¬)",          "axis": "total customer surplus (â‚¬)",            "tbl": "Customer surplus (â‚¬)", "kind": "euro"},
         "total_Z":    {"label": "Expected subscriptions E[Z]",         "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",             "kind": "num"},
-        "q":          {"label": "Adoption probability q(α)",           "axis": "adoption probability q(α)",             "tbl": "q(α)",             "kind": "pct"},
+        "q":          {"label": "Adoption probability q(Î±)",           "axis": "adoption probability q(Î±)",             "tbl": "q(Î±)",             "kind": "pct"},
     }
 
-    # ── Afhankelijke (y-as) variabele ─────────────────────────────────────
+    # â”€â”€ Afhankelijke (y-as) variabele â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _y_var = st.selectbox(
         "Y-as variabele (afhankelijk)", options=list(_Y_METRICS.keys()),
         format_func=lambda k: _Y_METRICS[k]["label"], index=0, key="se_y_var",
         help="De keten-uitkomst die tegen de gekozen x-as wordt geplot.")
     _y_spec = _Y_METRICS[_y_var]
 
-    # ── Onafhankelijke as-keuzes ──────────────────────────────────────────
+    # â”€â”€ Onafhankelijke as-keuzes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _cx, _ccurve = st.columns(2)
     with _cx:
         _x_var = st.selectbox(
@@ -5350,7 +5018,7 @@ with tab_sensitivity:
     with _ccurve:
         _curve_opts = ["(geen)"] + [k for k in _WTP_PARAMS if k != _x_var]
         # Als de opgeslagen curve-variabele gelijk is aan de nieuw gekozen
-        # x-variabele, reset dan naar "(geen)" — anders gooit Streamlit een
+        # x-variabele, reset dan naar "(geen)" â€” anders gooit Streamlit een
         # exception (waarde niet in opties) en valt de tab-layout uit elkaar.
         if st.session_state.get("se_curve_var", "(geen)") == _x_var:
             st.session_state["se_curve_var"] = "(geen)"
@@ -5359,9 +5027,9 @@ with tab_sensitivity:
             format_func=lambda k: _labels_se.get(k, k), index=0, key="se_curve_var",
             help="Een tweede element dat per curve verandert (familie van lijnen).")
 
-    # ── X-as bereik ───────────────────────────────────────────────────────
+    # â”€â”€ X-as bereik â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _spec_x = _WTP_PARAMS[_x_var]
-    st.markdown(f"**X-as bereik — {_spec_x['label']}**")
+    st.markdown(f"**X-as bereik â€” {_spec_x['label']}**")
     # Opgeslagen min/max-waarden van een vorige x-variabele kunnen buiten de
     # grenzen van de nieuwe variabele vallen -> Streamlit exception -> tab breekt.
     for _se_key, _se_def in (("se_x_min", _spec_x["min"]), ("se_x_max", _spec_x["max"])):
@@ -5384,11 +5052,11 @@ with tab_sensitivity:
         _x_n = st.slider("gridpunten", min_value=5, max_value=200, value=60,
                          key="se_x_n")
 
-    # ── Curve-variabele waarden ───────────────────────────────────────────
+    # â”€â”€ Curve-variabele waarden â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _curve_vals = [None]
     if _curve_var != "(geen)":
         _spec_c = _WTP_PARAMS[_curve_var]
-        st.markdown(f"**Curve-waarden — {_spec_c['label']}**")
+        st.markdown(f"**Curve-waarden â€” {_spec_c['label']}**")
         # Zelfde guard als voor se_x_min/se_x_max: reset bij wisselen curve-var.
         for _se_key, _se_def in (("se_c_min", _clip_se(_curve_var, _seed_se[_curve_var])), ("se_c_max", _spec_c["max"])):
             if _se_key in st.session_state:
@@ -5411,10 +5079,10 @@ with tab_sensitivity:
                              key="se_c_n")
         _curve_vals = list(np.linspace(float(_c_min), float(_c_max), int(_c_n)))
 
-    # ── Vaste waarden voor de overige elementen ───────────────────────────
+    # â”€â”€ Vaste waarden voor de overige elementen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _fixed = {k: _clip_se(k, _seed_se[k]) for k in _WTP_PARAMS}
     _vrij = [k for k in _WTP_PARAMS if k not in (_x_var, _curve_var)]
-    with st.expander("⚙️ Vaste waarden voor de overige elementen", expanded=True):
+    with st.expander("âš™ï¸ Vaste waarden voor de overige elementen", expanded=True):
         _fc = st.columns(2)
         for _i, _k in enumerate(_vrij):
             _spec = _WTP_PARAMS[_k]
@@ -5424,25 +5092,25 @@ with tab_sensitivity:
                     value=_clip_se(_k, _seed_se[_k]), step=_spec["step"],
                     format=_spec["fmt"], key=f"se_fix_{_k}")
 
-    # (WTP-plafond vervallen: adoptie hangt via κ_c/α af van α; geen aparte poort.)
+    # (WTP-plafond vervallen: adoptie hangt via Îº_c/Î± af van Î±; geen aparte poort.)
 
-    # ── Kostenparameters + bron ───────────────────────────────────────────
+    # â”€â”€ Kostenparameters + bron â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _kappa_bpa_se = float(_kp_se.get("kappa_bpa", 0.20))
     _kappa_c_se   = float(_kp_se.get("kappa_c", 0.25))
     st.caption(
-        f"Kostenparameters uit Kostenanalyse: κ_BPA = **{_kappa_bpa_se:.0%}**, "
-        f"κ_c = **{_kappa_c_se:.0%}** _(pas aan via 💰 Kostenanalyse)_."
+        f"Kostenparameters uit Kostenanalyse: Îº_BPA = **{_kappa_bpa_se:.0%}**, "
+        f"Îº_c = **{_kappa_c_se:.0%}** _(pas aan via ðŸ’° Kostenanalyse)_."
     )
 
     _cls_codes_se = sorted(get_classificatie_info().get("items", {}).keys())
     if not _cls_codes_se:
         st.warning(
             "Geen classificatie-selectie (`bpa_selectie.json`) gevonden. "
-            "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
+            "Voer eerst de classificatie uit via tab ðŸ·ï¸ Classificatie."
         )
 
     # Bron-Excel met de tab 'Adoptie': zelfde resolutie als de Subscriptie-
-    # simulatie-tab — eerst de daar geüploade Excel (`subsim_upload`), dan de
+    # simulatie-tab â€” eerst de daar geÃ¼ploade Excel (`subsim_upload`), dan de
     # classificatie-upload (`cls_upload`), anders SUBSCRIPTIES_PATH uit de repo,
     # en als laatste redmiddel EXCEL_PATH.
     _excel_se = (
@@ -5466,7 +5134,7 @@ with tab_sensitivity:
 
     _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_x_n)))
 
-    # ── Param-dicts voor alle (x, curve)-punten ───────────────────────────
+    # â”€â”€ Param-dicts voor alle (x, curve)-punten â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _bouw_param_dicts():
         _dicts = []
         for _cval in _curve_vals:
@@ -5479,7 +5147,7 @@ with tab_sensitivity:
         return _dicts
 
     _se_greedy = st.checkbox(
-        "📦 Greedy modus (budget-beperkte selectie)",
+        "ðŸ“¦ Greedy modus (budget-beperkte selectie)",
         value=False, key="se_greedy",
         help="Berekent per parameterpunt de greedy component-selectie binnen het "
              "budget. Toont winst van de daadwerkelijk gekozen subset. "
@@ -5487,11 +5155,11 @@ with tab_sensitivity:
     _se_budget = None
     if _se_greedy:
         _se_budget = st.number_input(
-            "Budget (€)", min_value=0.0, value=100_000.0,
+            "Budget (â‚¬)", min_value=0.0, value=100_000.0,
             step=10_000.0, format="%.0f", key="se_budget",
             help="Maximaal investeringsbudget voor de greedy-selectie per parameterpunt.")
 
-    if st.button("📊 Bereken sensitivity", type="primary",
+    if st.button("ðŸ“Š Bereken sensitivity", type="primary",
                  disabled=not _cls_codes_se, key="se_bereken"):
         try:
             _ov_se = get_overzicht_df(cfg)
@@ -5499,12 +5167,12 @@ with tab_sensitivity:
             _ov_se = None
             st.error(f"Kon overzicht niet laden: {_e}")
         if _ov_se is None or _ov_se.empty:
-            st.warning("Geen overzicht beschikbaar — laad eerst het overzicht (tab 📊).")
+            st.warning("Geen overzicht beschikbaar â€” laad eerst het overzicht (tab ðŸ“Š).")
         else:
             with st.spinner(
                     "Winst-sensitivity berekenen"
                     + (" (greedy per punt)" if _se_greedy else " via het kostenmodel")
-                    + "…"):
+                    + "â€¦"):
                 try:
                     _recs = metrieken_voor_wtp_grid(
                         _ov_se, _bouw_param_dicts(),
@@ -5544,7 +5212,7 @@ with tab_sensitivity:
                     )
                     st.session_state.pop("se_resultaat", None)
 
-    # ── Plot van het laatst berekende resultaat ───────────────────────────
+    # â”€â”€ Plot van het laatst berekende resultaat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _res_se = st.session_state.get("se_resultaat")
     if _res_se:
         import matplotlib.pyplot as _plt_se
@@ -5556,9 +5224,9 @@ with tab_sensitivity:
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
         _x_fmt     = _res_se["x_fmt"]
-        _y_axis    = _res_se.get("y_axis", "total BPA margin (€)")
-        _y_lbl     = _res_se.get("y_label", "total BPA margin (€)")
-        _y_tbl     = _res_se.get("y_tbl", "BPA margin (€)")
+        _y_axis    = _res_se.get("y_axis", "total BPA margin (â‚¬)")
+        _y_lbl     = _res_se.get("y_label", "total BPA margin (â‚¬)")
+        _y_tbl     = _res_se.get("y_tbl", "BPA margin (â‚¬)")
         _y_kind    = _res_se.get("y_kind", "euro")
 
         _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
@@ -5582,7 +5250,7 @@ with tab_sensitivity:
         _ax_se.set_ylabel(_y_axis, fontsize=11)
         _ax_se.set_title(f"Sensitivity of {_y_lbl} w.r.t. the WTP elements", fontsize=12)
         if _y_kind == "euro":
-            _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"€{v:,.0f}")
+            _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"â‚¬{v:,.0f}")
         elif _y_kind == "pct":
             _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:.0%}")
         else:
@@ -5595,8 +5263,8 @@ with tab_sensitivity:
         st.pyplot(_fig_se)
         _plt_se.close(_fig_se)
 
-        # ── Datatabel + download ──────────────────────────────────────────
-        with st.expander("📋 Data achter de grafiek"):
+        # â”€â”€ Datatabel + download â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ“‹ Data achter de grafiek"):
             _tbl = {_x_lbl.split(" ")[0]: _xg}
             for _ci, _cval in enumerate(_cvals):
                 if _cval is None:
@@ -5607,15 +5275,15 @@ with tab_sensitivity:
             _df_se = pd.DataFrame(_tbl)
             st.dataframe(_df_se, use_container_width=True, height=320)
             st.download_button(
-                "⬇️ Download sensitivity-data (CSV)",
+                "â¬‡ï¸ Download sensitivity-data (CSV)",
                 data=_df_se.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
                 file_name=f"wtp_sensitivity_{date.today()}.csv",
                 mime="text/csv",
             )
 
-        # ── Greedy component-detail ───────────────────────────────────────
+        # â”€â”€ Greedy component-detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if _res_se.get("greedy_mode"):
-            with st.expander("🔍 Componentdetail greedy-selectie"):
+            with st.expander("ðŸ” Componentdetail greedy-selectie"):
                 _pd_list  = _res_se["param_dicts"]
                 _gbudget  = _res_se["greedy_budget"]
                 _gxg      = _res_se["x_grid"]
@@ -5673,12 +5341,12 @@ with tab_sensitivity:
                     else:
                         _n_sel  = int(_det_df["geselecteerd"].sum())
                         _n_tot  = len(_det_df)
-                        _inv_sel = _det_df.loc[_det_df["geselecteerd"], "Inv (€)"].sum()
-                        _mar_sel = _det_df.loc[_det_df["geselecteerd"], "Marge (€)"].sum()
+                        _inv_sel = _det_df.loc[_det_df["geselecteerd"], "Inv (â‚¬)"].sum()
+                        _mar_sel = _det_df.loc[_det_df["geselecteerd"], "Marge (â‚¬)"].sum()
                         st.caption(
-                            f"📦 **{_n_sel} / {_n_tot}** componenten geselecteerd — "
-                            f"investering **€{_inv_sel:,.0f}** / budget €{_gbudget:,.0f} — "
-                            f"totale marge **€{_mar_sel:,.0f}**"
+                            f"ðŸ“¦ **{_n_sel} / {_n_tot}** componenten geselecteerd â€” "
+                            f"investering **â‚¬{_inv_sel:,.0f}** / budget â‚¬{_gbudget:,.0f} â€” "
+                            f"totale marge **â‚¬{_mar_sel:,.0f}**"
                         )
 
                         def _highlight_sel(row):
@@ -5694,7 +5362,7 @@ with tab_sensitivity:
                             use_container_width=True, height=450,
                         )
                         st.download_button(
-                            "⬇️ Download componentdetail (CSV)",
+                            "â¬‡ï¸ Download componentdetail (CSV)",
                             data=_det_df.to_csv(
                                 sep=";", decimal=",", index=False
                             ).encode("utf-8"),
@@ -5703,7 +5371,7 @@ with tab_sensitivity:
                             key="se_detail_dl",
                         )
     else:
-        st.info("Stel de parameters in en klik op **📊 Bereken sensitivity**.")
+        st.info("Stel de parameters in en klik op **ðŸ“Š Bereken sensitivity**.")
 
 
 
