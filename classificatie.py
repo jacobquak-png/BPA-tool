@@ -118,7 +118,19 @@ def laad_ruwe_dataset(bron, sheet_name="Filtered ") -> pd.DataFrame:
     correcte levertijden en MTBF(years). De eerste sheet 'Final_data' bevat
     placeholder-waarden (levertijd '0 dagen', MTBF in dagen) en mag hier niet
     gebruikt worden. Geef sheet_name=None om expliciet de eerste sheet te lezen.
+
+    Snelheidsoptimalisatie: als `bron` een bestandspad is en er een CSV-sidecar
+    ``<basisnaam>_filtered.csv`` naast het Excel-bestand staat, wordt die
+    geladen in plaats van het Excel-bestand (~500x sneller). De sidecar wordt
+    genegeerd bij file-like objecten (uploads) en bij een afwijkende sheet_name.
     """
+    import os as _os
+    # CSV-sidecar check: alleen voor padnamen + default sheet "Filtered "
+    if isinstance(bron, (_os.PathLike, str)) and sheet_name == "Filtered ":
+        _csv = _os.path.splitext(str(bron))[0] + "_filtered.csv"
+        if _os.path.exists(_csv):
+            return pd.read_csv(_csv)
+
     df = pd.read_excel(bron, sheet_name=sheet_name) if sheet_name else pd.read_excel(bron)
     return df
 
