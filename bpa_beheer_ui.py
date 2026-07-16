@@ -4953,6 +4953,9 @@ with tab_subsim:
                         _bru_res["beta_r_max"] = float(_br_hi)
                         _bru_res["cc"] = _bru_cc
                         _bru_res["eps"] = _bru_eps
+                        _bru_res["q_eq"]     = float(_q_eq)
+                        _bru_res["kappa_bpa"] = float(_kappa_bpa_bru)
+                        _bru_res["kappa_c"]  = float(_kappa_c_bru)
                         st.session_state["subsim_bru_data"] = _bru_res
             except (ValueError, FileNotFoundError, OSError) as _bru_err:
                 st.warning(
@@ -5063,6 +5066,95 @@ with tab_subsim:
                 _band_df.to_csv(index=False).encode("utf-8"),
                 file_name="beta_r_winstband.csv", mime="text/csv",
                 key="subsim_bru_dl")
+
+            # ── Greedy componentdetail ─────────────────────────────────
+            if _bru.get("budget") is not None:
+                with st.expander("🔍 Componentdetail greedy-selectie"):
+                    _bdet_lo  = float(_bru["beta_r_min"])
+                    _bdet_hi  = float(_bru["beta_r_max"])
+                    _bdet_bud = float(_bru["budget"])
+                    _bdet_X   = float(_bru["X"])
+                    _bdet_qeq = float(_bru.get("q_eq",  _q_eq))
+                    _bdet_kbpa= float(_bru.get("kappa_bpa", _kappa_bpa_bru))
+                    _bdet_kc  = float(_bru.get("kappa_c",  _kappa_c_bru))
+                    _bdet_eps = _bru.get("eps")
+
+                    _bdet_col1, _bdet_col2 = st.columns([1, 1])
+                    with _bdet_col1:
+                        _bdet_br_pct = st.selectbox(
+                            "β_r scenario",
+                            options=[5, 50, 95],
+                            format_func=lambda p: (
+                                f"P{p} (β_r ≈ {_bdet_lo + p/100*(_bdet_hi-_bdet_lo):.2f})"),
+                            index=1,
+                            key="bru_det_br_pct",
+                        )
+                    with _bdet_col2:
+                        _bdet_a_idx = st.selectbox(
+                            "α waarde",
+                            options=range(len(_ag)),
+                            format_func=lambda i: f"α = {_ag[i]:.3f}",
+                            key="bru_det_alpha",
+                        )
+
+                    _bdet_br  = _bdet_lo + _bdet_br_pct / 100.0 * (_bdet_hi - _bdet_lo)
+                    _bdet_a   = float(_ag[_bdet_a_idx])
+
+                    _bdet_n = _cached_aantal_klanten(
+                        _file_mtime(_excel_bron if isinstance(_excel_bron, str) else ""),
+                        upload=_excel_arg() if _excel_bron else None,
+                    )
+                    try:
+                        _ov_bdet = get_overzicht_df(cfg)
+                    except Exception:
+                        _ov_bdet = None
+                    _bdet_df = greedy_detail_for_params(
+                        overzicht_df=_ov_bdet,
+                        alpha=_bdet_a,
+                        service_level=_bdet_X,
+                        q_eq=_bdet_qeq,
+                        beta_r=_bdet_br,
+                        kappa_bpa=_bdet_kbpa,
+                        kappa_c=_bdet_kc,
+                        budget=_bdet_bud,
+                        n_series=_bdet_n,
+                        epsilon=_bdet_eps,
+                    )
+                    if _bdet_df.empty:
+                        st.info("Geen componentdata beschikbaar voor dit punt.")
+                    else:
+                        _bdet_nsel  = int(_bdet_df["geselecteerd"].sum())
+                        _bdet_ntot  = len(_bdet_df)
+                        _bdet_inv   = _bdet_df.loc[_bdet_df["geselecteerd"], "Inv (€)"].sum()
+                        _bdet_mar   = _bdet_df.loc[_bdet_df["geselecteerd"], "Marge (€)"].sum()
+                        st.caption(
+                            f"📦 **{_bdet_nsel} / {_bdet_ntot}** componenten geselecteerd — "
+                            f"investering **€{_bdet_inv:,.0f}** / budget €{_bdet_bud:,.0f} — "
+                            f"totale marge **€{_bdet_mar:,.0f}** — "
+                            f"β_r = {_bdet_br:.2f} (P{_bdet_br_pct}), α = {_bdet_a:.3f}"
+                        )
+
+                        def _bdet_highlight(row):
+                            bg = ("background-color: #d4edda" if row["geselecteerd"]
+                                  else "background-color: #f8f9fa; color: #888")
+                            return [bg] * len(row)
+
+                        _bdet_disp = _bdet_df.copy()
+                        if not _bdet_disp["omschrijving"].any():
+                            _bdet_disp = _bdet_disp.drop(columns=["omschrijving"])
+                        st.dataframe(
+                            _bdet_disp.style.apply(_bdet_highlight, axis=1),
+                            use_container_width=True, height=450,
+                        )
+                        st.download_button(
+                            "⬇️ Download componentdetail (CSV)",
+                            data=_bdet_df.to_csv(
+                                sep=";", decimal=",", index=False
+                            ).encode("utf-8"),
+                            file_name=f"greedy_detail_bru_{date.today()}.csv",
+                            mime="text/csv",
+                            key="bru_det_dl",
+                        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────────
