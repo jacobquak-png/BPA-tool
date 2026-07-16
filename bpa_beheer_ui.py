@@ -5159,66 +5159,54 @@ with tab_subsim:
                         # ── Verwachte marge bij ronde α-waarden ──────────
                         st.divider()
                         st.markdown(
-                            f"**📊 Verwachte marge bij ronde α — "
-                            f"β_r = {_bdet_br:.2f} (P{_bdet_br_pct})**"
+                            "**📊 Verwachte marge bij ronde α "
+                            f"(gemiddeld over {int(_bru_K)} β_r-trekkingen)**"
                         )
                         _int_alphas = [
                             a / 100
                             for a in range(1, 101)
                             if float(min(_ag)) <= a / 100 <= float(max(_ag))
                         ]
-                        if _int_alphas and _ov_bdet is not None:
-                            _int_gs = greedy_alpha_sweep(
-                                _ov_bdet,
-                                _int_alphas,
-                                _bdet_bud,
-                                _bdet_X,
-                                _bdet_qeq,
-                                _bdet_br,
-                                _bdet_kbpa,
-                                _bdet_kc,
-                                n_series=_bdet_n,
-                                epsilon=_bdet_eps,
+                        if _int_alphas:
+                            _int_mean = np.interp(
+                                _int_alphas, _ag, _bru["margin_mean"])
+                            _int_p5   = np.interp(
+                                _int_alphas, _ag, _bru["margin_pct"][5])
+                            _int_p50  = np.interp(
+                                _int_alphas, _ag, _bru["margin_pct"][50])
+                            _int_p95  = np.interp(
+                                _int_alphas, _ag, _bru["margin_pct"][95])
+                            _int_tbl = pd.DataFrame({
+                                "α (%)":    [int(round(a * 100)) for a in _int_alphas],
+                                "E[Π] (€)": _int_mean.round(0).astype(int),
+                                "P5 (€)":   _int_p5.round(0).astype(int),
+                                "P50 (€)":  _int_p50.round(0).astype(int),
+                                "P95 (€)":  _int_p95.round(0).astype(int),
+                            })
+                            _int_cur = int(round(_bdet_a * 100))
+
+                            def _int_hl(row):
+                                if row["α (%)"] == _int_cur:
+                                    return ["background-color: #fff3cd; font-weight: bold"] * len(row)
+                                if row["E[Π] (€)"] >= 0:
+                                    return [""] * len(row)
+                                return ["color: #888"] * len(row)
+
+                            st.dataframe(
+                                _int_tbl.style.apply(_int_hl, axis=1),
+                                use_container_width=True,
+                                hide_index=True,
+                                height=min(450, 36 * (len(_int_tbl) + 1)),
                             )
-                            if not _int_gs.empty:
-                                _int_tbl = _int_gs[[
-                                    "alpha", "q", "total_Z",
-                                    "total_inv", "total_margin", "n_selected",
-                                ]].copy()
-                                _int_tbl.columns = [
-                                    "α (%)", "q(α)", "E[Z_i]",
-                                    "Inv (€)", "Marge (€)", "Geselecteerd (n)",
-                                ]
-                                _int_tbl["α (%)"] = (_int_tbl["α (%)"] * 100).round(0).astype(int)
-                                _int_tbl["q(α)"]  = _int_tbl["q(α)"].round(4)
-                                _int_tbl["E[Z_i]"] = _int_tbl["E[Z_i]"].round(1)
-                                _int_tbl["Inv (€)"] = _int_tbl["Inv (€)"].round(0).astype(int)
-                                _int_tbl["Marge (€)"] = _int_tbl["Marge (€)"].round(0).astype(int)
-                                # Markeer de huidig geselecteerde α rij
-                                _int_cur = int(round(_bdet_a * 100))
-
-                                def _int_hl(row):
-                                    if row["α (%)"] == _int_cur:
-                                        return ["background-color: #fff3cd; font-weight: bold"] * len(row)
-                                    if row["Marge (€)"] >= 0:
-                                        return [""] * len(row)
-                                    return ["color: #888"] * len(row)
-
-                                st.dataframe(
-                                    _int_tbl.style.apply(_int_hl, axis=1),
-                                    use_container_width=True,
-                                    hide_index=True,
-                                    height=min(450, 36 * (len(_int_tbl) + 1)),
-                                )
-                                st.download_button(
-                                    "⬇️ Download margetabel ronde α (CSV)",
-                                    data=_int_tbl.to_csv(
-                                        sep=";", decimal=",", index=False
-                                    ).encode("utf-8"),
-                                    file_name=f"greedy_marge_alpha_{date.today()}.csv",
-                                    mime="text/csv",
-                                    key="bru_int_dl",
-                                )
+                            st.download_button(
+                                "⬇️ Download margetabel ronde α (CSV)",
+                                data=_int_tbl.to_csv(
+                                    sep=";", decimal=",", index=False
+                                ).encode("utf-8"),
+                                file_name=f"greedy_marge_alpha_{date.today()}.csv",
+                                mime="text/csv",
+                                key="bru_int_dl",
+                            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────────
