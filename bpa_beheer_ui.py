@@ -5208,6 +5208,78 @@ with tab_subsim:
                                 key="bru_int_dl",
                             )
 
+                            # Componentdetail voor gekozen integer α, β_r = E[β_r]
+                            st.markdown(
+                                "**Componentdetail bij verwacht β_r "
+                                f"= {(_bdet_lo + _bdet_hi) / 2:.2f} "
+                                f"(= E[β_r] van U({_bdet_lo:.2f}, {_bdet_hi:.2f}))**"
+                            )
+                            _int_a_sel = st.selectbox(
+                                "α kiezen",
+                                options=_int_alphas,
+                                format_func=lambda a: f"α = {int(round(a*100))}%",
+                                index=min(
+                                    len(_int_alphas) - 1,
+                                    max(0, next(
+                                        (i for i, a in enumerate(_int_alphas)
+                                         if int(round(a * 100)) >= _int_cur),
+                                        0,
+                                    )),
+                                ),
+                                key="bru_int_a_sel",
+                            )
+                            _int_br_mean = (_bdet_lo + _bdet_hi) / 2
+                            _int_det_df = greedy_detail_for_params(
+                                overzicht_df=_ov_bdet,
+                                alpha=float(_int_a_sel),
+                                service_level=_bdet_X,
+                                q_eq=_bdet_qeq,
+                                beta_r=_int_br_mean,
+                                kappa_bpa=_bdet_kbpa,
+                                kappa_c=_bdet_kc,
+                                budget=_bdet_bud,
+                                n_series=_bdet_n,
+                                epsilon=_bdet_eps,
+                            )
+                            if _int_det_df.empty:
+                                st.info("Geen componentdata beschikbaar.")
+                            else:
+                                _int_nsel = int(_int_det_df["geselecteerd"].sum())
+                                _int_ntot = len(_int_det_df)
+                                _int_inv  = _int_det_df.loc[
+                                    _int_det_df["geselecteerd"], "Inv (€)"].sum()
+                                _int_mar  = _int_det_df.loc[
+                                    _int_det_df["geselecteerd"], "Marge (€)"].sum()
+                                st.caption(
+                                    f"📦 **{_int_nsel} / {_int_ntot}** geselecteerd — "
+                                    f"investering **€{_int_inv:,.0f}** — "
+                                    f"marge **€{_int_mar:,.0f}**"
+                                )
+
+                                def _int_det_hl(row):
+                                    bg = ("background-color: #d4edda"
+                                          if row["geselecteerd"]
+                                          else "background-color: #f8f9fa; color: #888")
+                                    return [bg] * len(row)
+
+                                _int_disp = _int_det_df.copy()
+                                if not _int_disp["omschrijving"].any():
+                                    _int_disp = _int_disp.drop(columns=["omschrijving"])
+                                st.dataframe(
+                                    _int_disp.style.apply(_int_det_hl, axis=1),
+                                    use_container_width=True,
+                                    height=450,
+                                )
+                                st.download_button(
+                                    "⬇️ Download componentdetail verwacht (CSV)",
+                                    data=_int_det_df.to_csv(
+                                        sep=";", decimal=",", index=False
+                                    ).encode("utf-8"),
+                                    file_name=f"greedy_detail_verwacht_{date.today()}.csv",
+                                    mime="text/csv",
+                                    key="bru_int_det_dl",
+                                )
+
 
 # ─────────────────────────────────────────────────────────────────────────────────
 #  TAB 12 – SENSITIVITY (WTP)  – elementen van de adoptie-/WTP-functie plotten
