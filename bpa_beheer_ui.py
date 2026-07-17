@@ -4975,6 +4975,8 @@ with tab_sensitivity:
         "q_eq":    {"label": "q_eq — adoptie bij pariteit",     "axis": "q_eq — adoption at parity",    "min": 0.01,   "max": 0.99,   "step": 0.05,  "fmt": "%.3f"},
         "beta_r":  {"label": "β_r — kostenratio-gevoeligheid",  "axis": "β_r — cost-ratio sensitivity", "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
         "kappa_c": {"label": "κ_c — kostenpariteit",            "axis": "κ_c — cost parity",            "min": 0.01,   "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
+        "epsilon": {"label": "ε — chance-constraint niveau",    "axis": "ε — CC level",                 "min": 0.0,    "max": 0.50,   "step": 0.01,  "fmt": "%.2f",
+                    "help": "0 = geen CC; S* op (1−ε)-kwantiel Z_i^{1−ε} i.p.v. E[Z_i]. Alleen effectief in greedy modus."},
     }
 
     # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
@@ -4985,6 +4987,7 @@ with tab_sensitivity:
         "q_eq":    float(st.session_state.get("subsim_q_eq", 0.55)),
         "beta_r":  float(st.session_state.get("subsim_beta_r", 1.0)),
         "kappa_c": float(_kp_se.get("kappa_c", 0.25)),
+        "epsilon": 0.0,
     }
 
     def _clip_se(_name, _val):
@@ -5090,7 +5093,8 @@ with tab_sensitivity:
                 _fixed[_k] = st.number_input(
                     _spec["label"], min_value=_spec["min"], max_value=_spec["max"],
                     value=_clip_se(_k, _seed_se[_k]), step=_spec["step"],
-                    format=_spec["fmt"], key=f"se_fix_{_k}")
+                    format=_spec["fmt"], key=f"se_fix_{_k}",
+                    help=_spec.get("help"))
 
     # (WTP-plafond vervallen: adoptie hangt via κ_c/α af van α; geen aparte poort.)
 
@@ -5325,6 +5329,7 @@ with tab_sensitivity:
                         _ov_det = get_overzicht_df(cfg)
                     except Exception:
                         _ov_det = None
+                    _det_eps = float(_det_p.get("epsilon", 0.0))
                     _det_df = greedy_detail_for_params(
                         overzicht_df=_ov_det,
                         alpha=float(_det_p["alpha"]),
@@ -5335,6 +5340,7 @@ with tab_sensitivity:
                         kappa_c=float(_det_p.get("kappa_c", _kappa_c_se)),
                         budget=_gbudget,
                         n_series=_det_n,
+                        epsilon=_det_eps if _det_eps > 0 else None,
                     )
                     if _det_df.empty:
                         st.info("Geen componentdata beschikbaar voor dit punt.")
