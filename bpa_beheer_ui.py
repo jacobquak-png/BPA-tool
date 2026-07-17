@@ -5012,14 +5012,29 @@ with tab_sensitivity:
     _y_spec = _Y_METRICS[_y_var]
 
     # ── Onafhankelijke as-keuzes ──────────────────────────────────────────
+    # ε heeft alleen effect in greedy modus; sluit het uit wanneer greedy uit is
+    # zodat de gebruiker geen overlappende (identieke) curves krijgt.
+    _greedy_on = st.session_state.get("se_greedy", False)
+    _active_params = {k: v for k, v in _WTP_PARAMS.items()
+                      if k != "epsilon" or _greedy_on}
+    _labels_se_active = {k: v["label"] for k, v in _active_params.items()}
+
+    # Reset x/curve-variabele naar veilige default als ze naar epsilon wijzen
+    # terwijl greedy uit is.
+    if not _greedy_on:
+        if st.session_state.get("se_x_var") == "epsilon":
+            st.session_state["se_x_var"] = "alpha"
+        if st.session_state.get("se_curve_var") == "epsilon":
+            st.session_state["se_curve_var"] = "(geen)"
+
     _cx, _ccurve = st.columns(2)
     with _cx:
         _x_var = st.selectbox(
-            "X-as variabele", options=list(_WTP_PARAMS.keys()),
-            format_func=lambda k: _labels_se[k], index=0, key="se_x_var",
+            "X-as variabele", options=list(_active_params.keys()),
+            format_func=lambda k: _labels_se_active[k], index=0, key="se_x_var",
             help="Het WTP-element dat over de x-as wordt gevarieerd.")
     with _ccurve:
-        _curve_opts = ["(geen)"] + [k for k in _WTP_PARAMS if k != _x_var]
+        _curve_opts = ["(geen)"] + [k for k in _active_params if k != _x_var]
         # Als de opgeslagen curve-variabele gelijk is aan de nieuw gekozen
         # x-variabele, reset dan naar "(geen)" — anders gooit Streamlit een
         # exception (waarde niet in opties) en valt de tab-layout uit elkaar.
@@ -5027,11 +5042,11 @@ with tab_sensitivity:
             st.session_state["se_curve_var"] = "(geen)"
         _curve_var = st.selectbox(
             "Curve-variabele (optioneel)", options=_curve_opts,
-            format_func=lambda k: _labels_se.get(k, k), index=0, key="se_curve_var",
+            format_func=lambda k: _labels_se_active.get(k, k), index=0, key="se_curve_var",
             help="Een tweede element dat per curve verandert (familie van lijnen).")
 
     # ── X-as bereik ───────────────────────────────────────────────────────
-    _spec_x = _WTP_PARAMS[_x_var]
+    _spec_x = _active_params[_x_var]
     st.markdown(f"**X-as bereik — {_spec_x['label']}**")
     # Opgeslagen min/max-waarden van een vorige x-variabele kunnen buiten de
     # grenzen van de nieuwe variabele vallen -> Streamlit exception -> tab breekt.
@@ -5058,7 +5073,7 @@ with tab_sensitivity:
     # ── Curve-variabele waarden ───────────────────────────────────────────
     _curve_vals = [None]
     if _curve_var != "(geen)":
-        _spec_c = _WTP_PARAMS[_curve_var]
+        _spec_c = _active_params[_curve_var]
         st.markdown(f"**Curve-waarden — {_spec_c['label']}**")
         # Zelfde guard als voor se_x_min/se_x_max: reset bij wisselen curve-var.
         for _se_key, _se_def in (("se_c_min", _clip_se(_curve_var, _seed_se[_curve_var])), ("se_c_max", _spec_c["max"])):
@@ -5084,11 +5099,11 @@ with tab_sensitivity:
 
     # ── Vaste waarden voor de overige elementen ───────────────────────────
     _fixed = {k: _clip_se(k, _seed_se[k]) for k in _WTP_PARAMS}
-    _vrij = [k for k in _WTP_PARAMS if k not in (_x_var, _curve_var)]
+    _vrij = [k for k in _active_params if k not in (_x_var, _curve_var)]
     with st.expander("⚙️ Vaste waarden voor de overige elementen", expanded=True):
         _fc = st.columns(2)
         for _i, _k in enumerate(_vrij):
-            _spec = _WTP_PARAMS[_k]
+            _spec = _active_params[_k]
             with _fc[_i % 2]:
                 _fixed[_k] = st.number_input(
                     _spec["label"], min_value=_spec["min"], max_value=_spec["max"],
