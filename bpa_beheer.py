@@ -1020,10 +1020,26 @@ def metrieken_voor_wtp_grid(
                 })
             continue
 
-        _n_int   = _ez.round().clip(lower=0).astype(int)
+        _n_int = _ez.round().clip(lower=0).astype(int)  # E[Z_i] – voor omzet
+        # Chance-constrained stock (spiegelt pareto_alpha_X):
+        # omzet op E[Z_i], stock op (1-ε)-kwantiel Z_i^{1-ε}.
+        _eps_v = p.get('epsilon', None)
+        if _eps_v is not None and float(_eps_v) > 0:
+            _level = 1.0 - float(_eps_v)
+            _n_base_v = _n.reindex(base.index).fillna(0.0).values
+            _z_cc = pd.Series(
+                np.maximum(
+                    [float(binomiale_quantile(int(round(float(_mi))), float(_q), _level))
+                     for _mi in _n_base_v],
+                    _ez.values,
+                ),
+                index=base.index, dtype=float,
+            )
+        else:
+            _z_cc = _ez  # geen CC: stock op verwachte waarde
         mod = base.copy()
         mod['n_klanten'] = _n_int.values
-        mod['lambda_jr'] = (_ez * lam_per_cust).values  # continu: Z_i(α) · λ/N
+        mod['lambda_jr'] = (_z_cc * lam_per_cust).values  # Z_cc bepaalt stock
         _rec = {'total_Z': _total_z, 'q': float(_q)}
         if int(mod['n_klanten'].sum()) <= 0:
             _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False})
