@@ -5012,20 +5012,9 @@ with tab_sensitivity:
     _y_spec = _Y_METRICS[_y_var]
 
     # ── Onafhankelijke as-keuzes ──────────────────────────────────────────
-    # ε heeft alleen effect in greedy modus; sluit het uit wanneer greedy uit is
-    # zodat de gebruiker geen overlappende (identieke) curves krijgt.
-    _greedy_on = st.session_state.get("se_greedy", False)
-    _active_params = {k: v for k, v in _WTP_PARAMS.items()
-                      if k != "epsilon" or _greedy_on}
-    _labels_se_active = {k: v["label"] for k, v in _active_params.items()}
-
-    # Reset x/curve-variabele naar veilige default als ze naar epsilon wijzen
-    # terwijl greedy uit is.
-    if not _greedy_on:
-        if st.session_state.get("se_x_var") == "epsilon":
-            st.session_state["se_x_var"] = "alpha"
-        if st.session_state.get("se_curve_var") == "epsilon":
-            st.session_state["se_curve_var"] = "(geen)"
+    # ε werkt in zowel greedy als non-greedy modus (CC-stock via kwantiel).
+    _active_params = _WTP_PARAMS
+    _labels_se_active = _labels_se
 
     _cx, _ccurve = st.columns(2)
     with _cx:
