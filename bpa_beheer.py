@@ -998,10 +998,14 @@ def metrieken_voor_wtp_grid(
 
         if budget is not None:
             # Greedy modus: run greedy voor deze (α, X, q_eq, β_r)-combinatie.
+            _eps = p.get('epsilon', None)
+            if _eps is not None and float(_eps) <= 0:
+                _eps = None
             _gs = greedy_alpha_sweep(
                 overzicht_df, [_a], float(budget), _x,
                 _qe, _br, float(kappa_bpa), _kc,
                 n_series=_n,
+                epsilon=_eps,
             )
             if _gs.empty:
                 resultaten.append({**_leeg(), 'total_Z': _total_z, 'q': float(_q)})
