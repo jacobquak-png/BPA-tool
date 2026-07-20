@@ -5383,5 +5383,322 @@ with tab_sensitivity:
     else:
         st.info("Stel de parameters in en klik op **📊 Bereken sensitivity**.")
 
+    # ── Bandbreedte van optimale α bij onzekere β_r ───────────────────────
+    st.divider()
+    st.markdown("### Bandbreedte van optimale α bij onzekere β_r")
+    st.caption(
+        "$β_r$ is een **niet-schatbare scenario-parameter** die de "
+        "kostenratio-gevoeligheid van klanten beschrijft. "
+        "Bij onzekerheid $β_r \\sim U(β_r^{\\min},\\, β_r^{\\max})$ "
+        "berekent dit blok via Monte-Carlo de **bandbreedte** van de "
+        "winstmaximaliserende α* (P5 / P50 / P95). "
+        "Optioneel sweep je over een reeks service levels X om te zien "
+        "hoe de robuustheid van α* verandert met de servicegraad."
+    )
+
+    _sb_col1, _sb_col2 = st.columns(2)
+    with _sb_col1:
+        _sb_brlo = st.number_input(
+            "β_r^min", min_value=0.0, max_value=20.0,
+            value=float(st.session_state.get("subsim_bru_brlo", 0.5)),
+            step=0.1, format="%.2f", key="se_bru_brlo",
+            help="Ondergrens van het plausibele β_r-bereik.")
+        _sb_brhi = st.number_input(
+            "β_r^max", min_value=0.1, max_value=20.0,
+            value=float(st.session_state.get("subsim_bru_brhi", 3.5)),
+            step=0.1, format="%.2f", key="se_bru_brhi",
+            help="Bovengrens van het plausibele β_r-bereik.")
+        _sb_amin = st.number_input(
+            "α-grid min", min_value=0.0001, max_value=1.0, value=0.02,
+            step=0.01, format="%.2f", key="se_bru_amin")
+        _sb_amax = st.number_input(
+            "α-grid max", min_value=0.01,   max_value=1.0, value=0.40,
+            step=0.01, format="%.2f", key="se_bru_amax")
+        _sb_an   = st.slider("Aantal α-waarden", 5, 60, 25, key="se_bru_an")
+    with _sb_col2:
+        _sb_X   = st.number_input(
+            "Vast service level X", min_value=0.50, max_value=0.9999,
+            value=_clip_se("X", _seed_se["X"]), step=0.005, format="%.3f",
+            key="se_bru_X")
+        _sb_qeq = st.number_input(
+            "q_eq — adoptie bij pariteit", min_value=0.01, max_value=0.99,
+            value=_clip_se("q_eq", _seed_se["q_eq"]), step=0.01, format="%.3f",
+            key="se_bru_qeq")
+        _sb_K   = st.slider(
+            "Trekkingen (K)", min_value=20, max_value=1000, value=200, step=20,
+            key="se_bru_K",
+            help="Meer trekkingen → gladdere band, maar langere rekentijd.")
+        _sb_seed = st.checkbox(
+            "Vaste seed (reproduceerbaar)", value=True, key="se_bru_seed")
+        _sb_feas = st.checkbox(
+            "α* alleen over haalbare α zoeken", value=False, key="se_bru_feas",
+            help="Bepaal α* per trekking alleen over haalbare α "
+                 "(marge ≥ 0 én alle klanten profiteren).")
+
+    _sb_do_xsweep = st.checkbox(
+        "Toon ook bandbreedte over een reeks X-waarden",
+        value=False, key="se_bru_xsweep",
+        help="Berekent per X-waarde de P5/P50/P95 van α* en toont hoe de "
+             "bandbreedte verandert met de servicegraad.")
+    if _sb_do_xsweep:
+        _sb_xs1, _sb_xs2, _sb_xs3 = st.columns(3)
+        _sb_xsw_min = _sb_xs1.number_input(
+            "X sweep min", min_value=0.50, max_value=0.9999, value=0.95,
+            step=0.005, format="%.3f", key="se_bru_xsw_min")
+        _sb_xsw_max = _sb_xs2.number_input(
+            "X sweep max", min_value=0.50, max_value=0.9999, value=0.9999,
+            step=0.005, format="%.3f", key="se_bru_xsw_max")
+        _sb_xsw_n = _sb_xs3.slider(
+            "Aantal X-punten", min_value=3, max_value=20, value=8,
+            key="se_bru_xsw_n")
+
+    _sb_run = st.button(
+        "🎲 Bereken α*-bandbreedte", type="primary",
+        disabled=not _cls_codes_se, key="se_bru_run")
+
+    if _sb_run:
+        _ov_sb = None
+        try:
+            _ov_sb = get_overzicht_df(cfg)
+        except Exception as _esb:
+            st.error(f"Overzicht niet laden: {_esb}")
+        if _ov_sb is None or _ov_sb.empty:
+            st.warning("Geen overzicht — laad eerst het overzicht (tab 📊).")
+        elif float(_sb_brhi) <= float(_sb_brlo):
+            st.warning("β_r^max moet groter zijn dan β_r^min.")
+        else:
+            _sb_alpha_grid = list(np.linspace(
+                float(_sb_amin), float(_sb_amax), int(_sb_an)))
+            _sb_kbpa = float(_kp_se.get("kappa_bpa", 0.20))
+            _sb_kc   = float(_kp_se.get("kappa_c",   0.25))
+
+            def _excel_arg_sb():
+                if _excel_se is None:
+                    return None
+                try:
+                    _excel_se.seek(0)
+                except (AttributeError, ValueError):
+                    pass
+                return _excel_se
+
+            with st.spinner(
+                f"α*-bandbreedte berekenen ({int(_sb_K)} trekkingen × "
+                f"{int(_sb_an)} α-waarden)…"
+            ):
+                _sb_res = beta_r_winstband(
+                    _ov_sb, float(_sb_X), _sb_alpha_grid,
+                    float(_sb_qeq), float(_sb_brlo), float(_sb_brhi),
+                    _sb_kbpa, _sb_kc,
+                    n_samples=int(_sb_K),
+                    excel_file=_excel_arg_sb(),
+                    codes=_cls_codes_se,
+                    seed=(42 if _sb_seed else None),
+                    alleen_haalbaar=bool(_sb_feas),
+                )
+
+            _sb_xsweep_rows = []
+            if _sb_res is not None and _sb_do_xsweep:
+                _xsw_vals = list(np.linspace(
+                    float(_sb_xsw_min), float(_sb_xsw_max), int(_sb_xsw_n)))
+                with st.spinner(
+                    f"X-sweep berekenen ({len(_xsw_vals)} service levels × "
+                    f"{int(_sb_K)} trekkingen)…"
+                ):
+                    for _xv in _xsw_vals:
+                        _r = beta_r_winstband(
+                            _ov_sb, float(_xv), _sb_alpha_grid,
+                            float(_sb_qeq), float(_sb_brlo), float(_sb_brhi),
+                            _sb_kbpa, _sb_kc,
+                            n_samples=int(_sb_K),
+                            excel_file=_excel_arg_sb(),
+                            codes=_cls_codes_se,
+                            seed=(42 if _sb_seed else None),
+                            alleen_haalbaar=bool(_sb_feas),
+                        )
+                        if _r is not None:
+                            _p5v  = _r["opt_alpha_pct"].get(5,  float("nan"))
+                            _p50v = _r["opt_alpha_pct"].get(50, float("nan"))
+                            _p95v = _r["opt_alpha_pct"].get(95, float("nan"))
+                            _sb_xsweep_rows.append({
+                                "X":           round(_xv,  4),
+                                "α*_P5":       round(_p5v,  4),
+                                "α*_P50":      round(_p50v, 4),
+                                "α*_P95":      round(_p95v, 4),
+                                "bandbreedte": round(_p95v - _p5v, 4),
+                            })
+
+            if _sb_res is None:
+                st.warning(
+                    "Geen resultaten — controleer de Adoptie-tab en selectie.")
+                st.session_state.pop("se_bru_data", None)
+            else:
+                st.session_state["se_bru_data"] = {
+                    "res":       _sb_res,
+                    "X":         float(_sb_X),
+                    "brlo":      float(_sb_brlo),
+                    "brhi":      float(_sb_brhi),
+                    "xsweep":    _sb_xsweep_rows,
+                    "do_xsweep": bool(_sb_do_xsweep),
+                }
+
+    _sb = st.session_state.get("se_bru_data")
+    if _sb:
+        import matplotlib.pyplot as _plt_sb
+        import matplotlib.ticker as _mt_sb
+
+        _sbr     = _sb["res"]
+        _sb_ag   = _sbr["alpha_grid"]
+        _sb_p5   = _sbr["margin_pct"].get(5)
+        _sb_p50  = _sbr["margin_pct"].get(50)
+        _sb_p95  = _sbr["margin_pct"].get(95)
+        _sb_mean = _sbr["margin_mean"]
+        _sb_oap  = _sbr["opt_alpha_pct"]
+
+        # ── Metrics ──────────────────────────────────────────────────────
+        _sbm1, _sbm2, _sbm3, _sbm4 = st.columns(4)
+        _sbm1.metric("α* P5",              f"{_sb_oap.get(5,  float('nan')):.1%}")
+        _sbm2.metric("α* P50 (mediaan)",   f"{_sb_oap.get(50, float('nan')):.1%}")
+        _sbm3.metric("α* P95",             f"{_sb_oap.get(95, float('nan')):.1%}")
+        _sb_bw = _sb_oap.get(95, float("nan")) - _sb_oap.get(5, float("nan"))
+        _sbm4.metric("Bandbreedte P95−P5",
+                     f"{_sb_bw:.1%}" if np.isfinite(_sb_bw) else "—")
+        st.caption(
+            f"Bij $β_r \\sim U({_sb['brlo']:.2f},\\,{_sb['brhi']:.2f})$ "
+            f"en $X = {_sb['X']:.3f}$: de winstmaximaliserende α* valt "
+            f"voor 90% van de β_r-scenario's in het interval "
+            f"[**{_sb_oap.get(5, float('nan')):.1%}**, "
+            f"**{_sb_oap.get(95, float('nan')):.1%}**] "
+            f"(mediaan **{_sb_oap.get(50, float('nan')):.1%}**, "
+            f"bandbreedte **{_sb_bw:.1%}**)."
+        )
+
+        # ── Grafiek 1 + 2 naast elkaar ────────────────────────────────
+        _fig_sb, (_ax_band, _ax_hist) = _plt_sb.subplots(
+            1, 2, figsize=(13, 4.5))
+
+        # Winstband vs α
+        if _sb_p5 is not None and _sb_p95 is not None:
+            _ax_band.fill_between(
+                _sb_ag, _sb_p5, _sb_p95,
+                color="#1f77b4", alpha=0.20, label="P5–P95 band")
+        if _sb_p50 is not None:
+            _ax_band.plot(_sb_ag, _sb_p50, color="#1f77b4", lw=2.2,
+                           label="mediaan winst (P50)")
+        if _sb_mean is not None:
+            _ax_band.plot(_sb_ag, _sb_mean, color="#ff7f0e",
+                           lw=1.4, ls="--", label="gemiddelde E[Π]")
+        if _sb_p50 is not None and np.isfinite(_sb_p50).any():
+            _sb_ix = int(np.nanargmax(_sb_p50))
+            _ax_band.axvline(_sb_ag[_sb_ix], color="#d62728", ls=":", lw=1.5,
+                              label=f"α*(P50) = {_sb_ag[_sb_ix]:.1%}")
+        _ax_band.axhline(0, color="grey", lw=0.8, ls=":")
+        _ax_band.set_xlabel("α — prijspercentage")
+        _ax_band.set_ylabel("BPA-winst Π (€)")
+        _ax_band.yaxis.set_major_formatter(
+            _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+        _ax_band.set_title(
+            f"Winstband bij β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f})"
+            f"\nX = {_sb['X']:.3f}")
+        _ax_band.grid(True, alpha=0.3)
+        _ax_band.legend(fontsize=8)
+
+        # Verdeling van α*
+        _sb_opt_valid = _sbr["opt_alpha"][~np.isnan(_sbr["opt_alpha"])]
+        if _sb_opt_valid.size:
+            _ax_hist.hist(
+                _sb_opt_valid * 100.0,
+                bins=min(30, max(5, _sb_opt_valid.size // 5)),
+                color="#2ca02c", alpha=0.75, edgecolor="white")
+            _sb_p5v  = _sb_oap.get(5,  float("nan"))
+            _sb_p95v = _sb_oap.get(95, float("nan"))
+            for _p, _c in ((5, "#d62728"), (50, "#333333"), (95, "#d62728")):
+                _pv = _sb_oap.get(_p, float("nan"))
+                if np.isfinite(_pv):
+                    _ax_hist.axvline(_pv * 100.0, color=_c, ls="--", lw=1.5,
+                                      label=f"P{_p} = {_pv:.1%}")
+            if np.isfinite(_sb_p5v) and np.isfinite(_sb_p95v):
+                _ax_hist.axvspan(
+                    _sb_p5v * 100.0, _sb_p95v * 100.0,
+                    alpha=0.12, color="#d62728",
+                    label=f"bandbreedte {_sb_bw:.1%}")
+        _ax_hist.set_xlabel("optimale α* (%)")
+        _ax_hist.set_ylabel("frequentie")
+        _ax_hist.set_title("Verdeling van α* over β_r-trekkingen")
+        _ax_hist.grid(True, alpha=0.3)
+        _ax_hist.legend(fontsize=8)
+        _fig_sb.tight_layout()
+        st.pyplot(_fig_sb)
+        _plt_sb.close(_fig_sb)
+
+        # ── Grafiek 3: bandbreedte als functie van X (indien sweep) ──
+        _xsw_data = _sb.get("xsweep", [])
+        if _xsw_data:
+            _df_xsw = pd.DataFrame(_xsw_data)
+            _fig_xsw, _ax_xsw = _plt_sb.subplots(figsize=(9, 4.2))
+            _ax_xsw.fill_between(
+                _df_xsw["X"],
+                _df_xsw["α*_P5"]  * 100,
+                _df_xsw["α*_P95"] * 100,
+                color="#1f77b4", alpha=0.25, label="P5–P95 bandbreedte α*")
+            _ax_xsw.plot(
+                _df_xsw["X"], _df_xsw["α*_P50"] * 100,
+                color="#1f77b4", lw=2.2, marker="o", ms=4,
+                label="mediaan α* (P50)")
+            _ax_xsw2 = _ax_xsw.twinx()
+            _ax_xsw2.plot(
+                _df_xsw["X"], _df_xsw["bandbreedte"] * 100,
+                color="#d62728", lw=1.5, ls="--", marker="s", ms=4,
+                label="bandbreedte (P95−P5)")
+            _ax_xsw2.set_ylabel("bandbreedte P95−P5 (%)", color="#d62728")
+            _ax_xsw2.tick_params(axis="y", labelcolor="#d62728")
+            _ax_xsw.axvline(_sb["X"], color="grey", ls=":", lw=1,
+                             label=f"huidig X = {_sb['X']:.3f}")
+            _ax_xsw.set_xlabel("service level X")
+            _ax_xsw.set_ylabel("optimale α* (%)")
+            _ax_xsw.set_title(
+                f"Bandbreedte van optimale α* vs. service level X"
+                f"\n(β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f}), "
+                f"K = {int(_sbr['beta_r_samples'].size)})")
+            _ax_xsw.grid(True, alpha=0.3)
+            _l1, _lab1 = _ax_xsw.get_legend_handles_labels()
+            _l2, _lab2 = _ax_xsw2.get_legend_handles_labels()
+            _ax_xsw.legend(_l1 + _l2, _lab1 + _lab2, fontsize=9, loc="best")
+            _fig_xsw.tight_layout()
+            st.pyplot(_fig_xsw)
+            _plt_sb.close(_fig_xsw)
+
+            with st.expander("📋 Bandbreedte per X"):
+                _df_xsw_disp = _df_xsw.copy()
+                for _c in ["α*_P5", "α*_P50", "α*_P95", "bandbreedte"]:
+                    _df_xsw_disp[_c] = _df_xsw_disp[_c].map(
+                        lambda v: f"{v:.1%}")
+                st.dataframe(
+                    _df_xsw_disp, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "⬇️ Download X-sweep bandbreedte (CSV)",
+                    pd.DataFrame(_xsw_data).to_csv(
+                        sep=";", decimal=",", index=False).encode("utf-8"),
+                    file_name=f"alpha_bandbreedte_X_sweep_{date.today()}.csv",
+                    mime="text/csv",
+                    key="se_bru_xsw_dl")
+
+        # ── Download winst-band ───────────────────────────────────────
+        _sb_band_df = pd.DataFrame({
+            "alpha": _sb_ag,
+            "P5":    _sb_p5   if _sb_p5   is not None else np.nan,
+            "P50":   _sb_p50  if _sb_p50  is not None else np.nan,
+            "P95":   _sb_p95  if _sb_p95  is not None else np.nan,
+            "mean":  _sb_mean if _sb_mean is not None else np.nan,
+        })
+        st.download_button(
+            "⬇️ Download winst-band per α (CSV)",
+            _sb_band_df.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
+            file_name=f"alpha_bandbreedte_{date.today()}.csv",
+            mime="text/csv",
+            key="se_bru_dl")
+    else:
+        st.info(
+            "Stel de parameters in en klik op **🎲 Bereken α*-bandbreedte** "
+            "om de plot te genereren.")
 
 
