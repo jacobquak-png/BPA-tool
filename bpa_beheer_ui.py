@@ -5466,6 +5466,24 @@ with tab_sensitivity:
             "Aantal X-punten", min_value=3, max_value=20, value=8,
             key="se_bru_xsw_n")
 
+    _sb_do_brsweep = st.checkbox(
+        "Toon ook β_r → α* sweep (deterministisch)",
+        value=True, key="se_bru_brsweep",
+        help="Berekent voor elke β_r in het opgegeven bereik de "
+             "winstmaximaliserende α* en toont de functionele relatie "
+             "β_r → α*. Snel: één aanroep per β_r-punt (geen Monte-Carlo).")
+    if _sb_do_brsweep:
+        _sb_brs1, _sb_brs2, _sb_brs3 = st.columns(3)
+        _sb_brs_min = _sb_brs1.number_input(
+            "β_r sweep min", min_value=0.0, max_value=20.0, value=0.1,
+            step=0.1, format="%.2f", key="se_bru_brs_min")
+        _sb_brs_max = _sb_brs2.number_input(
+            "β_r sweep max", min_value=0.1, max_value=20.0, value=5.0,
+            step=0.1, format="%.2f", key="se_bru_brs_max")
+        _sb_brs_n = _sb_brs3.slider(
+            "Aantal β_r-punten", min_value=5, max_value=100, value=40,
+            key="se_bru_brs_n")
+
     _sb_run = st.button(
         "🎲 Bereken α*-bandbreedte", type="primary",
         disabled=not _cls_codes_se, key="se_bru_run")
@@ -5545,24 +5563,82 @@ with tab_sensitivity:
                                 "bandbreedte": round(_p95v - _p5v, 4),
                             })
 
+            # ── Deterministisch β_r → α* sweep ───────────────────────────
+            _sb_brsweep_rows = []
+            if _sb_res is not None and _sb_do_brsweep:
+                _brs_vals = list(np.linspace(
+                    float(_sb_brs_min), float(_sb_brs_max), int(_sb_brs_n)))
+                with st.spinner(
+                    f"β_r-sweep berekenen ({len(_brs_vals)} punten)"
+                    + (" — greedy" if _sb_greedy else "")
+                    + "…"
+                ):
+                    for _brv in _brs_vals:
+                        if _sb_greedy:
+                            _gs = greedy_alpha_sweep(
+                                _ov_sb, _sb_alpha_grid,
+                                float(_sb_budget),
+                                float(_sb_X), float(_sb_qeq), float(_brv),
+                                _sb_kbpa, _sb_kc,
+                                excel_file=_excel_arg_sb(),
+                                codes=_cls_codes_se,
+                            )
+                            if _gs.empty:
+                                continue
+                            _valid_gs = _gs.dropna(subset=["total_margin"])
+                            if _valid_gs.empty:
+                                continue
+                            if bool(_sb_feas):
+                                _pos_gs = _valid_gs[
+                                    _valid_gs["total_margin"] > 0]
+                                if not _pos_gs.empty:
+                                    _valid_gs = _pos_gs
+                            _best_gs = _valid_gs.loc[
+                                _valid_gs["total_margin"].idxmax()]
+                            _sb_brsweep_rows.append({
+                                "beta_r":     round(_brv, 4),
+                                "alpha_opt":  round(float(_best_gs["alpha"]), 4),
+                                "margin_opt": round(
+                                    float(_best_gs["total_margin"]), 2),
+                            })
+                        else:
+                            _, _best_br = optimale_alpha_bij_X(
+                                _ov_sb, float(_sb_X), _sb_alpha_grid,
+                                float(_sb_qeq), float(_brv),
+                                _sb_kbpa, _sb_kc,
+                                excel_file=_excel_arg_sb(),
+                                codes=_cls_codes_se,
+                                alleen_haalbaar=bool(_sb_feas),
+                            )
+                            if _best_br is not None:
+                                _sb_brsweep_rows.append({
+                                    "beta_r":     round(_brv, 4),
+                                    "alpha_opt":  round(
+                                        float(_best_br["alpha"]), 4),
+                                    "margin_opt": round(
+                                        float(_best_br["margin"]), 2),
+                                })
+
             if _sb_res is None:
                 st.warning(
                     "Geen resultaten — controleer de Adoptie-tab en selectie.")
                 st.session_state.pop("se_bru_data", None)
             else:
                 st.session_state["se_bru_data"] = {
-                    "res":       _sb_res,
-                    "X":         float(_sb_X),
-                    "brlo":      float(_sb_brlo),
-                    "brhi":      float(_sb_brhi),
-                    "xsweep":    _sb_xsweep_rows,
-                    "do_xsweep": bool(_sb_do_xsweep),
-                    "greedy":    bool(_sb_greedy),
-                    "budget":    float(_sb_budget) if _sb_greedy else None,
-                    "qeq":       float(_sb_qeq),
-                    "kbpa":      _sb_kbpa,
-                    "kc":        _sb_kc,
-                    "alpha_grid": _sb_alpha_grid,
+                    "res":        _sb_res,
+                    "X":          float(_sb_X),
+                    "brlo":       float(_sb_brlo),
+                    "brhi":       float(_sb_brhi),
+                    "xsweep":     _sb_xsweep_rows,
+                    "do_xsweep":  bool(_sb_do_xsweep),
+                    "br_sweep":   _sb_brsweep_rows,
+                    "do_brsweep": bool(_sb_do_brsweep),
+                    "greedy":     bool(_sb_greedy),
+                    "budget":     float(_sb_budget) if _sb_greedy else None,
+                    "qeq":        float(_sb_qeq),
+                    "kbpa":       _sb_kbpa,
+                    "kc":         _sb_kc,
+                    "alpha_grid":  _sb_alpha_grid,
                 }
 
     _sb = st.session_state.get("se_bru_data")
@@ -5712,6 +5788,78 @@ with tab_sensitivity:
                     mime="text/csv",
                     key="se_bru_xsw_dl")
 
+        # ── Grafiek: β_r → optimale α* sweep ─────────────────────────
+        _brsw_data = _sb.get("br_sweep", [])
+        if _brsw_data:
+            _df_brsw = pd.DataFrame(_brsw_data)
+            _fig_brsw, _ax_brsw = _plt_sb.subplots(figsize=(9, 4.2))
+            _ax_brsw.plot(
+                _df_brsw["beta_r"], _df_brsw["alpha_opt"] * 100,
+                color="#1f77b4", lw=2.2, marker="o", ms=3,
+                label="optimale α*(β_r)")
+            # Shade the uncertainty range
+            _ax_brsw.axvspan(
+                _sb["brlo"], _sb["brhi"],
+                alpha=0.13, color="#ff7f0e",
+                label=(
+                    f"onzekerheidsband β_r ∈ "
+                    f"[{_sb['brlo']:.2f}, {_sb['brhi']:.2f}]"))
+            # P5 / P50 / P95 horizontal reference lines from Monte-Carlo
+            for _p, _c, _ls in (
+                (5,  "#d62728", ":"),
+                (50, "#333333", "--"),
+                (95, "#d62728", ":"),
+            ):
+                _pv = _sb_oap.get(_p, float("nan"))
+                if np.isfinite(_pv):
+                    _ax_brsw.axhline(
+                        _pv * 100.0, color=_c, ls=_ls, lw=1.2,
+                        label=f"MC α* P{_p} = {_pv:.1%}")
+            # Second y-axis: optimal margin
+            _ax_brsw2 = _ax_brsw.twinx()
+            _ax_brsw2.plot(
+                _df_brsw["beta_r"], _df_brsw["margin_opt"],
+                color="#2ca02c", lw=1.4, ls="-.", alpha=0.75,
+                label="optimale marge (€)")
+            _ax_brsw2.set_ylabel("optimale marge (€)", color="#2ca02c")
+            _ax_brsw2.tick_params(axis="y", labelcolor="#2ca02c")
+            _ax_brsw2.yaxis.set_major_formatter(
+                _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+            _ax_brsw.set_xlabel("β_r — kostenratio-gevoeligheid")
+            _ax_brsw.set_ylabel("optimale α* (%)")
+            _ax_brsw.set_title(
+                ("Greedy o" if _sb.get("greedy") else "O")
+                + "ptimale α* als functie van β_r"
+                + (f"  |  budget ≤ €{_sb_bud_val:,.0f}"
+                   if _sb.get("greedy") else "")
+                + f"\nX = {_sb['X']:.3f},  "
+                + f"q_eq = {_sb.get('qeq', 0.55):.3f}")
+            _ax_brsw.grid(True, alpha=0.3)
+            _l1b, _lab1b = _ax_brsw.get_legend_handles_labels()
+            _l2b, _lab2b = _ax_brsw2.get_legend_handles_labels()
+            _ax_brsw.legend(
+                _l1b + _l2b, _lab1b + _lab2b, fontsize=9, loc="best")
+            _fig_brsw.tight_layout()
+            st.pyplot(_fig_brsw)
+            _plt_sb.close(_fig_brsw)
+
+            with st.expander("📋 β_r-sweep data"):
+                _df_brsw_disp = _df_brsw.copy()
+                _df_brsw_disp["alpha_opt"] = _df_brsw_disp["alpha_opt"].map(
+                    lambda v: f"{v:.1%}")
+                _df_brsw_disp["margin_opt"] = _df_brsw_disp["margin_opt"].map(
+                    lambda v: f"€{v:,.0f}")
+                _df_brsw_disp.columns = ["β_r", "α* (opt)", "Marge (opt)"]
+                st.dataframe(
+                    _df_brsw_disp, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "⬇️ Download β_r-sweep (CSV)",
+                    pd.DataFrame(_brsw_data).to_csv(
+                        sep=";", decimal=",", index=False).encode("utf-8"),
+                    file_name=f"br_alpha_sweep_{date.today()}.csv",
+                    mime="text/csv",
+                    key="se_bru_brsw_dl")
+
         # ── Greedy componentdetail ────────────────────────────────────
         if _sb_is_greedy and _sb_bud_val is not None:
             with st.expander("🔍 Componentdetail greedy-selectie"):
@@ -5810,5 +5958,3 @@ with tab_sensitivity:
             "om de plot te genereren.")
 
 
-
-                                    
