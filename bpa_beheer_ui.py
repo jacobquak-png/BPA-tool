@@ -4974,8 +4974,11 @@ with tab_sensitivity:
         "X":       {"label": "X — service level",              "axis": "X — service level",            "min": 0.50,   "max": 0.9999, "step": 0.005, "fmt": "%.3f"},
         "q_eq":    {"label": "q_eq — adoptie bij pariteit",     "axis": "q_eq — adoption at parity",    "min": 0.01,   "max": 0.99,   "step": 0.05,  "fmt": "%.3f"},
         "beta_r":  {"label": "β_r — kostenratio-gevoeligheid",  "axis": "β_r — cost-ratio sensitivity", "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
-        "kappa_c": {"label": "κ_c — kostenpariteit",            "axis": "κ_c — cost parity",            "min": 0.01,   "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
-        "epsilon": {"label": "ε — chance-constraint niveau",    "axis": "ε — CC level",                 "min": 0.0,    "max": 0.50,   "step": 0.01,  "fmt": "%.2f",
+        "kappa_c": {"label": "κ_c — kostenpariteit",            "axis": "κ_c — cost parity",              "min": 0.01,  "max": 1.0,  "step": 0.01,  "fmt": "%.3f"},
+        "ip_mult": {"label": "v_BPA — inkoopprijs multiplier",  "axis": "v_BPA — purchase price mult.",   "min": 0.10,  "max": 3.0,  "step": 0.05,  "fmt": "%.2f",
+                    "help": "Uniforme vermenigvuldiger op alle inkoopprijzen IP_i. "
+                             "1.0 = huidige prijzen; 0.5 = helft; 2.0 = dubbele prijs."},
+        "epsilon": {"label": "ε — chance-constraint niveau",    "axis": "ε — CC level",                   "min": 0.0,   "max": 0.50, "step": 0.01,  "fmt": "%.2f",
                     "help": "0 = geen CC; S* op (1−ε)-kwantiel Z_i^{1−ε} i.p.v. E[Z_i]. Alleen effectief in greedy modus."},
     }
 
@@ -4987,6 +4990,7 @@ with tab_sensitivity:
         "q_eq":    float(st.session_state.get("subsim_q_eq", 0.55)),
         "beta_r":  float(st.session_state.get("subsim_beta_r", 1.0)),
         "kappa_c": float(_kp_se.get("kappa_c", 0.25)),
+        "ip_mult": 1.0,
         "epsilon": 0.0,
     }
 
@@ -5435,6 +5439,15 @@ with tab_sensitivity:
             help="Bepaal α* per trekking alleen over haalbare α "
                  "(marge ≥ 0 én alle klanten profiteren).")
 
+    _sb_m = st.number_input(
+        "Margin-vereiste m (marge / omzet ≥ m)",
+        min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.2f",
+        key="se_bru_m",
+        help="Minimum vereiste verhouding marge/omzet voor een α om mee te "
+             "tellen als kandidaat-optimum. "
+             "0 = geen vereiste (standaard). "
+             "Bijv. 0.20 = alleen α met brutomarge ≥ 20% van de omzet.")
+
     _sb_greedy = st.checkbox(
         "📦 Greedy modus (budget-beperkte selectie)",
         value=False, key="se_bru_greedy",
@@ -5529,6 +5542,7 @@ with tab_sensitivity:
                     seed=(42 if _sb_seed else None),
                     alleen_haalbaar=bool(_sb_feas),
                     budget=float(_sb_budget) if _sb_greedy else None,
+                    margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                 )
 
             _sb_xsweep_rows = []
@@ -5550,6 +5564,7 @@ with tab_sensitivity:
                             seed=(42 if _sb_seed else None),
                             alleen_haalbaar=bool(_sb_feas),
                             budget=float(_sb_budget) if _sb_greedy else None,
+                            margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                         )
                         if _r is not None:
                             _p5v  = _r["opt_alpha_pct"].get(5,  float("nan"))
@@ -5593,6 +5608,13 @@ with tab_sensitivity:
                                     _valid_gs["total_margin"] > 0]
                                 if not _pos_gs.empty:
                                     _valid_gs = _pos_gs
+                            if _sb_m > 0 and "total_rev" in _valid_gs.columns:
+                                _rev_gs = _valid_gs["total_rev"].fillna(0.0)
+                                _mrm_gs = (_rev_gs > 0) & (
+                                    _valid_gs["total_margin"] / _rev_gs
+                                    >= float(_sb_m))
+                                if _mrm_gs.any():
+                                    _valid_gs = _valid_gs[_mrm_gs]
                             _best_gs = _valid_gs.loc[
                                 _valid_gs["total_margin"].idxmax()]
                             _sb_brsweep_rows.append({
@@ -5609,6 +5631,7 @@ with tab_sensitivity:
                                 excel_file=_excel_arg_sb(),
                                 codes=_cls_codes_se,
                                 alleen_haalbaar=bool(_sb_feas),
+                                margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                             )
                             if _best_br is not None:
                                 _sb_brsweep_rows.append({
@@ -5635,6 +5658,7 @@ with tab_sensitivity:
                     "do_brsweep": bool(_sb_do_brsweep),
                     "greedy":     bool(_sb_greedy),
                     "budget":     float(_sb_budget) if _sb_greedy else None,
+                    "m":          float(_sb_m),
                     "qeq":        float(_sb_qeq),
                     "kbpa":       _sb_kbpa,
                     "kc":         _sb_kc,
