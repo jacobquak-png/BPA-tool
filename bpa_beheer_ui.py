@@ -5435,6 +5435,20 @@ with tab_sensitivity:
             help="Bepaal α* per trekking alleen over haalbare α "
                  "(marge ≥ 0 én alle klanten profiteren).")
 
+    _sb_greedy = st.checkbox(
+        "📦 Greedy modus (budget-beperkte selectie)",
+        value=False, key="se_bru_greedy",
+        help="Berekent per β_r-trekking de greedy component-selectie binnen "
+             "het opgegeven budget. Toont de winst van de daadwerkelijk "
+             "gekozen subset i.p.v. de volledige portfolio.")
+    _sb_budget = None
+    if _sb_greedy:
+        _sb_budget = st.number_input(
+            "Budget (€)", min_value=0.0, value=100_000.0,
+            step=10_000.0, format="%.0f", key="se_bru_budget",
+            help="Maximaal investeringsbudget voor de greedy-selectie "
+                 "per β_r-trekking.")
+
     _sb_do_xsweep = st.checkbox(
         "Toon ook bandbreedte over een reeks X-waarden",
         value=False, key="se_bru_xsweep",
@@ -5483,7 +5497,9 @@ with tab_sensitivity:
 
             with st.spinner(
                 f"α*-bandbreedte berekenen ({int(_sb_K)} trekkingen × "
-                f"{int(_sb_an)} α-waarden)…"
+                f"{int(_sb_an)} α-waarden"
+                + (" — greedy per trekking" if _sb_greedy else "")
+                + "…"
             ):
                 _sb_res = beta_r_winstband(
                     _ov_sb, float(_sb_X), _sb_alpha_grid,
@@ -5494,6 +5510,7 @@ with tab_sensitivity:
                     codes=_cls_codes_se,
                     seed=(42 if _sb_seed else None),
                     alleen_haalbaar=bool(_sb_feas),
+                    budget=float(_sb_budget) if _sb_greedy else None,
                 )
 
             _sb_xsweep_rows = []
@@ -5514,6 +5531,7 @@ with tab_sensitivity:
                             codes=_cls_codes_se,
                             seed=(42 if _sb_seed else None),
                             alleen_haalbaar=bool(_sb_feas),
+                            budget=float(_sb_budget) if _sb_greedy else None,
                         )
                         if _r is not None:
                             _p5v  = _r["opt_alpha_pct"].get(5,  float("nan"))
@@ -5539,6 +5557,12 @@ with tab_sensitivity:
                     "brhi":      float(_sb_brhi),
                     "xsweep":    _sb_xsweep_rows,
                     "do_xsweep": bool(_sb_do_xsweep),
+                    "greedy":    bool(_sb_greedy),
+                    "budget":    float(_sb_budget) if _sb_greedy else None,
+                    "qeq":       float(_sb_qeq),
+                    "kbpa":      _sb_kbpa,
+                    "kc":        _sb_kc,
+                    "alpha_grid": _sb_alpha_grid,
                 }
 
     _sb = st.session_state.get("se_bru_data")
@@ -5592,13 +5616,19 @@ with tab_sensitivity:
             _ax_band.axvline(_sb_ag[_sb_ix], color="#d62728", ls=":", lw=1.5,
                               label=f"α*(P50) = {_sb_ag[_sb_ix]:.1%}")
         _ax_band.axhline(0, color="grey", lw=0.8, ls=":")
+        _sb_is_greedy = _sb.get("greedy", False)
+        _sb_bud_val   = _sb.get("budget")
         _ax_band.set_xlabel("α — prijspercentage")
-        _ax_band.set_ylabel("BPA-winst Π (€)")
+        _ax_band.set_ylabel(
+            f"greedy winst (€, budget ≤ €{_sb_bud_val:,.0f})"
+            if _sb_is_greedy else "BPA-winst Π (€)")
         _ax_band.yaxis.set_major_formatter(
             _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
         _ax_band.set_title(
-            f"Winstband bij β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f})"
-            f"\nX = {_sb['X']:.3f}")
+            ("Greedy w" if _sb_is_greedy else "W")
+            + f"instband bij β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f})"
+            + (f"  |  budget ≤ €{_sb_bud_val:,.0f}" if _sb_is_greedy else "")
+            + f"\nX = {_sb['X']:.3f}")
         _ax_band.grid(True, alpha=0.3)
         _ax_band.legend(fontsize=8)
 
@@ -5682,6 +5712,84 @@ with tab_sensitivity:
                     mime="text/csv",
                     key="se_bru_xsw_dl")
 
+        # ── Greedy componentdetail ────────────────────────────────────
+        if _sb_is_greedy and _sb_bud_val is not None:
+            with st.expander("🔍 Componentdetail greedy-selectie"):
+                _sbdet_ag  = _sb.get("alpha_grid", list(_sb_ag))
+                _sbdet_col1, _sbdet_col2 = st.columns([1, 2])
+                with _sbdet_col1:
+                    _sbdet_br_pct = st.selectbox(
+                        "β_r scenario",
+                        options=[5, 50, 95],
+                        format_func=lambda p: (
+                            f"P{p} (β_r ≈ "
+                            f"{_sb['brlo'] + p/100*(_sb['brhi']-_sb['brlo']):.2f})"),
+                        index=1, key="se_bru_det_br_pct")
+                with _sbdet_col2:
+                    _sbdet_a_idx = st.selectbox(
+                        "α waarde",
+                        options=range(len(_sbdet_ag)),
+                        format_func=lambda i: f"α = {_sbdet_ag[i]:.3f}",
+                        key="se_bru_det_alpha")
+
+                _sbdet_br = (_sb["brlo"]
+                             + _sbdet_br_pct / 100.0
+                             * (_sb["brhi"] - _sb["brlo"]))
+                _sbdet_a  = float(_sbdet_ag[_sbdet_a_idx])
+                _sbdet_n  = _cached_aantal_klanten(
+                    _file_mtime(_excel_se if isinstance(_excel_se, str) else ""),
+                    upload=_excel_arg_sb() if _excel_se else None,
+                )
+                try:
+                    _ov_sbdet = get_overzicht_df(cfg)
+                except Exception:
+                    _ov_sbdet = None
+                _sbdet_df = greedy_detail_for_params(
+                    overzicht_df=_ov_sbdet,
+                    alpha=_sbdet_a,
+                    service_level=float(_sb["X"]),
+                    q_eq=float(_sb.get("qeq", 0.55)),
+                    beta_r=float(_sbdet_br),
+                    kappa_bpa=float(_sb.get("kbpa", 0.20)),
+                    kappa_c=float(_sb.get("kc", 0.25)),
+                    budget=float(_sb_bud_val),
+                    n_series=_sbdet_n,
+                )
+                if _sbdet_df.empty:
+                    st.info("Geen componentdata beschikbaar voor dit punt.")
+                else:
+                    _sbdet_nsel = int(_sbdet_df["geselecteerd"].sum())
+                    _sbdet_ntot = len(_sbdet_df)
+                    _sbdet_inv  = _sbdet_df.loc[
+                        _sbdet_df["geselecteerd"], "Inv (€)"].sum()
+                    _sbdet_mar  = _sbdet_df.loc[
+                        _sbdet_df["geselecteerd"], "Marge (€)"].sum()
+                    st.caption(
+                        f"📦 **{_sbdet_nsel} / {_sbdet_ntot}** componenten "
+                        f"geselecteerd — investering **€{_sbdet_inv:,.0f}** / "
+                        f"budget €{_sb_bud_val:,.0f} — "
+                        f"totale marge **€{_sbdet_mar:,.0f}**")
+
+                    def _sbdet_highlight(row):
+                        bg = ("background-color: #d4edda"
+                              if row["geselecteerd"]
+                              else "background-color: #f8f9fa; color: #888")
+                        return [bg] * len(row)
+
+                    _sbdet_disp = _sbdet_df.copy()
+                    if not _sbdet_disp["omschrijving"].any():
+                        _sbdet_disp = _sbdet_disp.drop(columns=["omschrijving"])
+                    st.dataframe(
+                        _sbdet_disp.style.apply(_sbdet_highlight, axis=1),
+                        use_container_width=True, height=430)
+                    st.download_button(
+                        "⬇️ Download componentdetail (CSV)",
+                        _sbdet_df.to_csv(
+                            sep=";", decimal=",", index=False).encode("utf-8"),
+                        file_name=f"greedy_detail_bandbreedte_{date.today()}.csv",
+                        mime="text/csv",
+                        key="se_bru_det_dl")
+
         # ── Download winst-band ───────────────────────────────────────
         _sb_band_df = pd.DataFrame({
             "alpha": _sb_ag,
@@ -5702,3 +5810,5 @@ with tab_sensitivity:
             "om de plot te genereren.")
 
 
+
+                                    
