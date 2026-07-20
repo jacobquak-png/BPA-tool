@@ -991,7 +991,9 @@ def metrieken_voor_wtp_grid(
         _x  = float(p['X'])
         _qe = float(p['q_eq'])
         _br = float(p['beta_r'])
-        _kc = float(p.get('kappa_c', kappa_c))
+        _kc      = float(p.get('kappa_c', kappa_c))
+        _kb      = float(p.get('kappa_bpa', kappa_bpa))
+        _ip_mult = float(p.get('ip_mult', 1.0))
         _q       = adoptie_kans(_a, _kc, _qe, _br)
         _ez      = (_n * _q).reindex(base.index)
         _total_z = float(_ez.sum())
@@ -1001,9 +1003,11 @@ def metrieken_voor_wtp_grid(
             _eps = p.get('epsilon', None)
             if _eps is not None and float(_eps) <= 0:
                 _eps = None
+            _ov_ip = (overzicht_df if _ip_mult == 1.0
+                      else overzicht_df.assign(IP=overzicht_df['IP'] * _ip_mult))
             _gs = greedy_alpha_sweep(
-                overzicht_df, [_a], float(budget), _x,
-                _qe, _br, float(kappa_bpa), _kc,
+                _ov_ip, [_a], float(budget), _x,
+                _qe, _br, float(_kb), _kc,
                 n_series=_n,
                 epsilon=_eps,
             )
@@ -1040,12 +1044,14 @@ def metrieken_voor_wtp_grid(
         mod = base.copy()
         mod['n_klanten'] = _n_int.values
         mod['lambda_jr'] = (_z_cc * lam_per_cust).values  # Z_cc bepaalt stock
+        if _ip_mult != 1.0:
+            mod['IP'] = base['IP'].values * _ip_mult
         _rec = {'total_Z': _total_z, 'q': float(_q)}
         if int(mod['n_klanten'].sum()) <= 0:
             _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False})
         else:
             try:
-                _model, _res = bouw_model_kosten(mod, _a, kappa_bpa, _kc, _x)
+                _model, _res = bouw_model_kosten(mod, _a, _kb, _kc, _x)
                 _rec.update({
                     'bpa_margin': float(_res['bpa_margin']),
                     'surplus':    float(sum(
@@ -1088,10 +1094,11 @@ def optimale_alpha_bij_X(
     beta_r:    float,
     kappa_bpa: float,
     kappa_c:   float,
-    excel_file       = None,
-    codes            = None,
+    excel_file            = None,
+    codes                 = None,
     alleen_haalbaar: bool = False,
     epsilon: float        = None,
+    margin_ratio_min: float = None,
 ):
     """Zoek het prijspercentage α dat de BPA-marge maximaliseert bij vast X.
 
@@ -1125,6 +1132,13 @@ def optimale_alpha_bij_X(
         _haalbaar = _geldig[_geldig['feasible']]
         if not _haalbaar.empty:
             _kandidaten = _haalbaar
+    if margin_ratio_min is not None and float(margin_ratio_min) > 0:
+        if 'revenue' in _kandidaten.columns:
+            _rev = _kandidaten['revenue'].fillna(0.0)
+            _mrm = (_rev > 0) & (
+                _kandidaten['margin'] / _rev >= float(margin_ratio_min))
+            if _mrm.any():
+                _kandidaten = _kandidaten[_mrm]
     best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
     return curve, best
 
@@ -1142,10 +1156,11 @@ def beta_r_winstband(
     excel_file        = None,
     codes             = None,
     seed              = None,
-    alleen_haalbaar:  bool = False,
-    percentielen      = (5, 50, 95),
-    epsilon: float    = None,
-    budget: float     = None,
+    alleen_haalbaar:  bool  = False,
+    percentielen           = (5, 50, 95),
+    epsilon: float         = None,
+    budget: float          = None,
+    margin_ratio_min: float = None,
 ):
     """β_r-parameteronzekerheid: uniforme bandbreedte voor winst-vs-α en optimale α.
 
@@ -1224,6 +1239,14 @@ def beta_r_winstband(
                 _pos = _valid[_valid['total_margin'] > 0]
                 if not _pos.empty:
                     _kandidaten = _pos
+            if margin_ratio_min is not None and float(margin_ratio_min) > 0:
+                if 'total_rev' in _kandidaten.columns:
+                    _rev = _kandidaten['total_rev'].fillna(0.0)
+                    _mrm = (_rev > 0) & (
+                        _kandidaten['total_margin'] / _rev
+                        >= float(margin_ratio_min))
+                    if _mrm.any():
+                        _kandidaten = _kandidaten[_mrm]
             _best = _kandidaten.loc[_kandidaten['total_margin'].idxmax()]
             _opt_a[_k] = float(_best['alpha'])
             _opt_m[_k] = float(_best['total_margin'])
@@ -1247,6 +1270,14 @@ def beta_r_winstband(
                 _haalbaar = _valid[_valid['feasible']]
                 if not _haalbaar.empty:
                     _kandidaten = _haalbaar
+            if margin_ratio_min is not None and float(margin_ratio_min) > 0:
+                if 'revenue' in _kandidaten.columns:
+                    _rev = _kandidaten['revenue'].fillna(0.0)
+                    _mrm = (_rev > 0) & (
+                        _kandidaten['margin'] / _rev
+                        >= float(margin_ratio_min))
+                    if _mrm.any():
+                        _kandidaten = _kandidaten[_mrm]
             _best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
             _opt_a[_k] = float(_best['alpha'])
             _opt_m[_k] = float(_best['margin'])
