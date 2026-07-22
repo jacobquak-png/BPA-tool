@@ -968,6 +968,8 @@ def metrieken_voor_wtp_grid(
         return {
             'bpa_margin': float('nan'), 'surplus': float('nan'),
             'total_Z': float('nan'), 'q': float('nan'), 'feasible': False,
+            'revenue': float('nan'), 'costs': float('nan'),
+            'stock_level': float('nan'), 'inv_total': float('nan'),
         }
 
     if overzicht_df is None or overzicht_df.empty or not param_dicts:
@@ -994,21 +996,32 @@ def metrieken_voor_wtp_grid(
         _kc      = float(p.get('kappa_c', kappa_c))
         _kb      = float(p.get('kappa_bpa', kappa_bpa))
         _ip_mult = float(p.get('ip_mult', 1.0))
+        _n_mult  = float(p.get('n_mult', 1.0))
+        _lt_mult = float(p.get('lt_mult', 1.0))
         _q       = adoptie_kans(_a, _kc, _qe, _br)
-        _ez      = (_n * _q).reindex(base.index)
+        # Effective customer base: scale M_i by n_mult (default 1.0 = unchanged).
+        _n_eff   = (_n * _n_mult).reindex(base.index).fillna(0.0)
+        _ez      = _n_eff * _q
         _total_z = float(_ez.sum())
 
-        if budget is not None:
+        _bgt = p.get('budget', budget)
+        if _bgt is not None:
+            _bgt = float(_bgt)
+        if _bgt is not None:
             # Greedy modus: run greedy voor deze (α, X, q_eq, β_r)-combinatie.
             _eps = p.get('epsilon', None)
             if _eps is not None and float(_eps) <= 0:
                 _eps = None
-            _ov_ip = (overzicht_df if _ip_mult == 1.0
-                      else overzicht_df.assign(IP=overzicht_df['IP'] * _ip_mult))
+            _ov_mod = overzicht_df
+            if _ip_mult != 1.0:
+                _ov_mod = _ov_mod.assign(IP=_ov_mod['IP'] * _ip_mult)
+            if _lt_mult != 1.0:
+                _ov_mod = _ov_mod.assign(LT_dagen=_ov_mod['LT_dagen'] * _lt_mult)
+            _n_ser = (_n * _n_mult) if _n_mult != 1.0 else _n
             _gs = greedy_alpha_sweep(
-                _ov_ip, [_a], float(budget), _x,
+                _ov_mod, [_a], _bgt, _x,
                 _qe, _br, float(_kb), _kc,
-                n_series=_n,
+                n_series=_n_ser,
                 epsilon=_eps,
             )
             if _gs.empty:
@@ -1021,20 +1034,27 @@ def metrieken_voor_wtp_grid(
                     'total_Z':    float(_row['total_Z']),
                     'q':          float(_row['q']),
                     'feasible':   float(_row['total_margin']) >= 0,
+                    'revenue':    float(_row.get('total_rev',   float('nan'))),
+                    'costs':      float(_row.get('total_cbpa',  float('nan'))),
+                    'stock_level': float('nan'),
+                    'inv_total':  float(_row.get('total_inv',   float('nan'))),
                 })
             continue
 
-        _n_int = _ez.round().clip(lower=0).astype(int)  # E[Z_i] – voor omzet
+        # n_klanten voor modelstructuur: ceil zodat componenten met E[Z_i]>0
+        # nooit worden weggerond naar 0. Omzet/marge worden post-hoc berekend
+        # met continue _ez zodat afronden de financiële uitkomsten niet verstoort.
+        _n_ceil = np.ceil(_ez).clip(lower=0).astype(int)
         # Chance-constrained stock (spiegelt pareto_alpha_X):
         # omzet op E[Z_i], stock op (1-ε)-kwantiel Z_i^{1-ε}.
+        # Uses _n_eff (already scaled by n_mult) as the M_i population.
         _eps_v = p.get('epsilon', None)
         if _eps_v is not None and float(_eps_v) > 0:
             _level = 1.0 - float(_eps_v)
-            _n_base_v = _n.reindex(base.index).fillna(0.0).values
             _z_cc = pd.Series(
                 np.maximum(
                     [float(binomiale_quantile(int(round(float(_mi))), float(_q), _level))
-                     for _mi in _n_base_v],
+                     for _mi in _n_eff.values],
                     _ez.values,
                 ),
                 index=base.index, dtype=float,
@@ -1042,25 +1062,49 @@ def metrieken_voor_wtp_grid(
         else:
             _z_cc = _ez  # geen CC: stock op verwachte waarde
         mod = base.copy()
-        mod['n_klanten'] = _n_int.values
+        mod['n_klanten'] = _n_ceil.values
         mod['lambda_jr'] = (_z_cc * lam_per_cust).values  # Z_cc bepaalt stock
         if _ip_mult != 1.0:
             mod['IP'] = base['IP'].values * _ip_mult
+        if _lt_mult != 1.0:
+            mod['LT_dagen'] = base['LT_dagen'].values * _lt_mult
+        # Continue E[Z_i]-waarden voor omzetberekening (nooit afronden).
+        _ez_mod  = _ez.reindex(mod.index).fillna(0.0)
+        _vp_col  = 'VP' if 'VP' in mod.columns else 'IP'
         _rec = {'total_Z': _total_z, 'q': float(_q)}
-        if int(mod['n_klanten'].sum()) <= 0:
-            _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False})
+        if _ez_mod.sum() <= 0:
+            _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False,
+                         'revenue': 0.0, 'costs': 0.0, 'stock_level': 0.0, 'inv_total': 0.0})
         else:
             try:
                 _model, _res = bouw_model_kosten(mod, _a, _kb, _kc, _x)
+                _stk     = _model.calculate_base_stock_levels()
+                _stk_tot = float(sum(_stk.values()))
+                _inv_tot = float(sum(
+                    _stk.get(code, 0) * float(mod.at[code, 'IP'])
+                    for code in mod.index
+                ))
+                # Post-hoc omzet/marge met continue E[Z_i] (geen afrondingsfout).
+                _rev_cont    = float((_ez_mod * _a * mod[_vp_col]).sum())
+                _costs_cont  = float(_res.get('bpa_costs', float('nan')))
+                _margin_cont = (_rev_cont - _costs_cont
+                                if np.isfinite(_costs_cont) else float('nan'))
                 _rec.update({
-                    'bpa_margin': float(_res['bpa_margin']),
-                    'surplus':    float(sum(
+                    'bpa_margin':  _margin_cont,
+                    'surplus':     float(sum(
                         v['savings'] for v in _res['customer_benefits'].values())),
-                    'feasible':   bool(_res['feasible']),
+                    'feasible':    (_margin_cont >= 0
+                                    if np.isfinite(_margin_cont) else False),
+                    'revenue':     _rev_cont,
+                    'costs':       _costs_cont,
+                    'stock_level': _stk_tot,
+                    'inv_total':   _inv_tot,
                 })
             except Exception:
-                _rec.update({'bpa_margin': float('nan'),
-                             'surplus': float('nan'), 'feasible': False})
+                _rec.update({'bpa_margin': float('nan'), 'surplus': float('nan'),
+                             'feasible': False, 'revenue': float('nan'),
+                             'costs': float('nan'), 'stock_level': float('nan'),
+                             'inv_total': float('nan')})
         resultaten.append(_rec)
     return resultaten
 
