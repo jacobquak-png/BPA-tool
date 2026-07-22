@@ -4975,9 +4975,18 @@ with tab_sensitivity:
         "q_eq":    {"label": "q_eq — adoptie bij pariteit",     "axis": "q_eq — adoption at parity",    "min": 0.01,   "max": 0.99,   "step": 0.05,  "fmt": "%.3f"},
         "beta_r":  {"label": "β_r — kostenratio-gevoeligheid",  "axis": "β_r — cost-ratio sensitivity", "min": 0.0,    "max": 20.0,   "step": 0.1,   "fmt": "%.2f"},
         "kappa_c": {"label": "κ_c — kostenpariteit",            "axis": "κ_c — cost parity",              "min": 0.01,  "max": 1.0,  "step": 0.01,  "fmt": "%.3f"},
+        "kappa_bpa": {"label": "κ_BPA — BPA voorraadkosten-rate",  "axis": "κ_BPA — BPA carrying rate",       "min": 0.01,  "max": 1.0,  "step": 0.01,  "fmt": "%.3f",
+                    "help": "BPA interne kapitaalkosten per jaar als fractie van de inkoopprijs. "
+                             "Standaard ≈ 0.20."},
         "ip_mult": {"label": "v_BPA — inkoopprijs multiplier",  "axis": "v_BPA — purchase price mult.",   "min": 0.10,  "max": 3.0,  "step": 0.05,  "fmt": "%.2f",
                     "help": "Uniforme vermenigvuldiger op alle inkoopprijzen IP_i. "
                              "1.0 = huidige prijzen; 0.5 = helft; 2.0 = dubbele prijs."},
+        "n_mult":  {"label": "n — klantenvolume multiplier",    "axis": "n — customer volume mult.",      "min": 0.10,  "max": 5.0,  "step": 0.10,  "fmt": "%.2f",
+                    "help": "Schaal het aantal klanten M_i per component. "
+                             "1.0 = huidig; 2.0 = dubbel klantenbestand."},
+        "lt_mult": {"label": "LT — levertijd multiplier",       "axis": "LT — lead-time mult.",           "min": 0.10,  "max": 5.0,  "step": 0.10,  "fmt": "%.2f",
+                    "help": "Schaal alle levertijden LT_i. "
+                             "1.0 = huidig; 2.0 = dubbele levertijden (hogere S*)."},
         "epsilon": {"label": "ε — chance-constraint niveau",    "axis": "ε — CC level",                   "min": 0.0,   "max": 0.50, "step": 0.01,  "fmt": "%.2f",
                     "help": "0 = geen CC; S* op (1−ε)-kwantiel Z_i^{1−ε} i.p.v. E[Z_i]. Alleen effectief in greedy modus."},
     }
@@ -4990,7 +4999,10 @@ with tab_sensitivity:
         "q_eq":    float(st.session_state.get("subsim_q_eq", 0.55)),
         "beta_r":  float(st.session_state.get("subsim_beta_r", 1.0)),
         "kappa_c": float(_kp_se.get("kappa_c", 0.25)),
+        "kappa_bpa": float(_kappa_bpa_se),
         "ip_mult": 1.0,
+        "n_mult":   1.0,
+        "lt_mult":  1.0,
         "epsilon": 0.0,
     }
 
@@ -5002,10 +5014,16 @@ with tab_sensitivity:
 
     # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
     _Y_METRICS = {
-        "bpa_margin": {"label": "Total BPA margin (€)",              "axis": "total BPA margin (€)",                  "tbl": "BPA margin (€)",    "kind": "euro"},
-        "surplus":    {"label": "Total customer surplus (€)",          "axis": "total customer surplus (€)",            "tbl": "Customer surplus (€)", "kind": "euro"},
-        "total_Z":    {"label": "Expected subscriptions E[Z]",         "axis": "expected number of subscriptions E[Z]", "tbl": "E[Z]",             "kind": "num"},
-        "q":          {"label": "Adoption probability q(α)",           "axis": "adoption probability q(α)",             "tbl": "q(α)",             "kind": "pct"},
+        "bpa_margin":    {"label": "Total BPA margin (€)",                 "axis": "total BPA margin (€)",                  "tbl": "BPA margin (€)",       "kind": "euro"},
+        "revenue":       {"label": "Subscription revenue (€)",             "axis": "subscription revenue (€)",              "tbl": "Revenue (€)",          "kind": "euro"},
+        "costs":         {"label": "BPA carrying costs (€)",               "axis": "BPA carrying costs (€)",                "tbl": "Carrying costs (€)",   "kind": "euro"},
+        "surplus":       {"label": "Total customer surplus (€)",           "axis": "total customer surplus (€)",            "tbl": "Customer surplus (€)", "kind": "euro"},
+        "inv_total":     {"label": "Stock investment Σ Sᵢ·IPᵢ (€)",       "axis": "stock investment Σ Sᵢ·IPᵢ (€)",        "tbl": "Investment (€)",       "kind": "euro"},
+        "margin_ratio":  {"label": "Margin ratio (margin / revenue)",      "axis": "margin ratio (margin / revenue)",       "tbl": "Margin ratio",         "kind": "pct"},
+        "margin_per_sub":{"label": "Margin per subscriber (€/sub)",        "axis": "margin per subscriber (€/sub)",         "tbl": "Margin/sub (€)",       "kind": "euro"},
+        "total_Z":       {"label": "Expected subscriptions E[Z]",          "axis": "expected subscriptions E[Z]",           "tbl": "E[Z]",                 "kind": "num"},
+        "stock_level":   {"label": "Total base stock Σ Sᵢ (units)",        "axis": "total base stock Σ Sᵢ (units)",         "tbl": "Total stock (units)",  "kind": "num"},
+        "q":             {"label": "Adoption probability q(α)",            "axis": "adoption probability q(α)",             "tbl": "q(α)",                 "kind": "pct"},
     }
 
     # ── Afhankelijke (y-as) variabele ─────────────────────────────────────
@@ -5192,7 +5210,22 @@ with tab_sensitivity:
                         excel_file=_excel_arg_se(), codes=_cls_codes_se,
                         budget=float(_se_budget) if _se_greedy else None,
                     )
-                    _yvals = [r.get(_y_var, float("nan")) for r in _recs]
+                    _yvals_raw = {r_key: [r.get(r_key, float("nan")) for r in _recs]
+                                  for r_key in ("bpa_margin", "revenue", "total_Z")}
+                    if _y_var == "margin_ratio":
+                        _yvals = [
+                            m / v if (np.isfinite(m) and np.isfinite(v) and v > 0)
+                            else float("nan")
+                            for m, v in zip(_yvals_raw["bpa_margin"], _yvals_raw["revenue"])
+                        ]
+                    elif _y_var == "margin_per_sub":
+                        _yvals = [
+                            m / z if (np.isfinite(m) and np.isfinite(z) and z > 0)
+                            else float("nan")
+                            for m, z in zip(_yvals_raw["bpa_margin"], _yvals_raw["total_Z"])
+                        ]
+                    else:
+                        _yvals = [r.get(_y_var, float("nan")) for r in _recs]
                     _nx = len(_x_grid)
                     _per_curve = [
                         _yvals[_i * _nx:(_i + 1) * _nx]
