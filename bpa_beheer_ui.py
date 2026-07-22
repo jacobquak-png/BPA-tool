@@ -5448,6 +5448,14 @@ with tab_sensitivity:
              "0 = geen vereiste (standaard). "
              "Bijv. 0.20 = alleen α met brutomarge ≥ 20% van de omzet.")
 
+    _sb_eps = st.number_input(
+        "ε — chance-constraint niveau",
+        min_value=0.0, max_value=0.50, value=0.0, step=0.01, format="%.2f",
+        key="se_bru_eps",
+        help="Kans dat de service-belofte niet wordt gehaald door hogere adoptie "
+             "dan verwacht. 0 = verwachte waarde (geen CC). "
+             "Bijv. 0.05 → stock op 95%-kwantiel van Z_i.")
+
     _sb_greedy = st.checkbox(
         "📦 Greedy modus (budget-beperkte selectie)",
         value=False, key="se_bru_greedy",
@@ -5497,6 +5505,15 @@ with tab_sensitivity:
             "Aantal β_r-punten", min_value=5, max_value=100, value=40,
             key="se_bru_brs_n")
 
+    def _excel_arg_sb():
+        if _excel_se is None:
+            return None
+        try:
+            _excel_se.seek(0)
+        except (AttributeError, ValueError):
+            pass
+        return _excel_se
+
     _sb_run = st.button(
         "🎲 Bereken α*-bandbreedte", type="primary",
         disabled=not _cls_codes_se, key="se_bru_run")
@@ -5517,15 +5534,6 @@ with tab_sensitivity:
             _sb_kbpa = float(_kp_se.get("kappa_bpa", 0.20))
             _sb_kc   = float(_kp_se.get("kappa_c",   0.25))
 
-            def _excel_arg_sb():
-                if _excel_se is None:
-                    return None
-                try:
-                    _excel_se.seek(0)
-                except (AttributeError, ValueError):
-                    pass
-                return _excel_se
-
             with st.spinner(
                 f"α*-bandbreedte berekenen ({int(_sb_K)} trekkingen × "
                 f"{int(_sb_an)} α-waarden"
@@ -5541,6 +5549,7 @@ with tab_sensitivity:
                     codes=_cls_codes_se,
                     seed=(42 if _sb_seed else None),
                     alleen_haalbaar=bool(_sb_feas),
+                    epsilon=float(_sb_eps) if _sb_eps > 0 else None,
                     budget=float(_sb_budget) if _sb_greedy else None,
                     margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                 )
@@ -5563,6 +5572,7 @@ with tab_sensitivity:
                             codes=_cls_codes_se,
                             seed=(42 if _sb_seed else None),
                             alleen_haalbaar=bool(_sb_feas),
+                            epsilon=float(_sb_eps) if _sb_eps > 0 else None,
                             budget=float(_sb_budget) if _sb_greedy else None,
                             margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                         )
@@ -5597,6 +5607,7 @@ with tab_sensitivity:
                                 _sb_kbpa, _sb_kc,
                                 excel_file=_excel_arg_sb(),
                                 codes=_cls_codes_se,
+                                epsilon=float(_sb_eps) if _sb_eps > 0 else None,
                             )
                             if _gs.empty:
                                 continue
@@ -5631,6 +5642,7 @@ with tab_sensitivity:
                                 excel_file=_excel_arg_sb(),
                                 codes=_cls_codes_se,
                                 alleen_haalbaar=bool(_sb_feas),
+                                epsilon=float(_sb_eps) if _sb_eps > 0 else None,
                                 margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                             )
                             if _best_br is not None:
@@ -5659,6 +5671,7 @@ with tab_sensitivity:
                     "greedy":     bool(_sb_greedy),
                     "budget":     float(_sb_budget) if _sb_greedy else None,
                     "m":          float(_sb_m),
+                    "epsilon":    float(_sb_eps) if _sb_eps > 0 else None,
                     "qeq":        float(_sb_qeq),
                     "kbpa":       _sb_kbpa,
                     "kc":         _sb_kc,
@@ -5696,21 +5709,21 @@ with tab_sensitivity:
             f"bandbreedte **{_sb_bw:.1%}**)."
         )
 
-        # ── Grafiek 1 + 2 naast elkaar ────────────────────────────────
-        _fig_sb, (_ax_band, _ax_hist) = _plt_sb.subplots(
-            1, 2, figsize=(13, 4.5))
+        # ── Plots 1 + 2 + 3 side by side ────────────────────────────────
+        _fig_sb, (_ax_band, _ax_hist, _ax_ecdf) = _plt_sb.subplots(
+            1, 3, figsize=(19, 4.5))
 
-        # Winstband vs α
+        # Profit band vs α
         if _sb_p5 is not None and _sb_p95 is not None:
             _ax_band.fill_between(
                 _sb_ag, _sb_p5, _sb_p95,
                 color="#1f77b4", alpha=0.20, label="P5–P95 band")
         if _sb_p50 is not None:
             _ax_band.plot(_sb_ag, _sb_p50, color="#1f77b4", lw=2.2,
-                           label="mediaan winst (P50)")
+                           label="median profit (P50)")
         if _sb_mean is not None:
             _ax_band.plot(_sb_ag, _sb_mean, color="#ff7f0e",
-                           lw=1.4, ls="--", label="gemiddelde E[Π]")
+                           lw=1.4, ls="--", label="mean E[Π]")
         if _sb_p50 is not None and np.isfinite(_sb_p50).any():
             _sb_ix = int(np.nanargmax(_sb_p50))
             _ax_band.axvline(_sb_ag[_sb_ix], color="#d62728", ls=":", lw=1.5,
@@ -5718,21 +5731,21 @@ with tab_sensitivity:
         _ax_band.axhline(0, color="grey", lw=0.8, ls=":")
         _sb_is_greedy = _sb.get("greedy", False)
         _sb_bud_val   = _sb.get("budget")
-        _ax_band.set_xlabel("α — prijspercentage")
+        _ax_band.set_xlabel("α — subscription rate")
         _ax_band.set_ylabel(
-            f"greedy winst (€, budget ≤ €{_sb_bud_val:,.0f})"
-            if _sb_is_greedy else "BPA-winst Π (€)")
+            f"greedy profit (€, budget ≤ €{_sb_bud_val:,.0f})"
+            if _sb_is_greedy else "BPA profit Π (€)")
         _ax_band.yaxis.set_major_formatter(
             _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
         _ax_band.set_title(
-            ("Greedy w" if _sb_is_greedy else "W")
-            + f"instband bij β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f})"
+            ("Greedy p" if _sb_is_greedy else "P")
+            + f"rofit band for β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f})"
             + (f"  |  budget ≤ €{_sb_bud_val:,.0f}" if _sb_is_greedy else "")
             + f"\nX = {_sb['X']:.3f}")
         _ax_band.grid(True, alpha=0.3)
         _ax_band.legend(fontsize=8)
 
-        # Verdeling van α*
+        # Histogram of α*
         _sb_opt_valid = _sbr["opt_alpha"][~np.isnan(_sbr["opt_alpha"])]
         if _sb_opt_valid.size:
             _ax_hist.hist(
@@ -5750,12 +5763,32 @@ with tab_sensitivity:
                 _ax_hist.axvspan(
                     _sb_p5v * 100.0, _sb_p95v * 100.0,
                     alpha=0.12, color="#d62728",
-                    label=f"bandbreedte {_sb_bw:.1%}")
-        _ax_hist.set_xlabel("optimale α* (%)")
-        _ax_hist.set_ylabel("frequentie")
-        _ax_hist.set_title("Verdeling van α* over β_r-trekkingen")
+                    label=f"bandwidth {_sb_bw:.1%}")
+        _ax_hist.set_xlabel("optimal α* (%)")
+        _ax_hist.set_ylabel("frequency")
+        _ax_hist.set_title("Distribution of α* across β_r draws")
         _ax_hist.grid(True, alpha=0.3)
         _ax_hist.legend(fontsize=8)
+
+        # ECDF of optimal α*
+        if _sb_opt_valid.size:
+            _ecdf_x = np.sort(_sb_opt_valid) * 100.0
+            _ecdf_y = np.arange(1, _ecdf_x.size + 1) / float(_ecdf_x.size)
+            _ax_ecdf.step(_ecdf_x, _ecdf_y, where="post",
+                           color="#9467bd", lw=2.2, label="ECDF")
+            for _p, _c in ((5, "#d62728"), (50, "#333333"), (95, "#d62728")):
+                _pv = _sb_oap.get(_p, float("nan"))
+                if np.isfinite(_pv):
+                    _ax_ecdf.axvline(_pv * 100.0, color=_c, ls="--", lw=1.5,
+                                      label=f"P{_p} = {_pv:.1%}")
+            _ax_ecdf.axhline(0.05, color="#d62728", ls=":", lw=0.8, alpha=0.5)
+            _ax_ecdf.axhline(0.95, color="#d62728", ls=":", lw=0.8, alpha=0.5)
+        _ax_ecdf.set_xlabel("Optimal α* (%)")
+        _ax_ecdf.set_ylabel("Cumulative probability")
+        _ax_ecdf.set_title("ECDF of optimal α*\nacross β_r draws")
+        _ax_ecdf.set_ylim(0, 1)
+        _ax_ecdf.grid(True, alpha=0.3)
+        _ax_ecdf.legend(fontsize=8)
         _fig_sb.tight_layout()
         st.pyplot(_fig_sb)
         _plt_sb.close(_fig_sb)
@@ -5769,24 +5802,24 @@ with tab_sensitivity:
                 _df_xsw["X"],
                 _df_xsw["α*_P5"]  * 100,
                 _df_xsw["α*_P95"] * 100,
-                color="#1f77b4", alpha=0.25, label="P5–P95 bandbreedte α*")
+                color="#1f77b4", alpha=0.25, label="P5–P95 bandwidth α*")
             _ax_xsw.plot(
                 _df_xsw["X"], _df_xsw["α*_P50"] * 100,
                 color="#1f77b4", lw=2.2, marker="o", ms=4,
-                label="mediaan α* (P50)")
+                label="median α* (P50)")
             _ax_xsw2 = _ax_xsw.twinx()
             _ax_xsw2.plot(
                 _df_xsw["X"], _df_xsw["bandbreedte"] * 100,
                 color="#d62728", lw=1.5, ls="--", marker="s", ms=4,
-                label="bandbreedte (P95−P5)")
-            _ax_xsw2.set_ylabel("bandbreedte P95−P5 (%)", color="#d62728")
+                label="bandwidth (P95−P5)")
+            _ax_xsw2.set_ylabel("bandwidth P95−P5 (%)", color="#d62728")
             _ax_xsw2.tick_params(axis="y", labelcolor="#d62728")
             _ax_xsw.axvline(_sb["X"], color="grey", ls=":", lw=1,
-                             label=f"huidig X = {_sb['X']:.3f}")
+                             label=f"current X = {_sb['X']:.3f}")
             _ax_xsw.set_xlabel("service level X")
-            _ax_xsw.set_ylabel("optimale α* (%)")
+            _ax_xsw.set_ylabel("optimal α* (%)")
             _ax_xsw.set_title(
-                f"Bandbreedte van optimale α* vs. service level X"
+                f"Bandwidth of optimal α* vs. service level X"
                 f"\n(β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f}), "
                 f"K = {int(_sbr['beta_r_samples'].size)})")
             _ax_xsw.grid(True, alpha=0.3)
@@ -5820,13 +5853,13 @@ with tab_sensitivity:
             _ax_brsw.plot(
                 _df_brsw["beta_r"], _df_brsw["alpha_opt"] * 100,
                 color="#1f77b4", lw=2.2, marker="o", ms=3,
-                label="optimale α*(β_r)")
+                label="optimal α*(β_r)")
             # Shade the uncertainty range
             _ax_brsw.axvspan(
                 _sb["brlo"], _sb["brhi"],
                 alpha=0.13, color="#ff7f0e",
                 label=(
-                    f"onzekerheidsband β_r ∈ "
+                    f"uncertainty band β_r ∈ "
                     f"[{_sb['brlo']:.2f}, {_sb['brhi']:.2f}]"))
             # P5 / P50 / P95 horizontal reference lines from Monte-Carlo
             for _p, _c, _ls in (
@@ -5844,16 +5877,16 @@ with tab_sensitivity:
             _ax_brsw2.plot(
                 _df_brsw["beta_r"], _df_brsw["margin_opt"],
                 color="#2ca02c", lw=1.4, ls="-.", alpha=0.75,
-                label="optimale marge (€)")
-            _ax_brsw2.set_ylabel("optimale marge (€)", color="#2ca02c")
+                label="optimal margin (€)")
+            _ax_brsw2.set_ylabel("optimal margin (€)", color="#2ca02c")
             _ax_brsw2.tick_params(axis="y", labelcolor="#2ca02c")
             _ax_brsw2.yaxis.set_major_formatter(
                 _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
-            _ax_brsw.set_xlabel("β_r — kostenratio-gevoeligheid")
-            _ax_brsw.set_ylabel("optimale α* (%)")
+            _ax_brsw.set_xlabel("β_r — cost-ratio sensitivity")
+            _ax_brsw.set_ylabel("optimal α* (%)")
             _ax_brsw.set_title(
                 ("Greedy o" if _sb.get("greedy") else "O")
-                + "ptimale α* als functie van β_r"
+                + "ptimal α* as function of β_r"
                 + (f"  |  budget ≤ €{_sb_bud_val:,.0f}"
                    if _sb.get("greedy") else "")
                 + f"\nX = {_sb['X']:.3f},  "
