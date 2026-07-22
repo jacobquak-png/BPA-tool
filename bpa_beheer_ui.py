@@ -4987,6 +4987,9 @@ with tab_sensitivity:
         "lt_mult": {"label": "LT — levertijd multiplier",       "axis": "LT — lead-time mult.",           "min": 0.10,  "max": 5.0,  "step": 0.10,  "fmt": "%.2f",
                     "help": "Schaal alle levertijden LT_i. "
                              "1.0 = huidig; 2.0 = dubbele levertijden (hogere S*)."},
+        "budget": {"label": "Budget — max. investering (€)",   "axis": "budget cap (€)",                 "min": 1_000.0, "max": 2_000_000.0, "step": 10_000.0, "fmt": "%.0f",
+                   "help": "Maximaal totaal investeringsbedrag Σ Sᵢ·IPᵢ (€). "
+                            "Budget sweep activeert automatisch greedy modus."},
         "epsilon": {"label": "ε — chance-constraint niveau",    "axis": "ε — CC level",                   "min": 0.0,   "max": 0.50, "step": 0.01,  "fmt": "%.2f",
                     "help": "0 = geen CC; S* op (1−ε)-kwantiel Z_i^{1−ε} i.p.v. E[Z_i]. Alleen effectief in greedy modus."},
     }
@@ -5004,6 +5007,7 @@ with tab_sensitivity:
         "ip_mult": 1.0,
         "n_mult":   1.0,
         "lt_mult":  1.0,
+        "budget":   100_000.0,
         "epsilon": 0.0,
     }
 
@@ -5174,21 +5178,39 @@ with tab_sensitivity:
                 _p[_x_var] = float(_xv)
                 if _cval is not None:
                     _p[_curve_var] = float(_cval)
+                if _se_effective_greedy:
+                    # Ensure budget is present per point.
+                    # If swept as x/curve var, it is already set above.
+                    # Otherwise inject the fixed greedy-budget control value.
+                    if "budget" not in (_x_var, _curve_var) and _se_budget is not None:
+                        _p["budget"] = float(_se_budget)
+                else:
+                    # Non-greedy: strip budget so bpa_beheer skips greedy path.
+                    _p.pop("budget", None)
                 _dicts.append(_p)
         return _dicts
 
-    _se_greedy = st.checkbox(
-        "📦 Greedy modus (budget-beperkte selectie)",
-        value=False, key="se_greedy",
-        help="Berekent per parameterpunt de greedy component-selectie binnen het "
-             "budget. Toont winst van de daadwerkelijk gekozen subset. "
-             "'Klantsurplus' is niet beschikbaar in greedy modus.")
-    _se_budget = None
-    if _se_greedy:
-        _se_budget = st.number_input(
-            "Budget (€)", min_value=0.0, value=100_000.0,
-            step=10_000.0, format="%.0f", key="se_budget",
-            help="Maximaal investeringsbudget voor de greedy-selectie per parameterpunt.")
+    _budget_swept = (_x_var == "budget" or _curve_var == "budget")
+    if _budget_swept:
+        st.info(
+            "ℹ️ Budget sweep actief: greedy modus is automatisch ingeschakeld. "
+            "Het budget wordt per rasterpunt uit de X-as (of curve) gelezen.")
+        _se_greedy = True
+        _se_budget = None   # per-punt uit sweep
+    else:
+        _se_greedy = st.checkbox(
+            "📦 Greedy modus (budget-beperkte selectie)",
+            value=False, key="se_greedy",
+            help="Berekent per parameterpunt de greedy component-selectie binnen het "
+                 "budget. Toont winst van de daadwerkelijk gekozen subset. "
+                 "'Klantsurplus' is niet beschikbaar in greedy modus.")
+        _se_budget = None
+        if _se_greedy:
+            _se_budget = st.number_input(
+                "Budget (€)", min_value=0.0, value=100_000.0,
+                step=10_000.0, format="%.0f", key="se_budget",
+                help="Maximaal investeringsbudget voor de greedy-selectie per parameterpunt.")
+    _se_effective_greedy = _se_greedy
 
     if st.button("📊 Bereken sensitivity", type="primary",
                  disabled=not _cls_codes_se, key="se_bereken"):
@@ -5202,14 +5224,14 @@ with tab_sensitivity:
         else:
             with st.spinner(
                     "Winst-sensitivity berekenen"
-                    + (" (greedy per punt)" if _se_greedy else " via het kostenmodel")
+                    + (" (greedy per punt)" if _se_effective_greedy else " via het kostenmodel")
                     + "…"):
                 try:
                     _recs = metrieken_voor_wtp_grid(
                         _ov_se, _bouw_param_dicts(),
                         _kappa_bpa_se, _kappa_c_se,
                         excel_file=_excel_arg_se(), codes=_cls_codes_se,
-                        budget=float(_se_budget) if _se_greedy else None,
+                        budget=None,  # budget is injected per-point via param_dicts
                     )
                     _yvals_raw = {r_key: [r.get(r_key, float("nan")) for r in _recs]
                                   for r_key in ("bpa_margin", "revenue", "total_Z")}
@@ -5765,7 +5787,7 @@ with tab_sensitivity:
         _ax_band.axhline(0, color="grey", lw=0.8, ls=":")
         _sb_is_greedy = _sb.get("greedy", False)
         _sb_bud_val   = _sb.get("budget")
-        _ax_band.set_xlabel("α — subscription rate")
+        _ax_band.set_xlabel("α")
         _ax_band.set_ylabel(
             f"greedy profit (€, budget ≤ €{_sb_bud_val:,.0f})"
             if _sb_is_greedy else "BPA profit Π (€)")
