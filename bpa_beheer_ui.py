@@ -4993,6 +4993,7 @@ with tab_sensitivity:
 
     # Startwaarden overnemen uit de Subscriptie-simulatie / Kostenanalyse-tab.
     _kp_se = st.session_state.get("kosten_params", {})
+    _kappa_bpa_se = float(_kp_se.get("kappa_bpa", 0.20))
     _seed_se = {
         "alpha":   float(_kp_se.get("alpha", 0.15)),
         "X":       float(_kp_se.get("service_level", 0.99)),
