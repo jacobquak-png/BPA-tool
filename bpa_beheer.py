@@ -1257,9 +1257,10 @@ def beta_r_winstband(
     _rng = np.random.default_rng(seed)
     _br_samples = _rng.uniform(float(beta_r_min), float(beta_r_max), int(n_samples))
 
-    _margin = np.full((int(n_samples), _alpha.size), np.nan)
-    _opt_a  = np.full(int(n_samples), np.nan)
-    _opt_m  = np.full(int(n_samples), np.nan)
+    _margin  = np.full((int(n_samples), _alpha.size), np.nan)
+    _revenue = np.full((int(n_samples), _alpha.size), np.nan)  # R per (sample, α)
+    _opt_a   = np.full(int(n_samples), np.nan)
+    _opt_m   = np.full(int(n_samples), np.nan)
 
     for _k, _br in enumerate(_br_samples):
         if budget is not None:
@@ -1275,6 +1276,8 @@ def beta_r_winstband(
                 continue
             _m_series = _gs.set_index('alpha')['total_margin']
             _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+            if 'total_rev' in _gs.columns:
+                _revenue[_k, :] = _gs.set_index('alpha')['total_rev'].reindex(_alpha).to_numpy(dtype=float)
             _valid = _gs.dropna(subset=['total_margin'])
             if _valid.empty:
                 continue
@@ -1306,6 +1309,8 @@ def beta_r_winstband(
             # Uitlijnen op _alpha (identieke floats uit dezelfde grid).
             _m_series = _curve.set_index('alpha')['margin']
             _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+            if 'revenue' in _curve.columns:
+                _revenue[_k, :] = _curve.set_index('alpha')['revenue'].reindex(_alpha).to_numpy(dtype=float)
             _valid = _curve.dropna(subset=['margin'])
             if _valid.empty:
                 continue
@@ -1334,7 +1339,8 @@ def beta_r_winstband(
             _out[_col_ok] = np.nanpercentile(arr2d[:, _col_ok], p, axis=0)
         return _out
 
-    _margin_pct = {int(p): _safe_pct(_margin, p) for p in percentielen}
+    _margin_pct  = {int(p): _safe_pct(_margin, p) for p in percentielen}
+    _revenue_pct = {int(p): _safe_pct(_revenue, p) for p in percentielen}
     with np.errstate(invalid='ignore'):
         _margin_mean = np.where(
             np.all(np.isnan(_margin), axis=0), np.nan, np.nanmean(_margin, axis=0))
@@ -1356,6 +1362,7 @@ def beta_r_winstband(
         'margin_matrix':  _margin,
         'margin_pct':     _margin_pct,
         'margin_mean':    _margin_mean,
+        'revenue_pct':    _revenue_pct,
         'opt_alpha':      _opt_a,
         'opt_margin':     _opt_m,
         'opt_alpha_pct':  _opt_a_pct,
