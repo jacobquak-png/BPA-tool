@@ -5665,6 +5665,7 @@ with tab_sensitivity:
                             _sb_brsweep_rows.append({
                                 "beta_r":     round(_brv, 4),
                                 "alpha_opt":  round(float(_best_gs["alpha"]), 4),
+                                "q_opt":      round(float(_best_gs["q"]), 4),
                                 "margin_opt": round(
                                     float(_best_gs["total_margin"]), 2),
                             })
@@ -5680,10 +5681,14 @@ with tab_sensitivity:
                                 margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
                             )
                             if _best_br is not None:
+                                _q_opt_br = adoptie_kans(
+                                    float(_best_br["alpha"]), _sb_kc,
+                                    float(_sb_qeq), float(_brv))
                                 _sb_brsweep_rows.append({
                                     "beta_r":     round(_brv, 4),
                                     "alpha_opt":  round(
                                         float(_best_br["alpha"]), 4),
+                                    "q_opt":      round(_q_opt_br, 4),
                                     "margin_opt": round(
                                         float(_best_br["margin"]), 2),
                                 })
@@ -5955,9 +5960,16 @@ with tab_sensitivity:
                 _df_brsw_disp = _df_brsw.copy()
                 _df_brsw_disp["alpha_opt"] = _df_brsw_disp["alpha_opt"].map(
                     lambda v: f"{v:.1%}")
+                if "q_opt" in _df_brsw_disp.columns:
+                    _df_brsw_disp["q_opt"] = _df_brsw_disp["q_opt"].map(
+                        lambda v: f"{v:.1%}")
                 _df_brsw_disp["margin_opt"] = _df_brsw_disp["margin_opt"].map(
                     lambda v: f"€{v:,.0f}")
-                _df_brsw_disp.columns = ["β_r", "α* (opt)", "Marge (opt)"]
+                _col_map = {"beta_r": "β_r", "alpha_opt": "α* (opt)",
+                            "q_opt": "q(α*)", "margin_opt": "Marge (opt)"}
+                _df_brsw_disp = _df_brsw_disp.rename(
+                    columns={k: v for k, v in _col_map.items()
+                             if k in _df_brsw_disp.columns})
                 st.dataframe(
                     _df_brsw_disp, use_container_width=True, hide_index=True)
                 st.download_button(
