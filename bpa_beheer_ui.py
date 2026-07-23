@@ -5548,6 +5548,174 @@ with tab_sensitivity:
             pass
         return _excel_se
 
+    _sb_run_brsweep_only = st.button(
+        "📈 Alleen β_r → α* sweep berekenen (snel, zonder MC)",
+        disabled=not (_cls_codes_se and _sb_do_brsweep),
+        key="se_bru_run_brsweep_only",
+        help="Berekent alleen de deterministische β_r → α*-relatie "
+             "(één doorrekening per β_r-punt, géén Monte-Carlo trekkingen). "
+             "Veel sneller dan de volledige α*-bandbreedte hieronder.")
+
+    if _sb_run_brsweep_only:
+        _ov_bo = None
+        try:
+            _ov_bo = get_overzicht_df(cfg)
+        except Exception as _ebo:
+            st.error(f"Overzicht niet laden: {_ebo}")
+        if _ov_bo is None or _ov_bo.empty:
+            st.warning("Geen overzicht — laad eerst het overzicht (tab 📊).")
+        elif float(_sb_brs_max) <= float(_sb_brs_min):
+            st.warning("β_r sweep max moet groter zijn dan β_r sweep min.")
+        else:
+            _bo_alpha_grid = list(np.linspace(
+                float(_sb_amin), float(_sb_amax), int(_sb_an)))
+            _bo_kbpa = float(_kp_se.get("kappa_bpa", 0.20))
+            _bo_kc   = float(_kp_se.get("kappa_c",   0.25))
+            _bo_brs_vals = list(np.linspace(
+                float(_sb_brs_min), float(_sb_brs_max), int(_sb_brs_n)))
+            _bo_rows = []
+            with st.spinner(
+                f"β_r → α* sweep berekenen ({len(_bo_brs_vals)} punten, "
+                f"geen MC)…"
+            ):
+                for _brv in _bo_brs_vals:
+                    if _sb_greedy:
+                        _gs = greedy_alpha_sweep(
+                            _ov_bo, _bo_alpha_grid,
+                            float(_sb_budget),
+                            float(_sb_X), float(_sb_qeq), float(_brv),
+                            _bo_kbpa, _bo_kc,
+                            excel_file=_excel_arg_sb(),
+                            codes=_cls_codes_se,
+                            epsilon=float(_sb_eps) if _sb_eps > 0 else None,
+                        )
+                        if _gs.empty:
+                            continue
+                        _valid_gs = _gs.dropna(subset=["total_margin"])
+                        if _valid_gs.empty:
+                            continue
+                        if bool(_sb_feas):
+                            _pos_gs = _valid_gs[_valid_gs["total_margin"] > 0]
+                            if not _pos_gs.empty:
+                                _valid_gs = _pos_gs
+                        if _sb_m > 0 and "total_rev" in _valid_gs.columns:
+                            _rev_gs = _valid_gs["total_rev"].fillna(0.0)
+                            _mrm_gs = (_rev_gs > 0) & (
+                                _valid_gs["total_margin"] / _rev_gs
+                                >= float(_sb_m))
+                            if _mrm_gs.any():
+                                _valid_gs = _valid_gs[_mrm_gs]
+                        _best_gs = _valid_gs.loc[
+                            _valid_gs["total_margin"].idxmax()]
+                        _bo_rows.append({
+                            "beta_r":     round(_brv, 4),
+                            "alpha_opt":  round(float(_best_gs["alpha"]), 4),
+                            "q_opt":      round(float(_best_gs["q"]), 4),
+                            "margin_opt": round(
+                                float(_best_gs["total_margin"]), 2),
+                        })
+                    else:
+                        _, _best_br = optimale_alpha_bij_X(
+                            _ov_bo, float(_sb_X), _bo_alpha_grid,
+                            float(_sb_qeq), float(_brv),
+                            _bo_kbpa, _bo_kc,
+                            excel_file=_excel_arg_sb(),
+                            codes=_cls_codes_se,
+                            alleen_haalbaar=bool(_sb_feas),
+                            epsilon=float(_sb_eps) if _sb_eps > 0 else None,
+                            margin_ratio_min=float(_sb_m) if _sb_m > 0 else None,
+                        )
+                        if _best_br is not None:
+                            _q_opt_br = adoptie_kans(
+                                float(_best_br["alpha"]), _bo_kc,
+                                float(_sb_qeq), float(_brv))
+                            _bo_rows.append({
+                                "beta_r":     round(_brv, 4),
+                                "alpha_opt":  round(
+                                    float(_best_br["alpha"]), 4),
+                                "q_opt":      round(_q_opt_br, 4),
+                                "margin_opt": round(
+                                    float(_best_br["margin"]), 2),
+                            })
+            if not _bo_rows:
+                st.warning(
+                    "Geen resultaten voor de β_r-sweep — controleer de "
+                    "parameters (bv. α-grid of budget).")
+                st.session_state.pop("se_brsweep_only", None)
+            else:
+                st.session_state["se_brsweep_only"] = {
+                    "brlo":   float(_sb_brs_min),
+                    "brhi":   float(_sb_brs_max),
+                    "X":      float(_sb_X),
+                    "qeq":    float(_sb_qeq),
+                    "greedy": bool(_sb_greedy),
+                    "budget": float(_sb_budget) if _sb_greedy else None,
+                    "rows":   _bo_rows,
+                }
+
+    _bo_data = st.session_state.get("se_brsweep_only")
+    if _bo_data:
+        import matplotlib.pyplot as _plt_bo
+        import matplotlib.ticker as _mt_bo
+
+        st.markdown("#### β_r → α* sweep (deterministisch, zonder MC)")
+        _df_bo = pd.DataFrame(_bo_data["rows"])
+        _fig_bo, _ax_bo = _plt_bo.subplots(figsize=(9, 4.2))
+        _ax_bo.plot(
+            _df_bo["beta_r"], _df_bo["alpha_opt"] * 100,
+            color="#1f77b4", lw=2.2, marker="o", ms=3,
+            label="optimal α*(β_r)")
+        _bo_bud_val = _bo_data.get("budget")
+        _ax_bo2 = _ax_bo.twinx()
+        _ax_bo2.plot(
+            _df_bo["beta_r"], _df_bo["margin_opt"],
+            color="#2ca02c", lw=1.4, ls="-.", alpha=0.75,
+            label="optimal margin (€)")
+        _ax_bo2.set_ylabel("optimal margin (€)", color="#2ca02c")
+        _ax_bo2.tick_params(axis="y", labelcolor="#2ca02c")
+        _ax_bo2.yaxis.set_major_formatter(
+            _mt_bo.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+        _ax_bo.set_xlabel("β_r — cost-ratio sensitivity")
+        _ax_bo.set_ylabel("optimal α* (%)")
+        _ax_bo.set_title(
+            ("Greedy o" if _bo_data.get("greedy") else "O")
+            + "ptimal α* as function of β_r  (geen Monte-Carlo)"
+            + (f"  |  budget ≤ €{_bo_bud_val:,.0f}"
+               if _bo_data.get("greedy") else "")
+            + f"\nX = {_bo_data['X']:.3f},  q_eq = {_bo_data['qeq']:.3f}")
+        _ax_bo.grid(True, alpha=0.3)
+        _l1o, _lab1o = _ax_bo.get_legend_handles_labels()
+        _l2o, _lab2o = _ax_bo2.get_legend_handles_labels()
+        _ax_bo.legend(_l1o + _l2o, _lab1o + _lab2o, fontsize=9, loc="best")
+        _fig_bo.tight_layout()
+        st.pyplot(_fig_bo)
+        _plt_bo.close(_fig_bo)
+
+        with st.expander("📋 β_r → α* sweep data (zonder MC)"):
+            _df_bo_disp = _df_bo.copy()
+            _df_bo_disp["alpha_opt"] = _df_bo_disp["alpha_opt"].map(
+                lambda v: f"{v:.1%}")
+            if "q_opt" in _df_bo_disp.columns:
+                _df_bo_disp["q_opt"] = _df_bo_disp["q_opt"].map(
+                    lambda v: f"{v:.1%}")
+            _df_bo_disp["margin_opt"] = _df_bo_disp["margin_opt"].map(
+                lambda v: f"€{v:,.0f}")
+            _col_map_bo = {"beta_r": "β_r", "alpha_opt": "α* (opt)",
+                           "q_opt": "q(α*)", "margin_opt": "Marge (opt)"}
+            _df_bo_disp = _df_bo_disp.rename(
+                columns={k: v for k, v in _col_map_bo.items()
+                         if k in _df_bo_disp.columns})
+            st.dataframe(
+                _df_bo_disp, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇️ Download β_r → α* sweep (CSV, zonder MC)",
+                _df_bo.to_csv(
+                    sep=";", decimal=",", index=False).encode("utf-8"),
+                file_name=f"br_alpha_sweep_no_mc_{date.today()}.csv",
+                mime="text/csv",
+                key="se_bru_brsw_only_dl")
+
+    st.divider()
     _sb_run = st.button(
         "🎲 Bereken α*-bandbreedte", type="primary",
         disabled=not _cls_codes_se, key="se_bru_run")
