@@ -1036,7 +1036,7 @@ def metrieken_voor_wtp_grid(
                     'feasible':   float(_row['total_margin']) >= 0,
                     'revenue':    float(_row.get('total_rev',   float('nan'))),
                     'costs':      float(_row.get('total_cbpa',  float('nan'))),
-                    'stock_level': float('nan'),
+                    'stock_level': float(_row.get('total_stock', float('nan'))),
                     'inv_total':  float(_row.get('total_inv',   float('nan'))),
                 })
             continue
@@ -1415,8 +1415,8 @@ def greedy_alpha_sweep(
     Returns
     -------
     DataFrame met per α-waarde:
-        alpha, q, total_Z, total_inv, total_rev, total_margin, total_cbpa,
-        n_selected, n_total.
+        alpha, q, total_Z, total_inv, total_stock, total_rev, total_margin,
+        total_cbpa, n_selected, n_total.
     Leeg DataFrame als er geen data of overzicht beschikbaar is.
     """
     if overzicht_df is None or overzicht_df.empty:
@@ -1504,6 +1504,7 @@ def greedy_alpha_sweep(
             'q':              float(_q),
             'total_Z':        float(_z_mean.sum()),   # verwachte abonnees (niet kwantiel)
             'total_inv':      float(_inv_v[_sel].sum()),
+            'total_stock':    float(_s_star[_sel].sum()),  # Σ S_i* (units) van de geselecteerde set
             'total_rev':      float(_rev_v[_sel].sum()),
             'total_margin':   float(_margin_v[_sel].sum()),
             'total_cbpa':     float(_cbpa_v[_sel].sum()),
