@@ -4497,19 +4497,19 @@ with tab_subsim:
                 file_name="optimale_alpha_bij_X.csv", mime="text/csv",
                 key="subsim_opt_dl")
 
-    # ── β_r-onzekerheidsband: uniforme scenario-parameter ─────────────────
+    # ── β_r-onzekerheidsband: scenario-parameter met een bereik ───────────
     with st.expander("🎲 β_r-onzekerheidsband: bandbreedte van winst en optimale α"):
         st.caption(
             "$β_r$ kan **niet** uit historische subscriptie-data worden "
             "geschat en wordt daarom als **onzekere scenario-parameter** "
-            "behandeld. Bij gebrek aan voorkennis over welke waarde binnen een "
-            "plausibel bereik het meest waarschijnlijk is, gebruiken we een "
-            "**uniforme** verdeling $β_r\\sim U(β_r^{min}, β_r^{max})$. Per "
-            "trekking wordt (bij vast $X$) de volledige keten "
-            "$α\\to q(α)\\to E[Z_i]\\to$ kostenmodel doorgerekend. Zo ontstaat "
-            "per α een verdeling van de verwachte BPA-winst $E[Π_{BPA}(α)]$ "
-            "(P5/P50/P95-band) en een verdeling van de winst-maximaliserende "
-            "$α^*$."
+            "behandeld: geen kansverdeling, maar een plausibel "
+            "**bereik** $β_r \\in [β_r^{min}, β_r^{max}]$. Dit bereik wordt "
+            "**deterministisch en gelijkmatig doorlopen** (geen willekeurige "
+            "trekkingen). Per rasterpunt wordt (bij vast $X$) de volledige "
+            "keten $α\\to q(α)\\to E[Z_i]\\to$ kostenmodel doorgerekend. Zo "
+            "ontstaat per α een bandbreedte van de verwachte BPA-winst "
+            "$E[Π_{BPA}(α)]$ (min–max over het β_r-bereik) en een bereik van "
+            "de winst-maximaliserende $α^*$."
         )
         _kp_bru = st.session_state.get("kosten_params", {})
         _kappa_bpa_bru = float(_kp_bru.get("kappa_bpa", 0.20))
@@ -4546,18 +4546,17 @@ with tab_subsim:
         _cbr3, _cbr4 = st.columns(2)
         with _cbr3:
             _bru_K = st.slider(
-                "Aantal β_r-trekkingen (K)", 20, 1000, 200, step=20,
+                "Aantal β_r-rasterpunten (K)", 20, 1000, 200, step=20,
                 key="subsim_bru_K",
-                help="Meer trekkingen → gladdere band, maar langere rekentijd.")
+                help="Meer rasterpunten → gladdere band, maar langere rekentijd. "
+                     "Het β_r-bereik wordt deterministisch en gelijkmatig "
+                     "doorlopen (geen willekeurige trekkingen).")
         with _cbr4:
             _bru_feas = st.checkbox(
                 "α* alleen over haalbare α zoeken",
                 value=False, key="subsim_bru_feas",
-                help="Bepaal de optimale α* per trekking alleen over haalbare α "
+                help="Bepaal de optimale α* per rasterpunt alleen over haalbare α "
                      "(marge ≥ 0 én alle klanten profiteren).")
-        _bru_seed = st.checkbox(
-            "Reproduceerbare trekkingen (vaste seed)", value=True,
-            key="subsim_bru_seed")
         _bru_cc = st.checkbox(
             "Chance-constraint base stock  P(β_i ≥ X) ≥ 1−ε",
             value=False, key="subsim_bru_cc",
@@ -4576,7 +4575,7 @@ with tab_subsim:
         _bru_greedy = st.checkbox(
             "📦 Greedy modus (budget-beperkte selectie)",
             value=False, key="subsim_bru_greedy",
-            help="Berekent per β_r-trekking de greedy component-selectie binnen "
+            help="Berekent per β_r-rasterpunt de greedy component-selectie binnen "
                  "het opgegeven budget. Toont de winst van de daadwerkelijk "
                  "gekozen subset i.p.v. de volledige portfolio.")
         _bru_budget = None
@@ -4598,9 +4597,9 @@ with tab_subsim:
                 else:
                     _bra_grid = list(np.linspace(float(_bra_min), float(_bra_max), int(_bra_n)))
                     with st.spinner(
-                            f"β_r-band berekenen ({int(_bru_K)} trekkingen × "
+                            f"β_r-band berekenen ({int(_bru_K)} rasterpunten × "
                             f"{int(_bra_n)} α-waarden"
-                            + (" — greedy per trekking" if _bru_greedy else "")
+                            + (" — greedy per rasterpunt" if _bru_greedy else "")
                             + ")…"):
                         _bru_res = beta_r_winstband(
                             _ov_bru, float(_X_bru), _bra_grid,
@@ -4608,7 +4607,6 @@ with tab_subsim:
                             _kappa_bpa_bru, _kappa_c_bru,
                             n_samples=int(_bru_K),
                             excel_file=_excel_arg(), codes=_cls_codes,
-                            seed=(42 if _bru_seed else None),
                             alleen_haalbaar=bool(_bru_feas),
                             epsilon=_bru_eps,
                             budget=float(_bru_budget) if _bru_greedy else None)
@@ -4659,12 +4657,12 @@ with tab_subsim:
                     f"binnen **€\u202f{_bru['budget']:,.0f}**."
                 )
             st.caption(
-                "Onder onzekerheid in de klantgevoeligheid β_r ligt de optimale "
-                f"α meestal tussen **{_oap.get(5, float('nan')):.1%}** en "
+                "Over het onzekere β_r-bereik ligt de winstmaximaliserende "
+                f"α tussen **{_oap.get(5, float('nan')):.1%}** en "
                 f"**{_oap.get(95, float('nan')):.1%}** "
-                f"(mediaan **{_oap.get(50, float('nan')):.1%}**), bij "
-                f"X = {_bru['X']:.3f} en β_r ~ U({_bru['beta_r_min']:.2f}, "
-                f"{_bru['beta_r_max']:.2f}).{_cc_suffix}{_greedy_suffix}"
+                f"(midden van de band **{_oap.get(50, float('nan')):.1%}**), bij "
+                f"X = {_bru['X']:.3f} en β_r ∈ [{_bru['beta_r_min']:.2f}, "
+                f"{_bru['beta_r_max']:.2f}].{_cc_suffix}{_greedy_suffix}"
             )
 
             # ── Grafiek 1: winst-band vs α ────────────────────────────────
@@ -4692,8 +4690,8 @@ with tab_subsim:
             )
             _axbr.set_title(
                 ("Greedy " if _bru.get("budget") is not None else "")
-                + f"Margin band under β_r ~ U({_bru['beta_r_min']:.2f}, "
-                + f"{_bru['beta_r_max']:.2f})  at X = {_bru['X']:.3f}"
+                + f"Margin band over β_r ∈ [{_bru['beta_r_min']:.2f}, "
+                + f"{_bru['beta_r_max']:.2f}]  at X = {_bru['X']:.3f}"
                 + (f"  | budget ≤ €{_bru['budget']:,.0f}" if _bru.get("budget") is not None else ""))
             _axbr.grid(True, alpha=0.3)
             _axbr.legend(loc="best", fontsize=9)
@@ -4714,7 +4712,7 @@ with tab_subsim:
                                   label=f"{_lbl} = {_oap.get(_p, float('nan')):.1%}")
                 _axhx.set_xlabel("optimal price percentage α* (%)")
                 _axhx.set_ylabel("frequency")
-                _axhx.set_title("Distribution of margin-maximising α* over β_r draws")
+                _axhx.set_title("Range of margin-maximising α* over the β_r sweep")
                 _axhx.grid(True, alpha=0.3)
                 _axhx.legend(loc="best", fontsize=9)
                 _fighx.tight_layout()
@@ -4828,7 +4826,7 @@ with tab_subsim:
                         st.divider()
                         st.markdown(
                             "**📊 Verwachte marge bij ronde α "
-                            f"(gemiddeld over {int(_bru_K)} β_r-trekkingen)**"
+                            f"(over {int(_bru_K)} β_r-rasterpunten)**"
                         )
                         _int_alphas = [
                             a / 100
@@ -4878,9 +4876,9 @@ with tab_subsim:
 
                             # Componentdetail voor gekozen integer α, β_r = E[β_r]
                             st.markdown(
-                                "**Componentdetail bij verwacht β_r "
+                                "**Componentdetail bij β_r "
                                 f"= {(_bdet_lo + _bdet_hi) / 2:.2f} "
-                                f"(= E[β_r] van U({_bdet_lo:.2f}, {_bdet_hi:.2f}))**"
+                                f"(= midden van het bereik [{_bdet_lo:.2f}, {_bdet_hi:.2f}])**"
                             )
                             _int_a_sel = st.selectbox(
                                 "α kiezen",
@@ -5245,6 +5243,10 @@ with tab_sensitivity:
                         "y_label":     _y_spec["axis"],
                         "y_tbl":       _y_spec["tbl"],
                         "y_kind":      _y_spec["kind"],
+                        # verwachte subscripties E[Z] vs. verwachte winst (BPA-marge),
+                        # over alle doorgerekende (x, curve)-punten van deze sweep.
+                        "z_vals":      list(_yvals_raw["total_Z"]),
+                        "margin_vals": list(_yvals_raw["bpa_margin"]),
                         # greedy detail
                         "greedy_mode": _se_greedy,
                         "greedy_budget": float(_se_budget) if _se_greedy else None,
@@ -5326,6 +5328,49 @@ with tab_sensitivity:
                 file_name=f"wtp_sensitivity_{date.today()}.csv",
                 mime="text/csv",
             )
+
+        # ── Distributie: verwachte subscripties E[Z] vs. verwachte winst ──
+        _z_pts = _res_se.get("z_vals")
+        _m_pts = _res_se.get("margin_vals")
+        if _z_pts and _m_pts:
+            with st.expander(
+                    "🔀 Distributie: verwachte subscripties E[Z] vs. verwachte winst",
+                    expanded=False):
+                st.caption(
+                    "Elk punt is één doorgerekende combinatie uit de huidige "
+                    f"sweep (x-as = **{_x_lbl}**"
+                    + (f", curve = **{_WTP_PARAMS[_cv_var]['label']}**"
+                       if _cv_var != "(geen)" else "")
+                    + "). Toont hoe de verwachte winst (BPA-marge) samenhangt "
+                      "met het verwachte aantal subscripties E[Z] over die sweep."
+                )
+                _z_arr = np.asarray(_z_pts, dtype=float)
+                _m_arr = np.asarray(_m_pts, dtype=float)
+                _zm_ok = np.isfinite(_z_arr) & np.isfinite(_m_arr)
+                if not _zm_ok.any():
+                    st.info("Geen geldige (E[Z], winst)-combinaties in deze sweep.")
+                else:
+                    import matplotlib.pyplot as _plt_zm
+                    import matplotlib.ticker as _mt_zm
+                    _fig_zm, _ax_zm = _plt_zm.subplots(figsize=(9, 5))
+                    _color_vals = np.tile(np.asarray(_xg, dtype=float), len(_cvals))
+                    _sc_zm = _ax_zm.scatter(
+                        _z_arr[_zm_ok], _m_arr[_zm_ok],
+                        c=_color_vals[_zm_ok], cmap="viridis",
+                        s=60, edgecolor="white", linewidth=0.5, zorder=3)
+                    _cb_zm = _fig_zm.colorbar(_sc_zm, ax=_ax_zm)
+                    _cb_zm.set_label(_x_lbl)
+                    _ax_zm.axhline(0, color="grey", lw=0.8, ls=":")
+                    _ax_zm.set_xlabel("expected subscriptions E[Z]")
+                    _ax_zm.set_ylabel("expected BPA profit (€)")
+                    _ax_zm.yaxis.set_major_formatter(
+                        _mt_zm.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+                    _ax_zm.set_title(
+                        "Relation between expected subscriptions and expected profit")
+                    _ax_zm.grid(True, alpha=0.3)
+                    _fig_zm.tight_layout()
+                    st.pyplot(_fig_zm)
+                    _plt_zm.close(_fig_zm)
 
         # ── Greedy component-detail ───────────────────────────────────────
         if _res_se.get("greedy_mode"):
@@ -5426,10 +5471,11 @@ with tab_sensitivity:
     st.markdown("### Bandbreedte van optimale α bij onzekere β_r")
     st.caption(
         "$β_r$ is een **niet-schatbare scenario-parameter** die de "
-        "kostenratio-gevoeligheid van klanten beschrijft. "
-        "Bij onzekerheid $β_r \\sim U(β_r^{\\min},\\, β_r^{\\max})$ "
-        "berekent dit blok via Monte-Carlo de **bandbreedte** van de "
-        "winstmaximaliserende α* (P5 / P50 / P95). "
+        "kostenratio-gevoeligheid van klanten beschrijft: geen kansverdeling, "
+        "maar een plausibel **bereik** $β_r \\in [β_r^{\\min}, β_r^{\\max}]$. "
+        "Dit blok doorloopt dat bereik **deterministisch** (geen "
+        "willekeurige trekkingen) en toont de **bandbreedte** van de "
+        "winstmaximaliserende α* (min–max over het β_r-bereik). "
         "Optioneel sweep je over een reeks service levels X om te zien "
         "hoe de robuustheid van α* verandert met de servicegraad."
     )
@@ -5463,14 +5509,14 @@ with tab_sensitivity:
             value=_clip_se("q_eq", _seed_se["q_eq"]), step=0.01, format="%.3f",
             key="se_bru_qeq")
         _sb_K   = st.slider(
-            "Trekkingen (K)", min_value=20, max_value=1000, value=200, step=20,
+            "Rasterpunten (K)", min_value=20, max_value=1000, value=200, step=20,
             key="se_bru_K",
-            help="Meer trekkingen → gladdere band, maar langere rekentijd.")
-        _sb_seed = st.checkbox(
-            "Vaste seed (reproduceerbaar)", value=True, key="se_bru_seed")
+            help="Meer rasterpunten → gladdere band, maar langere rekentijd. "
+                 "Het β_r-bereik wordt deterministisch en gelijkmatig "
+                 "doorlopen (geen willekeurige trekkingen).")
         _sb_feas = st.checkbox(
             "α* alleen over haalbare α zoeken", value=False, key="se_bru_feas",
-            help="Bepaal α* per trekking alleen over haalbare α "
+            help="Bepaal α* per rasterpunt alleen over haalbare α "
                  "(marge ≥ 0 én alle klanten profiteren).")
 
     _sb_m = st.number_input(
@@ -5493,7 +5539,7 @@ with tab_sensitivity:
     _sb_greedy = st.checkbox(
         "📦 Greedy modus (budget-beperkte selectie)",
         value=False, key="se_bru_greedy",
-        help="Berekent per β_r-trekking de greedy component-selectie binnen "
+        help="Berekent per β_r-rasterpunt de greedy component-selectie binnen "
              "het opgegeven budget. Toont de winst van de daadwerkelijk "
              "gekozen subset i.p.v. de volledige portfolio.")
     _sb_budget = None
@@ -5502,12 +5548,12 @@ with tab_sensitivity:
             "Budget (€)", min_value=0.0, value=100_000.0,
             step=10_000.0, format="%.0f", key="se_bru_budget",
             help="Maximaal investeringsbudget voor de greedy-selectie "
-                 "per β_r-trekking.")
+                 "per β_r-rasterpunt.")
 
     _sb_do_xsweep = st.checkbox(
         "Toon ook bandbreedte over een reeks X-waarden",
         value=False, key="se_bru_xsweep",
-        help="Berekent per X-waarde de P5/P50/P95 van α* en toont hoe de "
+        help="Berekent per X-waarde de band (min-mid-max) van α* en toont hoe de "
              "bandbreedte verandert met de servicegraad.")
     if _sb_do_xsweep:
         _sb_xs1, _sb_xs2, _sb_xs3 = st.columns(3)
@@ -5553,7 +5599,8 @@ with tab_sensitivity:
         disabled=not (_cls_codes_se and _sb_do_brsweep),
         key="se_bru_run_brsweep_only",
         help="Berekent alleen de deterministische β_r → α*-relatie "
-             "(één doorrekening per β_r-punt, géén Monte-Carlo trekkingen). "
+             "(één doorrekening per β_r-rasterpunt, geen volledige "
+             "min–max-band over de α-grid). "
              "Veel sneller dan de volledige α*-bandbreedte hieronder.")
 
     if _sb_run_brsweep_only:
@@ -5737,9 +5784,9 @@ with tab_sensitivity:
             _sb_kc   = float(_kp_se.get("kappa_c",   0.25))
 
             with st.spinner(
-                f"α*-bandbreedte berekenen ({int(_sb_K)} trekkingen × "
+                f"α*-bandbreedte berekenen ({int(_sb_K)} rasterpunten × "
                 f"{int(_sb_an)} α-waarden"
-                + (" — greedy per trekking" if _sb_greedy else "")
+                + (" — greedy per rasterpunt" if _sb_greedy else "")
                 + "…"
             ):
                 _sb_res = beta_r_winstband(
@@ -5749,7 +5796,6 @@ with tab_sensitivity:
                     n_samples=int(_sb_K),
                     excel_file=_excel_arg_sb(),
                     codes=_cls_codes_se,
-                    seed=(42 if _sb_seed else None),
                     alleen_haalbaar=bool(_sb_feas),
                     epsilon=float(_sb_eps) if _sb_eps > 0 else None,
                     budget=float(_sb_budget) if _sb_greedy else None,
@@ -5762,7 +5808,7 @@ with tab_sensitivity:
                     float(_sb_xsw_min), float(_sb_xsw_max), int(_sb_xsw_n)))
                 with st.spinner(
                     f"X-sweep berekenen ({len(_xsw_vals)} service levels × "
-                    f"{int(_sb_K)} trekkingen)…"
+                    f"{int(_sb_K)} rasterpunten)…"
                 ):
                     for _xv in _xsw_vals:
                         _r = beta_r_winstband(
@@ -5772,7 +5818,6 @@ with tab_sensitivity:
                             n_samples=int(_sb_K),
                             excel_file=_excel_arg_sb(),
                             codes=_cls_codes_se,
-                            seed=(42 if _sb_seed else None),
                             alleen_haalbaar=bool(_sb_feas),
                             epsilon=float(_sb_eps) if _sb_eps > 0 else None,
                             budget=float(_sb_budget) if _sb_greedy else None,
@@ -5900,19 +5945,19 @@ with tab_sensitivity:
 
         # ── Metrics ──────────────────────────────────────────────────────
         _sbm1, _sbm2, _sbm3, _sbm4 = st.columns(4)
-        _sbm1.metric("α* P5",              f"{_sb_oap.get(5,  float('nan')):.1%}")
-        _sbm2.metric("α* P50 (mediaan)",   f"{_sb_oap.get(50, float('nan')):.1%}")
-        _sbm3.metric("α* P95",             f"{_sb_oap.get(95, float('nan')):.1%}")
+        _sbm1.metric("α* min",              f"{_sb_oap.get(5,  float('nan')):.1%}")
+        _sbm2.metric("α* midden van bereik", f"{_sb_oap.get(50, float('nan')):.1%}")
+        _sbm3.metric("α* max",              f"{_sb_oap.get(95, float('nan')):.1%}")
         _sb_bw = _sb_oap.get(95, float("nan")) - _sb_oap.get(5, float("nan"))
-        _sbm4.metric("Bandbreedte P95−P5",
+        _sbm4.metric("Bandbreedte max−min",
                      f"{_sb_bw:.1%}" if np.isfinite(_sb_bw) else "—")
         st.caption(
-            f"Bij $β_r \\sim U({_sb['brlo']:.2f},\\,{_sb['brhi']:.2f})$ "
-            f"en $X = {_sb['X']:.3f}$: de winstmaximaliserende α* valt "
-            f"voor 90% van de β_r-scenario's in het interval "
+            f"Over het β_r-bereik [{_sb['brlo']:.2f}, {_sb['brhi']:.2f}] "
+            f"en $X = {_sb['X']:.3f}$: de winstmaximaliserende α* varieert "
+            f"over dit bereik binnen het interval "
             f"[**{_sb_oap.get(5, float('nan')):.1%}**, "
             f"**{_sb_oap.get(95, float('nan')):.1%}**] "
-            f"(mediaan **{_sb_oap.get(50, float('nan')):.1%}**, "
+            f"(midden van de band **{_sb_oap.get(50, float('nan')):.1%}**, "
             f"bandbreedte **{_sb_bw:.1%}**)."
         )
 
@@ -5927,14 +5972,14 @@ with tab_sensitivity:
                 color="#1f77b4", alpha=0.20, label="P5–P95 band")
         if _sb_p50 is not None:
             _ax_band.plot(_sb_ag, _sb_p50, color="#1f77b4", lw=2.2,
-                           label="median profit (P50)")
+                           label="profit at range midpoint")
         if _sb_mean is not None:
             _ax_band.plot(_sb_ag, _sb_mean, color="#ff7f0e",
-                           lw=1.4, ls="--", label="mean E[Π]")
+                           lw=1.4, ls="--", label="mean Π over β_r sweep")
         if _sb_p50 is not None and np.isfinite(_sb_p50).any():
             _sb_ix = int(np.nanargmax(_sb_p50))
             _ax_band.axvline(_sb_ag[_sb_ix], color="#d62728", ls=":", lw=1.5,
-                              label=f"α*(P50) = {_sb_ag[_sb_ix]:.1%}")
+                              label=f"α*(mid) = {_sb_ag[_sb_ix]:.1%}")
         # m-punt: markeer α waar P50-marge/omzet = m (groen)
         _sb_rev_p50 = _sbr.get("revenue_pct", {}).get(50)
         _sb_m_val   = float(_sb.get("m", 0.0))
@@ -5963,7 +6008,7 @@ with tab_sensitivity:
             _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
         _ax_band.set_title(
             ("Greedy p" if _sb_is_greedy else "P")
-            + f"rofit band for β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f})"
+            + f"rofit band over β_r ∈ [{_sb['brlo']:.2f}, {_sb['brhi']:.2f}]"
             + (f"  |  budget ≤ €{_sb_bud_val:,.0f}" if _sb_is_greedy else "")
             + f"\nX = {_sb['X']:.3f}")
         _ax_band.grid(True, alpha=0.3)
@@ -5989,8 +6034,8 @@ with tab_sensitivity:
                     alpha=0.12, color="#d62728",
                     label=f"bandwidth {_sb_bw:.1%}")
         _ax_hist.set_xlabel("optimal α* (%)")
-        _ax_hist.set_ylabel("frequency")
-        _ax_hist.set_title("Distribution of α* across β_r draws")
+        _ax_hist.set_ylabel("count of grid points")
+        _ax_hist.set_title("Range of α* across the β_r sweep")
         _ax_hist.grid(True, alpha=0.3)
         _ax_hist.legend(fontsize=8)
 
@@ -6008,8 +6053,8 @@ with tab_sensitivity:
             _ax_ecdf.axhline(0.05, color="#d62728", ls=":", lw=0.8, alpha=0.5)
             _ax_ecdf.axhline(0.95, color="#d62728", ls=":", lw=0.8, alpha=0.5)
         _ax_ecdf.set_xlabel("Optimal α* (%)")
-        _ax_ecdf.set_ylabel("Cumulative probability")
-        _ax_ecdf.set_title("ECDF of optimal α*\nacross β_r draws")
+        _ax_ecdf.set_ylabel("Cumulative fraction of grid points")
+        _ax_ecdf.set_title("ECDF of optimal α*\nacross the β_r sweep")
         _ax_ecdf.set_ylim(0, 1)
         _ax_ecdf.grid(True, alpha=0.3)
         _ax_ecdf.legend(fontsize=8)
@@ -6026,7 +6071,7 @@ with tab_sensitivity:
                 _df_xsw["X"],
                 _df_xsw["α*_P5"]  * 100,
                 _df_xsw["α*_P95"] * 100,
-                color="#1f77b4", alpha=0.25, label="P5–P95 bandwidth α*")
+                color="#1f77b4", alpha=0.25, label="min–max bandwidth α*")
             _ax_xsw.plot(
                 _df_xsw["X"], _df_xsw["α*_P50"] * 100,
                 color="#1f77b4", lw=2.2, marker="o", ms=4,
@@ -6044,8 +6089,8 @@ with tab_sensitivity:
             _ax_xsw.set_ylabel("optimal α* (%)")
             _ax_xsw.set_title(
                 f"Bandwidth of optimal α* vs. service level X"
-                f"\n(β_r ~ U({_sb['brlo']:.2f}, {_sb['brhi']:.2f}), "
-                f"K = {int(_sbr['beta_r_samples'].size)})")
+                f"\n(β_r ∈ [{_sb['brlo']:.2f}, {_sb['brhi']:.2f}], "
+                f"K = {int(_sbr['beta_r_samples'].size)} grid points)")
             _ax_xsw.grid(True, alpha=0.3)
             _l1, _lab1 = _ax_xsw.get_legend_handles_labels()
             _l2, _lab2 = _ax_xsw2.get_legend_handles_labels()
@@ -6085,7 +6130,7 @@ with tab_sensitivity:
                 label=(
                     f"uncertainty band β_r ∈ "
                     f"[{_sb['brlo']:.2f}, {_sb['brhi']:.2f}]"))
-            # P5 / P50 / P95 horizontal reference lines from Monte-Carlo
+            # min / mid / max horizontal reference lines from the β_r sweep
             for _p, _c, _ls in (
                 (5,  "#d62728", ":"),
                 (50, "#333333", "--"),
@@ -6095,7 +6140,7 @@ with tab_sensitivity:
                 if np.isfinite(_pv):
                     _ax_brsw.axhline(
                         _pv * 100.0, color=_c, ls=_ls, lw=1.2,
-                        label=f"MC α* P{_p} = {_pv:.1%}")
+                        label=f"α* band ref = {_pv:.1%}")
             # Second y-axis: optimal margin
             _ax_brsw2 = _ax_brsw.twinx()
             _ax_brsw2.plot(
