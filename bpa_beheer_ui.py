@@ -4673,10 +4673,10 @@ with tab_subsim:
                     label="P5–P95 band")
             if _p50 is not None:
                 _axbr.plot(_ag, _p50, color="#1f77b4", lw=2.2,
-                           label="mediaan (P50)")
+                           label="median (P50)")
             if _mean is not None:
                 _axbr.plot(_ag, _mean, color="#ff7f0e", lw=1.4, ls="--",
-                           label="gemiddelde E[Π]")
+                           label="mean E[Π]")
             # Mediaan-optimum markeren.
             if _p50 is not None and np.isfinite(_p50).any():
                 _ix = int(np.nanargmax(_p50))
@@ -5377,7 +5377,7 @@ with tab_sensitivity:
                         _z_arr[_zm_ok], _m_arr[_zm_ok],
                         c=_color_vals[_zm_ok], cmap="viridis",
                         s=60, edgecolor="white", linewidth=0.5, zorder=3,
-                        label="verwachte winst Π")
+                        label="expected profit Π")
                     _cb_zm = _fig_zm.colorbar(_sc_zm, ax=_ax_zm)
                     _cb_zm.set_label(_x_lbl)
                     _req_ok = None
@@ -5388,14 +5388,13 @@ with tab_sensitivity:
                             _ax_zm.scatter(
                                 _z_arr[_req_ok], _req_arr[_req_ok],
                                 c="#2ca02c", marker="_", s=140, linewidth=2,
-                                zorder=4, label=f"vereiste marge (m·R)  [m={_m_req:.0%}]")
+                                zorder=4, label=f"required margin (m·R)  [m={_m_req:.0%}]")
                     _ax_zm.axhline(0, color="grey", lw=0.8, ls=":")
                     _ax_zm.set_xlabel("expected subscriptions E[Z]")
                     _ax_zm.set_ylabel("expected BPA profit (€)")
                     _ax_zm.yaxis.set_major_formatter(
                         _mt_zm.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
-                    _ax_zm.set_title(
-                        "Relation between expected subscriptions and expected profit")
+                    _ax_zm.set_title("E[Z] vs. expected profit")
                     _ax_zm.grid(True, alpha=0.3)
                     if _req_ok is not None and _req_ok.any():
                         _ax_zm.legend(fontsize=9)
