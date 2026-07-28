@@ -5188,6 +5188,14 @@ with tab_sensitivity:
             step=10_000.0, format="%.0f", key="se_budget",
             help="Maximaal investeringsbudget voor de greedy-selectie per parameterpunt.")
 
+    _se_m = st.number_input(
+        "Margin-vereiste m (marge / omzet ≥ m)",
+        min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.2f",
+        key="se_req_m",
+        help="Minimum vereiste verhouding marge/omzet. Wordt getoond als "
+             "referentielijn 'vereiste marge (m·R)' in de E[Z]-vs-winst-plot. "
+             "0 = geen vereiste (standaard).")
+
     if st.button("📊 Bereken sensitivity", type="primary",
                  disabled=not _cls_codes_se, key="se_bereken"):
         try:
@@ -5247,6 +5255,8 @@ with tab_sensitivity:
                         # over alle doorgerekende (x, curve)-punten van deze sweep.
                         "z_vals":      list(_yvals_raw["total_Z"]),
                         "margin_vals": list(_yvals_raw["bpa_margin"]),
+                        "revenue_vals": list(_yvals_raw["revenue"]),
+                        "m_req":       float(_se_m),
                         # param_dicts: altijd bewaard (ook buiten greedy modus),
                         # zodat de α-waarde per sweep-punt beschikbaar is voor
                         # de E[Z]-vs-winst datatabel hieronder.
@@ -5346,9 +5356,15 @@ with tab_sensitivity:
                        if _cv_var != "(geen)" else "")
                     + "). Toont hoe de verwachte winst (BPA-marge) samenhangt "
                       "met het verwachte aantal subscripties E[Z] over die sweep."
+                    + (f" De groene markers tonen de vereiste marge m·R "
+                       f"[m={float(_res_se.get('m_req', 0.0)):.0%}] per punt."
+                       if float(_res_se.get("m_req", 0.0)) > 0 else "")
                 )
                 _z_arr = np.asarray(_z_pts, dtype=float)
                 _m_arr = np.asarray(_m_pts, dtype=float)
+                _r_pts = _res_se.get("revenue_vals")
+                _r_arr = np.asarray(_r_pts, dtype=float) if _r_pts else None
+                _m_req = float(_res_se.get("m_req", 0.0))
                 _zm_ok = np.isfinite(_z_arr) & np.isfinite(_m_arr)
                 if not _zm_ok.any():
                     st.info("Geen geldige (E[Z], winst)-combinaties in deze sweep.")
@@ -5360,9 +5376,19 @@ with tab_sensitivity:
                     _sc_zm = _ax_zm.scatter(
                         _z_arr[_zm_ok], _m_arr[_zm_ok],
                         c=_color_vals[_zm_ok], cmap="viridis",
-                        s=60, edgecolor="white", linewidth=0.5, zorder=3)
+                        s=60, edgecolor="white", linewidth=0.5, zorder=3,
+                        label="verwachte winst Π")
                     _cb_zm = _fig_zm.colorbar(_sc_zm, ax=_ax_zm)
                     _cb_zm.set_label(_x_lbl)
+                    _req_ok = None
+                    if _m_req > 0 and _r_arr is not None:
+                        _req_arr = _m_req * _r_arr
+                        _req_ok = _zm_ok & np.isfinite(_req_arr)
+                        if _req_ok.any():
+                            _ax_zm.scatter(
+                                _z_arr[_req_ok], _req_arr[_req_ok],
+                                c="#2ca02c", marker="_", s=140, linewidth=2,
+                                zorder=4, label=f"vereiste marge (m·R)  [m={_m_req:.0%}]")
                     _ax_zm.axhline(0, color="grey", lw=0.8, ls=":")
                     _ax_zm.set_xlabel("expected subscriptions E[Z]")
                     _ax_zm.set_ylabel("expected BPA profit (€)")
@@ -5371,6 +5397,8 @@ with tab_sensitivity:
                     _ax_zm.set_title(
                         "Relation between expected subscriptions and expected profit")
                     _ax_zm.grid(True, alpha=0.3)
+                    if _req_ok is not None and _req_ok.any():
+                        _ax_zm.legend(fontsize=9)
                     _fig_zm.tight_layout()
                     st.pyplot(_fig_zm)
                     _plt_zm.close(_fig_zm)
@@ -5388,13 +5416,17 @@ with tab_sensitivity:
                         _alpha_zm = np.array(
                             [_p.get("alpha", float("nan")) for _p in _pd_zm],
                             dtype=float)
-                        _df_zm = pd.DataFrame({
+                        _df_data_zm = {
                             "α (2 sig. cijfers)": [
                                 _round_sig(v, 2) for v in _alpha_zm[_zm_ok]
                             ],
                             "E[Z] — verwachte subscripties": _z_arr[_zm_ok],
                             "verwachte winst (€)": _m_arr[_zm_ok],
-                        })
+                        }
+                        if _m_req > 0 and _r_arr is not None:
+                            _df_data_zm["vereiste marge m·R (€)"] = (
+                                _m_req * _r_arr[_zm_ok])
+                        _df_zm = pd.DataFrame(_df_data_zm)
                         st.dataframe(_df_zm, use_container_width=True, height=280)
                         st.download_button(
                             "⬇️ Download α / E[Z] / winst-data (CSV)",
