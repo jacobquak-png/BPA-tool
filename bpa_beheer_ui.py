@@ -5247,10 +5247,13 @@ with tab_sensitivity:
                         # over alle doorgerekende (x, curve)-punten van deze sweep.
                         "z_vals":      list(_yvals_raw["total_Z"]),
                         "margin_vals": list(_yvals_raw["bpa_margin"]),
+                        # param_dicts: altijd bewaard (ook buiten greedy modus),
+                        # zodat de α-waarde per sweep-punt beschikbaar is voor
+                        # de E[Z]-vs-winst datatabel hieronder.
+                        "param_dicts": _bouw_param_dicts(),
                         # greedy detail
                         "greedy_mode": _se_greedy,
                         "greedy_budget": float(_se_budget) if _se_greedy else None,
-                        "param_dicts": _bouw_param_dicts() if _se_greedy else [],
                         "fixed_params": dict(_fixed) if _se_greedy else {},
                     }
                 except ValueError as _se_err:
@@ -5371,6 +5374,40 @@ with tab_sensitivity:
                     _fig_zm.tight_layout()
                     st.pyplot(_fig_zm)
                     _plt_zm.close(_fig_zm)
+
+                    # ── Datatabel: α (2 significante cijfers), E[Z], winst ──
+                    def _round_sig(_v, _sig=2):
+                        if not np.isfinite(_v) or _v == 0:
+                            return _v
+                        from math import floor, log10
+                        _dec = _sig - 1 - int(floor(log10(abs(_v))))
+                        return round(_v, _dec)
+
+                    _pd_zm = _res_se.get("param_dicts") or []
+                    if len(_pd_zm) == len(_z_pts):
+                        _alpha_zm = np.array(
+                            [_p.get("alpha", float("nan")) for _p in _pd_zm],
+                            dtype=float)
+                        _df_zm = pd.DataFrame({
+                            "α (2 sig. cijfers)": [
+                                _round_sig(v, 2) for v in _alpha_zm[_zm_ok]
+                            ],
+                            "E[Z] — verwachte subscripties": _z_arr[_zm_ok],
+                            "verwachte winst (€)": _m_arr[_zm_ok],
+                        })
+                        st.dataframe(_df_zm, use_container_width=True, height=280)
+                        st.download_button(
+                            "⬇️ Download α / E[Z] / winst-data (CSV)",
+                            data=_df_zm.to_csv(sep=";", decimal=",", index=False).encode("utf-8"),
+                            file_name=f"alpha_ez_winst_{date.today()}.csv",
+                            mime="text/csv",
+                            key="se_zm_download",
+                        )
+                    else:
+                        st.info(
+                            "α-waarden per punt niet beschikbaar (herbereken de "
+                            "sensitivity om de datatabel te tonen)."
+                        )
 
         # ── Greedy component-detail ───────────────────────────────────────
         if _res_se.get("greedy_mode"):
