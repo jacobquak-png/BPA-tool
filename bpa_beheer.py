@@ -845,7 +845,7 @@ def pareto_alpha_X(
 
     ``n_series`` : optioneel vooraf geladen N_i (Series op Code). Wordt gebruikt
     om herhaald inlezen van de Adoptie-tab te vermijden wanneer deze functie
-    vaak wordt aangeroepen (bv. per β_r-trekking in de onzekerheidsband).
+    vaak wordt aangeroepen (bv. per β_r-rasterpunt in de onzekerheidsband).
     ``epsilon``  : geaccepteerde kans dat de service-belofte niet gehaald wordt
     door hogere adoptie dan verwacht. Wanneer opgegeven wordt de base-stock
     berekend op het (1-ε)-kwantiel Z_i^{1-ε} ~ Binomiaal(M_i, q), terwijl de
@@ -1206,41 +1206,53 @@ def beta_r_winstband(
     budget: float          = None,
     margin_ratio_min: float = None,
 ):
-    """β_r-parameteronzekerheid: uniforme bandbreedte voor winst-vs-α en optimale α.
+    """β_r-parameteronzekerheid: bandbreedte voor winst-vs-α en optimale α.
 
-    β_r kan niet uit historische subscriptie-data worden geschat en wordt
-    daarom als **onzekere scenario-parameter** behandeld. Bij gebrek aan
-    voorkennis over welke waarde binnen een plausibel bereik het meest
-    waarschijnlijk is, wordt een uniforme verdeling gebruikt::
+    β_r kan niet uit historische subscriptie-data worden geschat. Het is
+    **geen kansverdeling** (er is geen kansmodel over de aannemelijkheid van
+    een bepaalde waarde) maar een **onzekere parameter met een plausibel
+    bereik** [beta_r_min, beta_r_max]. Om de gevoeligheid van de uitkomst
+    voor deze onzekerheid te tonen, wordt het volledige bereik **deterministisch
+    en gelijkmatig doorlopen** via een raster (geen willekeurige trekkingen,
+    geen aanname over een onderliggende verdeling)::
 
-        β_r^(k) ~ U(beta_r_min, beta_r_max),   k = 1 … n_samples.
+        β_r^(k) = beta_r_min + k·(beta_r_max − beta_r_min)/(n_samples − 1),
+        k = 0 … n_samples − 1.
 
-    Voor elke trekking wordt (bij vast service level ``X_fix``) de volledige
+    Voor elk rasterpunt wordt (bij vast service level ``X_fix``) de volledige
     keten α → q(α) → E[Z_i] → kostenmodel over ``alpha_grid`` doorgerekend
-    (via :func:`pareto_alpha_X`). Dit levert per α een verdeling van de
-    verwachte BPA-winst E[Π_BPA(α)] en per trekking een winst-maximaliserende
-    α*. De N_i worden één keer geladen en over alle trekkingen hergebruikt.
+    (via :func:`pareto_alpha_X`). Dit levert per α een bandbreedte van de
+    verwachte BPA-winst E[Π_BPA(α)] over het β_r-bereik en per rasterpunt een
+    winst-maximaliserende α*. De N_i worden één keer geladen en over alle
+    rasterpunten hergebruikt.
 
     Parameters
     ----------
-    n_samples : aantal β_r-trekkingen (K).
-    seed      : optionele seed voor reproduceerbare trekkingen.
-    alleen_haalbaar : bepaal α* per trekking alleen over haalbare α (marge ≥ 0
-                      én alle klanten profiteren), met terugval op alle α.
-    percentielen : welke percentielen te rapporteren (default P5/P50/P95).
+    n_samples : aantal β_r-rasterpunten (K) waarmee het bereik gelijkmatig
+                wordt doorlopen.
+    seed      : ongebruikt (geen willekeurige trekkingen meer); alleen nog
+                aanwezig voor achterwaartse compatibiliteit van de signatuur.
+    alleen_haalbaar : bepaal α* per rasterpunt alleen over haalbare α
+                      (marge ≥ 0 én alle klanten profiteren), met terugval op
+                      alle α.
+    percentielen : welke posities over het doorlopen β_r-bereik te
+                   rapporteren (default 5/50/95; 0/100 geven exact het
+                   minimum/maximum van de band).
 
     Returns
     -------
     dict met sleutels:
         alpha_grid     : np.array van gebruikte α-waarden;
-        beta_r_samples : np.array getrokken β_r-waarden;
+        beta_r_samples : np.array van gelijkmatig verdeelde β_r-rasterwaarden
+                         (deterministisch, geen trekkingen);
         margin_matrix  : (n_samples × len(alpha_grid)) marges E[Π_BPA];
-        margin_pct     : {p: array over α} percentiel-band van de winst;
-        margin_mean    : np.array gemiddelde winst per α;
-        opt_alpha      : np.array optimale α* per trekking;
-        opt_margin     : np.array optimale winst per trekking;
-        opt_alpha_pct  : {p: float} percentielen van de optimale α*;
-        opt_margin_pct : {p: float} percentielen van de optimale winst.
+        margin_pct     : {p: array over α} band van de winst over het
+                         doorlopen β_r-bereik (p=0/100 = min/max);
+        margin_mean    : np.array gemiddelde winst per α over het raster;
+        opt_alpha      : np.array optimale α* per rasterpunt;
+        opt_margin     : np.array optimale winst per rasterpunt;
+        opt_alpha_pct  : {p: float} band van de optimale α* over het bereik;
+        opt_margin_pct : {p: float} band van de optimale winst over het bereik.
     Of ``None`` wanneer er geen data/overzicht beschikbaar is.
     """
     _alpha = np.asarray(list(alpha_grid), dtype=float)
@@ -1249,16 +1261,18 @@ def beta_r_winstband(
     if float(beta_r_max) < float(beta_r_min):
         beta_r_min, beta_r_max = beta_r_max, beta_r_min
 
-    # N_i één keer laden (dure Excel-read) en over alle trekkingen hergebruiken.
+    # N_i één keer laden (dure Excel-read) en over alle rasterpunten hergebruiken.
     _n = aantal_klanten_per_component(excel_file, codes)
     if _n is None or _n.empty:
         return None
 
-    _rng = np.random.default_rng(seed)
-    _br_samples = _rng.uniform(float(beta_r_min), float(beta_r_max), int(n_samples))
+    # Deterministisch, gelijkmatig raster over het β_r-bereik — β_r is een
+    # onzekere parameter met een gedefinieerd bereik, geen kansverdeling, dus
+    # geen willekeurige trekkingen (``seed`` wordt niet meer gebruikt).
+    _br_samples = np.linspace(float(beta_r_min), float(beta_r_max), int(n_samples))
 
     _margin  = np.full((int(n_samples), _alpha.size), np.nan)
-    _revenue = np.full((int(n_samples), _alpha.size), np.nan)  # R per (sample, α)
+    _revenue = np.full((int(n_samples), _alpha.size), np.nan)  # R per (grid-punt, α)
     _opt_a   = np.full(int(n_samples), np.nan)
     _opt_m   = np.full(int(n_samples), np.nan)
 
