@@ -5728,6 +5728,9 @@ with tab_sensitivity:
                             "q_opt":      round(float(_best_gs["q"]), 4),
                             "margin_opt": round(
                                 float(_best_gs["total_margin"]), 2),
+                            "revenue_opt": round(
+                                float(_best_gs["total_rev"]), 2)
+                                if "total_rev" in _best_gs.index else None,
                         })
                     else:
                         _, _best_br = optimale_alpha_bij_X(
@@ -5751,6 +5754,9 @@ with tab_sensitivity:
                                 "q_opt":      round(_q_opt_br, 4),
                                 "margin_opt": round(
                                     float(_best_br["margin"]), 2),
+                                "revenue_opt": round(
+                                    float(_best_br["revenue"]), 2)
+                                    if "revenue" in _best_br.index else None,
                             })
             if not _bo_rows:
                 st.warning(
@@ -5765,6 +5771,7 @@ with tab_sensitivity:
                     "qeq":    float(_sb_qeq),
                     "greedy": bool(_sb_greedy),
                     "budget": float(_sb_budget) if _sb_greedy else None,
+                    "m_req":  float(_sb_m),
                     "rows":   _bo_rows,
                 }
 
@@ -5790,6 +5797,13 @@ with tab_sensitivity:
         _ax_bo2.tick_params(axis="y", labelcolor="#2ca02c")
         _ax_bo2.yaxis.set_major_formatter(
             _mt_bo.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
+        _bo_m_req = float(_bo_data.get("m_req", 0.0))
+        if (_bo_m_req > 0 and "revenue_opt" in _df_bo.columns
+                and _df_bo["revenue_opt"].notna().any()):
+            _ax_bo2.plot(
+                _df_bo["beta_r"], _bo_m_req * _df_bo["revenue_opt"],
+                color="#d62728", lw=1.4, ls=":",
+                label=f"required margin (m·R)  [m={_bo_m_req:.0%}]")
         _ax_bo.set_xlabel("η_r — cost-ratio sensitivity")
         _ax_bo.set_ylabel("optimal α* (%)")
         _ax_bo.set_title(
