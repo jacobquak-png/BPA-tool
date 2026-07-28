@@ -5794,7 +5794,7 @@ with tab_sensitivity:
         _ax_bo.set_ylabel("optimal α* (%)")
         _ax_bo.set_title(
             ("Greedy o" if _bo_data.get("greedy") else "O")
-            + "ptimal α* as function of β_r  (geen Monte-Carlo)"
+            + "ptimal α* as function of β_r"
             + (f"  |  budget ≤ €{_bo_bud_val:,.0f}"
                if _bo_data.get("greedy") else "")
             + f"\nX = {_bo_data['X']:.3f},  q_eq = {_bo_data['qeq']:.3f}")
