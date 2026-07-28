@@ -5821,15 +5821,23 @@ with tab_sensitivity:
         _plt_bo.close(_fig_bo)
 
         with st.expander("📋 η_r → α* sweep data (zonder MC)"):
+            def _fmt_sig_pct(_v, _sig=2):
+                if not np.isfinite(_v) or _v == 0:
+                    return "0%"
+                from math import floor, log10
+                _p = _v * 100
+                _dec = max(_sig - 1 - int(floor(log10(abs(_p)))), 0)
+                return f"{_p:.{_dec}f}%"
+
             _df_bo_disp = _df_bo.copy()
             _df_bo_disp["alpha_opt"] = _df_bo_disp["alpha_opt"].map(
-                lambda v: f"{v:.1%}")
+                lambda v: _fmt_sig_pct(v, 2))
             if "q_opt" in _df_bo_disp.columns:
                 _df_bo_disp["q_opt"] = _df_bo_disp["q_opt"].map(
                     lambda v: f"{v:.1%}")
             _df_bo_disp["margin_opt"] = _df_bo_disp["margin_opt"].map(
                 lambda v: f"€{v:,.0f}")
-            _col_map_bo = {"beta_r": "η_r", "alpha_opt": "α* (opt)",
+            _col_map_bo = {"beta_r": "η_r", "alpha_opt": "α* (opt, 2 sig. cijfers)",
                            "q_opt": "q(α*)", "margin_opt": "Marge (opt)"}
             _df_bo_disp = _df_bo_disp.rename(
                 columns={k: v for k, v in _col_map_bo.items()
