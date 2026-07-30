@@ -230,7 +230,7 @@ if "overzicht_df" not in st.session_state:
 #  TABS
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget, tab_subsim, tab_sensitivity = st.tabs([
+tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab_historie, tab_kosten, tab_drempel, tab_classificatie, tab_budget, tab_subsim, tab_sensitivity, tab_consignment = st.tabs([
     "📊 Overzicht",
     "✏️ Subscripties aanpassen",
     "➕ Component toevoegen",
@@ -243,6 +243,7 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
     "💼 Budget-scenario",
     "📈 Verwachte subscripties",
     "📐 Sensitivity (WTP)",
+    "📦 Consignment (CI + VMI)",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6379,5 +6380,213 @@ with tab_sensitivity:
         st.info(
             "Stel de parameters in en klik op **🎲 Bereken α*-bandbreedte** "
             "om de plot te genereren.")
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  TAB 13 – CONSIGNMENT (CI + VMI)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Implementeert de modeluitbreiding "Consignment stock as a second delivery
+# mode" (§6.9 / §8.5 / §9.5 van het uitbreidingsplan): naast de bestaande
+# centrale abonnementsmodus (cen) krijgt elk component een consignment-modus
+# (con) waarbij BPA voorraad plaatst op de klantlocatie (Sloc units,
+# één-op-één aangevuld). Consignment is duurder per unit (κ_con > κ_BPA) én
+# vergt meer units (géén pooling, φ_i = 1), maar bespaart de klant de
+# transit-stilstand T via de proximity premium θ. De kernresultaten zijn:
+# Propositie 1 (α_L,con is Z-onafhankelijk — een verliesgevende
+# consignmentcomponent blijft verliesgevend bij élk volume), de
+# modusdominantie-drempel φ_i ⋛ (κ_con/κ_BPA)·Sloc, en de marge-feasibility
+# α_m,L,con vs. α_U,con = κ_c − c_s.
+with tab_consignment:
+    st.subheader("📦 Consignment (CI + VMI) — feasibility-check")
+    st.caption(
+        "Feasibility-check voor een consignmenttier (CI/VMI): voorraad in "
+        "eigendom van BPA, geplaatst op de klantlocatie, **zonder het "
+        "poolingvoordeel van de centrale voorraad** — elke locatie houdt "
+        "zelf S_loc units aan, één-op-één aangevuld (§4.3), met S_loc "
+        "afgeleid uit de fill-rate-berekening op basis van de vraag van "
+        "één klant (niet vermenigvuldigd met het aantal subscripties). "
+        "BPA's holding cost wordt gedragen op **v^BPA** (inkoopprijs, IP) "
+        "maar α wordt geprijsd als % van **v^c** (verkoopprijs, VP) — de "
+        "ondergrens wordt daarom herschaald met de ratio v^BPA/v^c per "
+        "component. Vergelijk de prijsondergrens die BPA nodig heeft om de "
+        "holding cost te dekken met de prijsbovengrens die de klant nog "
+        "accepteert."
+    )
+
+    st.markdown("#### Holding costs BPA — consignment (c_f + c_s + c_o)")
+    _cv_a1, _cv_a2, _cv_a3 = st.columns(3)
+    with _cv_a1:
+        cv_cf_bpa = st.number_input(
+            "c_f — financieringskosten BPA (%)", min_value=0.0, max_value=50.0,
+            value=10.0, step=0.5, format="%.1f", key="cv_cf_bpa",
+            help="Kapitaalkosten van BPA op de consignmentvoorraad.") / 100
+    with _cv_a2:
+        cv_co_bpa = st.number_input(
+            "c_o — obsolescentiekosten BPA (%)", min_value=0.0, max_value=50.0,
+            value=7.0, step=0.5, format="%.1f", key="cv_co_bpa",
+            help="Veroudering/incourant risico van BPA op de consignmentvoorraad.") / 100
+    with _cv_a3:
+        cv_cs_bpa = st.number_input(
+            "c_s — opslagkosten BPA (%)", min_value=0.0, max_value=50.0,
+            value=5.0, step=0.5, format="%.1f", key="cv_cs_bpa",
+            help="Opslag-/handlingkosten van BPA op de consignmentvoorraad.") / 100
+    cv_kappa_con = cv_cf_bpa + cv_co_bpa + cv_cs_bpa
+    st.metric("κ_con = c_f + c_o + c_s (BPA)", f"{cv_kappa_con:.2%}")
+
+    st.markdown("#### Holding costs klant — zelfvoorraad (c_f + c_s + c_o)")
+    _cv_b1, _cv_b2, _cv_b3 = st.columns(3)
+    with _cv_b1:
+        cv_cf_cust = st.number_input(
+            "c_f — financieringskosten klant (%)", min_value=0.0, max_value=50.0,
+            value=15.0, step=0.5, format="%.1f", key="cv_cf_cust",
+            help="Kapitaalkosten van de klant als die zelf voorraad aanhoudt.") / 100
+    with _cv_b2:
+        cv_co_cust = st.number_input(
+            "c_o — obsolescentiekosten klant (%)", min_value=0.0, max_value=50.0,
+            value=7.5, step=0.5, format="%.1f", key="cv_co_cust",
+            help="Veroudering/incourant risico bij de klant.") / 100
+    with _cv_b3:
+        cv_cs_cust = st.number_input(
+            "c_s — opslagkosten klant (%)", min_value=0.0, max_value=50.0,
+            value=2.5, step=0.5, format="%.1f", key="cv_cs_cust",
+            help="Opslagkosten die de klant blijft dragen, ook onder "
+                 "consignment (§4.2). Verlaagt de bovengrens: "
+                 "α_U,con = κ_c − c_s.") / 100
+    cv_kappa_c = cv_cf_cust + cv_co_cust + cv_cs_cust
+    st.metric("κ_c = c_f + c_o + c_s (klant)", f"{cv_kappa_c:.2%}")
+
+    st.markdown("#### S_loc — uit de fill-rate-berekening (per component)")
+    st.caption(
+        "S_loc,i = S*(β^tar, λ_i, LT_i) per component, op basis van de "
+        "vraag van **één klant** (λ_i wordt hier niet vermenigvuldigd met "
+        "het aantal subscripties Z_i) — dat is precies het poolingvoordeel "
+        "dat wegvalt t.o.v. de centrale modus. S_loc verschilt dus per "
+        "component, net als de vraag."
+    )
+    _cv_has_data = (
+        "overzicht_df" in st.session_state and not st.session_state.overzicht_df.empty
+    )
+    _cv_d1, _cv_d2, _cv_d3 = st.columns(3)
+    with _cv_d1:
+        cv_sl = st.selectbox(
+            "Service level β^tar", options=SERVICE_LEVELS,
+            index=SERVICE_LEVELS.index(0.990) if 0.990 in SERVICE_LEVELS else 0,
+            format_func=lambda v: f"{v:.1%}", key="cv_sl")
+    if _cv_has_data:
+        _cv_df = st.session_state.overzicht_df.copy()
+        _cv_df["Z_i"] = _cv_df["n_klanten"].astype(float)
+        _cv_df = _cv_df[(_cv_df["Z_i"] > 0) & (_cv_df["VP"] > 0)].copy()
+        _cv_lam_pc = (_cv_df["lambda_jr"] / _cv_df["Z_i"]).astype(float)
+        _cv_lt_yr = (_cv_df["LT_dagen"] / 365.0).astype(float)
+        _cv_df["S_loc_i"] = [
+            BPAOptimizationModel.inverse_service_level(cv_sl, float(_lam), float(_lt))
+            if _lam > 0 and _lt > 0 else 0
+            for _lam, _lt in zip(_cv_lam_pc, _cv_lt_yr)
+        ]
+        _cv_df["r_i"] = (_cv_df["IP"] / _cv_df["VP"]).astype(float)
+        with _cv_d2:
+            cv_m = st.number_input(
+                "m — vereiste marge (%)", min_value=0.0, max_value=95.0,
+                value=57.0, step=1.0, format="%.0f", key="cv_m") / 100
+        cv_sloc = float(_cv_df["S_loc_i"].mean())
+        cv_r = float(_cv_df["r_i"].mean())
+        _cv_df["alpha_L_con_i"] = cv_kappa_con * _cv_df["S_loc_i"] * _cv_df["r_i"]
+        _cv_g1, _cv_g2, _cv_g3, _cv_g4 = st.columns(4)
+        _cv_g1.metric("S_loc gemiddeld", f"{cv_sloc:.2f}")
+        _cv_g2.metric("S_loc min", f"{_cv_df['S_loc_i'].min():.0f}")
+        _cv_g3.metric("S_loc max", f"{_cv_df['S_loc_i'].max():.0f}")
+        _cv_g4.metric("v^BPA/v^c gemiddeld (IP/VP)", f"{cv_r:.2%}")
+        with st.expander(f"S_loc,i per component ({len(_cv_df)} componenten)"):
+            st.dataframe(
+                _cv_df[["Z_i", "lambda_jr", "LT_dagen", "S_loc_i", "IP", "VP", "r_i", "alpha_L_con_i"]]
+                .sort_values("S_loc_i", ascending=False)
+                .style.format({
+                    "Z_i": "{:.0f}", "lambda_jr": "{:.3f}",
+                    "LT_dagen": "{:.0f}", "S_loc_i": "{:.0f}",
+                    "IP": "€{:.2f}", "VP": "€{:.2f}",
+                    "r_i": "{:.2%}", "alpha_L_con_i": "{:.2%}",
+                }),
+                use_container_width=True, height=300,
+            )
+        _cv_alpha_L_con = float(_cv_df["alpha_L_con_i"].mean())
+    else:
+        st.info("Geen overzicht geladen — vul λ/LT en v^BPA/v^c handmatig in voor een enkelvoudige schatting.")
+        _cv_d2b, _cv_d3b, _cv_d4b = st.columns(3)
+        with _cv_d2b:
+            cv_lam = st.number_input(
+                "λ — vraag per klant per jaar (units)", min_value=0.0,
+                value=2.0, step=0.1, format="%.2f", key="cv_lam")
+        with _cv_d3b:
+            cv_lt = st.number_input(
+                "LT — levertijd (dagen)", min_value=1.0, max_value=365.0,
+                value=30.0, step=1.0, format="%.0f", key="cv_lt")
+        with _cv_d4b:
+            cv_m = st.number_input(
+                "m — vereiste marge (%)", min_value=0.0, max_value=95.0,
+                value=57.0, step=1.0, format="%.0f", key="cv_m") / 100
+        _cv_d5b, _cv_d6b = st.columns(2)
+        with _cv_d5b:
+            cv_ip = st.number_input(
+                "v^BPA — inkoopprijs (€)", min_value=0.0, value=100.0, step=10.0,
+                format="%.2f", key="cv_ip",
+                help="BPA's kostbasis: de holding cost wordt hierop gedragen.")
+        with _cv_d6b:
+            cv_vp = st.number_input(
+                "v^c — verkoopprijs (€)", min_value=0.0, value=100.0, step=10.0,
+                format="%.2f", key="cv_vp",
+                help="Klantwaarde: α wordt hierop geprijsd (als %).")
+        cv_sloc = (
+            BPAOptimizationModel.inverse_service_level(cv_sl, cv_lam, cv_lt / 365.0)
+            if cv_lam > 0 else 0
+        )
+        cv_r = (cv_ip / cv_vp) if cv_vp > 0 else 1.0
+        st.metric("S_loc (units per locatie)", f"{cv_sloc:.0f}")
+        _cv_alpha_L_con = cv_kappa_con * cv_sloc * cv_r
+
+    # ── Prijsgrenzen zonder poolingvoordeel centraal ─────────────────
+    st.markdown("#### Prijsgrenzen")
+    _cv_alpha_U_con = cv_kappa_c - cv_cs_cust
+
+    _cv_e1, _cv_e2 = st.columns(2)
+    _cv_e1.metric("α_L,con — ondergrens BPA", f"{_cv_alpha_L_con:.2%}",
+                  help="κ_con·S_loc·(v^BPA/v^c): minimale prijs (als % van "
+                       "verkoopprijs) om BPA's holding cost — gedragen op de "
+                       "inkoopprijs — op de consignmentvoorraad te dekken "
+                       "(geen pooling).")
+    _cv_e2.metric("α_U,con — bovengrens klant", f"{_cv_alpha_U_con:.2%}",
+                  help="κ_c − c_s: klant betaalt niet meer dan wat "
+                       "zelf-voorraad hem/haar kost, minus de opslag die "
+                       "hij toch al zelf blijft dragen.")
+
+    # ── Marge-feasibility ─────────────────────────────────────────────
+    st.markdown("#### Marge-haalbaarheid consignmenttier")
+    _cv_alpha_m_L_con = _cv_alpha_L_con / (1 - cv_m) if cv_m < 1 else np.nan
+    _cv_gap = _cv_alpha_m_L_con - _cv_alpha_U_con
+    _cv_kappa_con_max = (
+        (1 - cv_m) * _cv_alpha_U_con / (cv_sloc * cv_r)
+        if cv_sloc * cv_r > 0 else np.nan
+    )
+
+    _cv_f1, _cv_f2, _cv_f3 = st.columns(3)
+    _cv_f1.metric("α_m,L,con — ondergrens incl. marge-eis", f"{_cv_alpha_m_L_con:.2%}")
+    _cv_f2.metric("vs. α_U,con", f"{_cv_alpha_U_con:.2%}",
+                  delta=f"{_cv_gap:+.2%} gap" if not np.isnan(_cv_gap) else None,
+                  delta_color="inverse")
+    _cv_f3.metric("Haalbaar?", "✓ JA" if _cv_gap <= 0 else "✗ NEE")
+
+    if _cv_gap > 0:
+        st.error(
+            f"De consignmenttier is bij deze parameters **infeasible** "
+            f"(gat van {_cv_gap:.2%}-punt). Nodig: κ_con ≤ "
+            f"**{_cv_kappa_con_max:.2%}**. Levers (§5.2): buy-out-clausule "
+            "na 12–24 mnd (κ_con verlagen), of een plaatsingsfee."
+        )
+    else:
+        st.success(
+            f"De consignmenttier is haalbaar onder de marge-eis "
+            f"(marge {(-_cv_gap):.2%}-punt speling)."
+        )
+
+
 
 
