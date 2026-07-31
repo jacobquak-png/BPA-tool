@@ -6466,23 +6466,39 @@ with tab_consignment:
     _cv_has_data = (
         "overzicht_df" in st.session_state and not st.session_state.overzicht_df.empty
     )
+    cv_policy = st.radio(
+        "Voorraadbeleid",
+        options=["VMI — BPA bepaalt S_loc (fill-rate)", "CI — klant bepaalt zelf (S_loc = 1)"],
+        index=0, key="cv_policy", horizontal=True,
+        help="**VMI** (Vendor-Managed Inventory): BPA voert het voorraadbeleid en "
+             "optimaliseert S_loc,i per component via de fill-rate-formule. "
+             "**CI** (Consignment Inventory): de klant voert zelf het "
+             "voorraadbeleid — in de praktijk een simpele one-for-one "
+             "basestock van 1 stuk per component, ongeacht vraag/levertijd."
+    )
+    _cv_is_vmi = cv_policy.startswith("VMI")
     _cv_d1, _cv_d2, _cv_d3 = st.columns(3)
     with _cv_d1:
         cv_sl = st.selectbox(
             "Service level β^tar", options=SERVICE_LEVELS,
             index=SERVICE_LEVELS.index(0.990) if 0.990 in SERVICE_LEVELS else 0,
-            format_func=lambda v: f"{v:.1%}", key="cv_sl")
+            format_func=lambda v: f"{v:.1%}", key="cv_sl",
+            disabled=not _cv_is_vmi,
+            help="Alleen relevant bij VMI — bij CI ligt S_loc vast op 1.")
     if _cv_has_data:
         _cv_df = st.session_state.overzicht_df.copy()
         _cv_df["Z_i"] = _cv_df["n_klanten"].astype(float)
         _cv_df = _cv_df[(_cv_df["Z_i"] > 0) & (_cv_df["VP"] > 0)].copy()
-        _cv_lam_pc = (_cv_df["lambda_jr"] / _cv_df["Z_i"]).astype(float)
-        _cv_lt_yr = (_cv_df["LT_dagen"] / 365.0).astype(float)
-        _cv_df["S_loc_i"] = [
-            BPAOptimizationModel.inverse_service_level(cv_sl, float(_lam), float(_lt))
-            if _lam > 0 and _lt > 0 else 0
-            for _lam, _lt in zip(_cv_lam_pc, _cv_lt_yr)
-        ]
+        if _cv_is_vmi:
+            _cv_lam_pc = (_cv_df["lambda_jr"] / _cv_df["Z_i"]).astype(float)
+            _cv_lt_yr = (_cv_df["LT_dagen"] / 365.0).astype(float)
+            _cv_df["S_loc_i"] = [
+                BPAOptimizationModel.inverse_service_level(cv_sl, float(_lam), float(_lt))
+                if _lam > 0 and _lt > 0 else 0
+                for _lam, _lt in zip(_cv_lam_pc, _cv_lt_yr)
+            ]
+        else:
+            _cv_df["S_loc_i"] = 1.0
         _cv_df["r_i"] = (_cv_df["IP"] / _cv_df["VP"]).astype(float)
         with _cv_d2:
             cv_m = st.number_input(
@@ -6536,8 +6552,9 @@ with tab_consignment:
                 format="%.2f", key="cv_vp",
                 help="Klantwaarde: α wordt hierop geprijsd (als %).")
         cv_sloc = (
-            BPAOptimizationModel.inverse_service_level(cv_sl, cv_lam, cv_lt / 365.0)
-            if cv_lam > 0 else 0
+            (BPAOptimizationModel.inverse_service_level(cv_sl, cv_lam, cv_lt / 365.0)
+             if cv_lam > 0 else 0)
+            if _cv_is_vmi else 1.0
         )
         cv_r = (cv_ip / cv_vp) if cv_vp > 0 else 1.0
         st.metric("S_loc (units per locatie)", f"{cv_sloc:.0f}")
