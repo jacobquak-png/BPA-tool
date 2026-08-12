@@ -36,6 +36,7 @@ from bpa_beheer import (
     pareto_alpha_X,
     optimale_alpha_bij_X,
     beta_r_winstband,
+    eta0_winstband,
     greedy_alpha_sweep,
     winst_voor_wtp_grid,
     metrieken_voor_wtp_grid,
@@ -1106,7 +1107,7 @@ with tab_historie:
         st.divider()
         st.subheader("Haalbaarheid BPA per (Z, serviceniveau)")
         st.caption(
-            "Groen = BPA is haalbaar (marge ≥ 0), rood = niet haalbaar. "
+            "Groen = BPA is haalbaar (marge > 0), rood = niet haalbaar. "
             "α wordt overgenomen uit tabblad 💰 Kostenanalyse; κ_BPA en κ_c idem."
         )
 
@@ -2475,32 +2476,55 @@ with tab_drempel:
         )
         _sl_col = f"s@{_sl_d:.1%}"
 
+        _drm_mode = st.radio(
+            "Startpunt",
+            options=["Adoptie-bewust", "Conservatief (Z=1)"],
+            horizontal=True,
+            key="drempel_startpunt",
+            help=("Kies het verwachte adoptieniveau of start ieder component met "
+                  "precies één abonnee."),
+        )
+        _drm_conservative = _drm_mode == "Conservatief (Z=1)"
+        _drm_report_cutoff = 10
+
         # ── Adoptie-bewuste parameters: bereken Z_i(α) als huidig niveau ──
-        _drm_c1, _drm_c2, _drm_c3 = st.columns(3)
-        with _drm_c1:
-            _drm_alpha = st.number_input(
-                "α (abonnementstarief)",
-                min_value=0.001, max_value=1.0,
-                value=float(st.session_state.get("kosten_params", {}).get("alpha", 0.15)),
-                step=0.01, format="%.3f", key="drm_alpha",
-                help="Prijspercentage α waarvoor Z_i(α) = M_i·q(α) wordt berekend.",
+        _drm_q = 0.0
+        if _drm_conservative:
+            _drm_report_cutoff = st.number_input(
+                "Rapportagegrens voor ruime drempel (τ ≥)",
+                min_value=2, max_value=100_000, value=10, step=1,
+                key="drempel_report_cutoff",
             )
-        with _drm_c2:
-            _drm_q_eq = st.number_input(
-                "q_eq (adoptie bij pariteit)",
-                min_value=0.01, max_value=0.99,
-                value=float(st.session_state.get("subsim_q_eq", 0.55)),
-                step=0.05, format="%.2f", key="drm_q_eq",
+            st.caption(
+                "Voor ieder component wordt Z_i = 1 gebruikt. τ is het kleinste "
+                "aantal extra abonnees waarbij S* stijgt."
             )
-        with _drm_c3:
-            _drm_beta_r = st.number_input(
-                "η_r (kostenratio-gevoeligheid)",
-                min_value=0.0, max_value=20.0,
-                value=float(st.session_state.get("subsim_beta_r", 1.0)),
-                step=0.1, format="%.2f", key="drm_beta_r",
-            )
-        _drm_kappa_c = float(st.session_state.get("kosten_params", {}).get("kappa_c", 0.25))
-        _drm_q = adoptie_kans(_drm_alpha, _drm_kappa_c, _drm_q_eq, _drm_beta_r)
+        else:
+            _drm_c1, _drm_c2, _drm_c3 = st.columns(3)
+            with _drm_c1:
+                _drm_alpha = st.number_input(
+                    "α (abonnementstarief)",
+                    min_value=0.001, max_value=1.0,
+                    value=float(st.session_state.get("kosten_params", {}).get("alpha", 0.15)),
+                    step=0.01, format="%.3f", key="drm_alpha",
+                    help="Prijspercentage α waarvoor Z_i(α) = M_i·q(α) wordt berekend.",
+                )
+            with _drm_c2:
+                _drm_q_eq = st.number_input(
+                    "q_eq (adoptie bij pariteit)",
+                    min_value=0.01, max_value=0.99,
+                    value=float(st.session_state.get("subsim_q_eq", 0.55)),
+                    step=0.05, format="%.2f", key="drm_q_eq",
+                )
+            with _drm_c3:
+                _drm_beta_r = st.number_input(
+                    "η_r (kostenratio-gevoeligheid)",
+                    min_value=0.0, max_value=20.0,
+                    value=float(st.session_state.get("subsim_beta_r", 1.0)),
+                    step=0.1, format="%.2f", key="drm_beta_r",
+                )
+            _drm_kappa_c = float(st.session_state.get("kosten_params", {}).get("kappa_c", 0.25))
+            _drm_q = adoptie_kans(_drm_alpha, _drm_kappa_c, _drm_q_eq, _drm_beta_r)
 
         # Laad M_i (cached) voor Z_i(α) = M_i·q(α)
         _drm_n_mi = pd.Series(dtype=float)
@@ -2514,7 +2538,7 @@ with tab_drempel:
                 )
         except Exception:
             pass
-        if not _drm_n_mi.empty:
+        if not _drm_conservative and not _drm_n_mi.empty:
             st.caption(
                 f"Adoptie-bewust: q(α={_drm_alpha:.1%}) = {_drm_q:.3f} — "
                 f"Z_i(α) = M_i·q gebruikt als huidig niveau. "
@@ -2532,7 +2556,7 @@ with tab_drempel:
 
             # Adoptie-bewust: gebruik Z_i(α) = M_i·q(α) als huidig abonneeniveau
             _mi  = float(_drm_n_mi.get(str(_code), float(_n_orig))) if not _drm_n_mi.empty else float(_n_orig)
-            _n   = int(round(_mi * _drm_q))
+            _n   = 1 if _drm_conservative else int(round(_mi * _drm_q))
             _lam_pn = _lam_orig / _n_orig if _n_orig > 0 else _lam_orig
             _lam = _n * _lam_pn
 
@@ -2541,28 +2565,18 @@ with tab_drempel:
                       if _n > 0 and _lam > 0 and _lt_jr > 0 else 0)
 
             if _n > 0 and _lam_pn > 0 and _lt_jr > 0:
-                # Binary search: kleinste N_drempel waarbij S* > _s_now
-                _lo, _hi = _n + 1, _n + _MAX_N_SEARCH
-                _s_hi = BPAOptimizationModel.inverse_service_level(
-                    _sl_d, _lam_pn * _hi, _lt_jr
+                _extra = BPAOptimizationModel.subscription_threshold(
+                    _sl_d,
+                    _lam_pn,
+                    _lt_jr,
+                    current_subscribers=_n,
+                    max_extra=_MAX_N_SEARCH,
                 )
-                if _s_hi <= _s_now:
-                    _n_drempel = None
-                else:
-                    while _lo < _hi:
-                        _mid = (_lo + _hi) // 2
-                        _s_mid = BPAOptimizationModel.inverse_service_level(
-                            _sl_d, _lam_pn * _mid, _lt_jr
-                        )
-                        if _s_mid > _s_now:
-                            _hi = _mid
-                        else:
-                            _lo = _mid + 1
-                    _n_drempel = _lo
+                _n_drempel = _n + _extra if _extra is not None else None
             else:
+                _extra = None
                 _n_drempel = None
 
-            _extra = (_n_drempel - _n) if _n_drempel is not None else None
             _drempel_rows.append({
                 "Code":          _code,
                 "Omschrijving":  str(_row.get("Descr", ""))[:35],
@@ -2607,6 +2621,38 @@ with tab_drempel:
             use_container_width=True,
             height=500,
         )
+
+        if _drm_conservative:
+            _valid_thresholds = _tbl_d["Extra Z nodig"].dropna().astype(int)
+            _n_components = len(_tbl_d)
+            _n_stock_one = int((_tbl_d["S* huidig"] == 1).sum())
+            _n_immediate = int((_valid_thresholds == 1).sum())
+            _n_roomy = int((_valid_thresholds >= int(_drm_report_cutoff)).sum())
+
+            st.markdown("**Conservatieve samenvatting**")
+            _sum_c1, _sum_c2, _sum_c3, _sum_c4 = st.columns(4)
+            _sum_c1.metric("Componenten", _n_components)
+            _sum_c2.metric("S*(1) = 1", _n_stock_one)
+            _sum_c3.metric("τ = 1", _n_immediate)
+            _sum_c4.metric(f"τ ≥ {int(_drm_report_cutoff)}", _n_roomy)
+
+            _distribution = (
+                _valid_thresholds.value_counts().sort_index().rename_axis("τ")
+                .reset_index(name="Aantal componenten")
+            )
+            st.dataframe(_distribution, hide_index=True, use_container_width=False)
+            _immediate_rows = _tbl_d[_tbl_d["Extra Z nodig"] == 1]
+            _stock_increase_text = (
+                "a second unit"
+                if not _immediate_rows.empty and (_immediate_rows["S* huidig"] == 1).all()
+                else "an additional unit"
+            )
+            st.code(
+                f"For {_n_immediate} components the first additional subscriber already "
+                f"requires {_stock_increase_text}, while {_n_roomy} components can accommodate "
+                f"{int(_drm_report_cutoff)} or more subscribers at the initial stock level.",
+                language=None,
+            )
 
         # ── Bar chart: Extra N nodig per component ─────────────────────────
         _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra Z nodig"].notna()].copy()
@@ -2748,10 +2794,11 @@ with tab_classificatie:
         )
     with _mf2:
         _min_orders = st.number_input(
-            "Min. gem. orders/locatie", 0.0, 100.0, 0.0, 0.1,
+            "Min. gem. orders/locatie/jaar", 0.0, 100.0, 0.0, 0.1,
             key="cls_min_orders",
             format="%.1f",
-            help="Artikelen met gem. orders/locatie < deze waarde worden uitgesloten.",
+            help=("Artikelen met gemiddeld minder orders per actieve "
+                  "klantlocatie per jaar worden uitgesloten."),
         )
 
     st.markdown("**Aggregatiemethode**")
@@ -2878,7 +2925,7 @@ with tab_classificatie:
             "ABC_categorie", "ArticleType",
             "Standaard verkoopprijs",
             "Aantal_klantlocaties_met_orders_5jr",
-            "Gem_orders_per_klantlocatie_5jr",
+            "Gem_orders_per_klantlocatie_per_jaar",
             # MTBF: bron-kolom (originele waarde + eenheid) + genormaliseerd in jaren
             "MTBF(years)", "MTBF (years)", "MTBF_years",
             "MTBF(jaren)", "MTBF (jaren)",
@@ -2929,7 +2976,7 @@ with tab_classificatie:
 
                 _SW_LOC = "Aantal_klantlocaties_met_orders_5jr"
                 _SW_PRI = "Standaard verkoopprijs"
-                _SW_ORD = "Gem_orders_per_klantlocatie_5jr"
+                _SW_ORD = "Gem_orders_per_klantlocatie_per_jaar"
 
                 def _sw_sel(ml, mp, mo):
                     """Hard filters + topn; returns frozenset of index labels."""
@@ -2976,7 +3023,7 @@ with tab_classificatie:
                 _sw_configs = [
                     (_SW_LOC, "Min. klantlocaties",      float(_sw_params.min_klantlocaties)),
                     (_SW_PRI, "Min. verkoopprijs (€)",   float(_sw_params.min_prijs)),
-                    (_SW_ORD, "Min. orders/locatie",     float(_sw_params.min_orders)),
+                    (_SW_ORD, "Min. orders/locatie/jaar", float(_sw_params.min_orders)),
                 ]
                 _sw_fig, _sw_axes = _plt_sw.subplots(2, 3, figsize=(13, 5.5), sharex="col")
                 for _ci, (_sw_col, _sw_lbl, _sw_cur) in enumerate(_sw_configs):
@@ -3026,7 +3073,7 @@ with tab_classificatie:
         _raw_cols   = [
             "Standaard verkoopprijs",
             "Aantal_klantlocaties_met_orders_5jr",
-            "Gem_orders_per_klantlocatie_5jr",
+            "Gem_orders_per_klantlocatie_per_jaar",
         ]
         _has_scores = all(c in _res.columns for c in _score_cols)
         _has_raw    = all(c in _res.columns for c in _raw_cols)
@@ -3142,6 +3189,60 @@ with tab_classificatie:
                 _fig3d.subplots_adjust(left=0.06, right=0.96, top=0.95, bottom=0.06)
                 st.pyplot(_fig3d)
                 _plt_cls.close(_fig3d)
+
+                # ── 2D-scatter: kies twee van de drie criteria ──
+                st.markdown("**Twee criteria vergelijken**")
+                _scatter_sel_x, _scatter_sel_y = st.columns(2)
+                if st.session_state.get("cls_scatter_x") not in _viz_cols:
+                    st.session_state["cls_scatter_x"] = _viz_cols[0]
+                with _scatter_sel_x:
+                    _scatter_x = st.selectbox(
+                        "Criterium op x-as",
+                        options=_viz_cols,
+                        format_func=lambda c: _crit_meta[c][0],
+                        key="cls_scatter_x",
+                    )
+
+                _scatter_y_options = [c for c in _viz_cols if c != _scatter_x]
+                if st.session_state.get("cls_scatter_y") not in _scatter_y_options:
+                    st.session_state["cls_scatter_y"] = _scatter_y_options[0]
+                with _scatter_sel_y:
+                    _scatter_y = st.selectbox(
+                        "Criterium op y-as",
+                        options=_scatter_y_options,
+                        format_func=lambda c: _crit_meta[c][0],
+                        key="cls_scatter_y",
+                    )
+
+                _scatter_x_label = _crit_meta[_scatter_x][0]
+                _scatter_y_label = _crit_meta[_scatter_y][0]
+                _fig2d, _ax2d = _plt_cls.subplots(figsize=(9, 5.5))
+                for _mask, _kleur, _lbl in [
+                    (_opnemen_mask,  "#2E7D32", "Include in list"),
+                    (~_opnemen_mask, "#C62828", "Do not include"),
+                ]:
+                    _sub = _plot_df[_mask]
+                    if not _sub.empty:
+                        _ax2d.scatter(
+                            _sub[_scatter_x], _sub[_scatter_y],
+                            c=_kleur, label=_lbl, s=38, alpha=0.65,
+                            edgecolors="white", linewidths=0.35,
+                        )
+                if _log_schaal:
+                    _ax2d.set_xscale("log")
+                    _ax2d.set_yscale("log")
+                _ax2d.set_xlabel(_scatter_x_label, fontsize=10)
+                _ax2d.set_ylabel(_scatter_y_label, fontsize=10)
+                _ax2d.set_title(
+                    f"{_scatter_x_label} vs. {_scatter_y_label} "
+                    f"({len(_plot_df)} components)",
+                    fontsize=12,
+                )
+                _ax2d.grid(True, alpha=0.25)
+                _ax2d.legend(fontsize=9)
+                _fig2d.tight_layout()
+                st.pyplot(_fig2d)
+                _plt_cls.close(_fig2d)
 
                 # ── Bar charts (histogrammen) per criterium ──
                 st.markdown("**Verdeling per criterium**")
@@ -3572,9 +3673,8 @@ with tab_budget:
                 st.warning(
                     f"⚠ {_n_loss} van {len(_df_b)} componenten zijn structureel "
                     f"verliesgevend bij α = {_alpha_b:.1%} en κ_BPA = {_kappa_b:.1%} "
-                    f"(C_BPA > abonnementsomzet). Ze blijven zichtbaar in de tabel "
-                    f"maar krijgen een negatieve ROI; greedy plaatst ze onderaan en "
-                    f"selecteert ze in de regel niet — verhoog eventueel α of "
+                    f"(C_BPA > abonnementsomzet). Ze blijven zichtbaar in de tabel, "
+                    f"maar worden niet geselecteerd — verhoog eventueel α of "
                     f"verlaag κ_BPA om ze rendabel te maken."
                 )
 
@@ -3625,8 +3725,12 @@ with tab_budget:
                 .drop(columns=["_Ratio_rd"])
                 .copy()
             )
-            _cum = _df_sorted["Inv"].cumsum()
-            _df_sorted["In_selectie"] = _cum <= _budget
+            _eligible_sorted = (
+                np.isfinite(_df_sorted["Winst_jr"])
+                & (_df_sorted["Winst_jr"] > 0)
+            )
+            _cum = _df_sorted["Inv"].where(_eligible_sorted, 0.0).cumsum()
+            _df_sorted["In_selectie"] = _eligible_sorted & (_cum <= _budget)
 
             # Probeer optioneel nog kleinere items toe te voegen die nog wel passen
             # (na de eerste die niet meer past — kan totale waarde verhogen).
@@ -3634,7 +3738,8 @@ with tab_budget:
             _resterend = _budget - _df_sorted.loc[_df_sorted["In_selectie"], "Inv"].sum()
             _sel_arr = _df_sorted["In_selectie"].to_numpy().copy()
             _inv_arr = _df_sorted["Inv"].to_numpy()
-            for _pos in np.where(~_sel_arr)[0]:
+            _eligible_arr = _eligible_sorted.to_numpy()
+            for _pos in np.where(~_sel_arr & _eligible_arr)[0]:
                 _kost = float(_inv_arr[_pos])
                 if _kost <= _resterend:
                     _sel_arr[_pos] = True
@@ -4198,7 +4303,6 @@ with tab_subsim:
             import matplotlib.pyplot as _plt_sens
             _figs, (_axa, _axb, _axc) = _plt_sens.subplots(1, 3, figsize=(14, 4))
             _axa.plot(_sens["a_grid"], _sens["z_vs_a"], color="#1f77b4", lw=2)
-            _axa.axvline(_sens["alpha"], color="grey", ls="--", lw=1)
             _axa.set_xlabel("price percentage α")
             _axa.set_ylabel("expected total subscriptions  Σ E[Z]")
             _axa.set_title(f"Z vs. α  (η_r={_sens['beta_r']:.2f}, q_eq={_sens['q_eq']:.2f})")
@@ -4380,7 +4484,7 @@ with tab_subsim:
                 "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
                 step=0.01, format="%.2f", key="subsim_opt_amax")
         _opt_feas = st.checkbox(
-            "Alleen haalbare combinaties meenemen (marge ≥ 0 én alle klanten profiteren)",
+            "Alleen haalbare combinaties meenemen (marge > 0 én alle klanten profiteren)",
             value=False, key="subsim_opt_feas")
         _opt_cc = st.checkbox(
             "Chance-constraint base stock  P(β_i ≥ β^tar) ≥ 1−ε",
@@ -4557,7 +4661,7 @@ with tab_subsim:
                 "α* alleen over haalbare α zoeken",
                 value=False, key="subsim_bru_feas",
                 help="Bepaal de optimale α* per rasterpunt alleen over haalbare α "
-                     "(marge ≥ 0 én alle klanten profiteren).")
+                     "(marge > 0 én alle klanten profiteren).")
         _bru_cc = st.checkbox(
             "Chance-constraint base stock  P(β_i ≥ β^tar) ≥ 1−ε",
             value=False, key="subsim_bru_cc",
@@ -5021,6 +5125,7 @@ with tab_sensitivity:
         "inv_total":     {"label": "Stock investment Σ Sᵢ·IPᵢ (€)",       "axis": "stock investment Σ Sᵢ·IPᵢ (€)",        "tbl": "Investment (€)",       "kind": "euro"},
         "margin_ratio":  {"label": "Margin ratio (margin / revenue)",      "axis": "margin ratio (margin / revenue)",       "tbl": "Margin ratio",         "kind": "pct"},
         "margin_per_sub":{"label": "Margin per subscriber (€/sub)",        "axis": "margin per subscriber (€/sub)",         "tbl": "Margin/sub (€)",       "kind": "euro"},
+        "optimal_alpha": {"label": "Optimal α (maximum BPA margin)",        "axis": "optimal α",                              "tbl": "Optimal α",            "kind": "pct"},
         "total_Z":       {"label": "Expected subscriptions E[Z]",          "axis": "expected subscriptions E[Z]",           "tbl": "E[Z]",                 "kind": "num"},
         "stock_level":   {"label": "Total base stock Σ Sᵢ (units)",        "axis": "total base stock Σ Sᵢ (units)",         "tbl": "Total stock (units)",  "kind": "num"},
         "q":             {"label": "Adoption probability q(α)",            "axis": "adoption probability q(α)",             "tbl": "q(α)",                 "kind": "pct"},
@@ -5035,11 +5140,17 @@ with tab_sensitivity:
 
     # ── Onafhankelijke as-keuzes ──────────────────────────────────────────
     # ε werkt in zowel greedy als non-greedy modus (CC-stock via kwantiel).
-    _active_params = _WTP_PARAMS
-    _labels_se_active = _labels_se
+    _optimal_alpha_mode = _y_var == "optimal_alpha"
+    _active_params = {
+        k: v for k, v in _WTP_PARAMS.items()
+        if not (_optimal_alpha_mode and k == "alpha")
+    }
+    _labels_se_active = {k: _labels_se[k] for k in _active_params}
 
     _cx, _ccurve = st.columns(2)
     with _cx:
+        if st.session_state.get("se_x_var") not in _active_params:
+            st.session_state["se_x_var"] = next(iter(_active_params))
         _x_var = st.selectbox(
             "X-as variabele", options=list(_active_params.keys()),
             format_func=lambda k: _labels_se_active[k], index=0, key="se_x_var",
@@ -5049,7 +5160,7 @@ with tab_sensitivity:
         # Als de opgeslagen curve-variabele gelijk is aan de nieuw gekozen
         # x-variabele, reset dan naar "(geen)" — anders gooit Streamlit een
         # exception (waarde niet in opties) en valt de tab-layout uit elkaar.
-        if st.session_state.get("se_curve_var", "(geen)") == _x_var:
+        if st.session_state.get("se_curve_var", "(geen)") not in _curve_opts:
             st.session_state["se_curve_var"] = "(geen)"
         _curve_var = st.selectbox(
             "Curve-variabele (optioneel)", options=_curve_opts,
@@ -5164,6 +5275,32 @@ with tab_sensitivity:
 
     _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_x_n)))
 
+    _alpha_opt_grid = None
+    if _optimal_alpha_mode:
+        st.markdown("**Zoekbereik voor optimale α**")
+        _oa1, _oa2, _oa3 = st.columns(3)
+        with _oa1:
+            _alpha_opt_min = st.number_input(
+                "α minimum", min_value=0.0001, max_value=1.0,
+                value=0.01, step=0.01, format="%.3f", key="se_opt_alpha_min")
+        with _oa2:
+            _alpha_opt_max = st.number_input(
+                "α maximum", min_value=0.0001, max_value=1.0,
+                value=0.50, step=0.01, format="%.3f", key="se_opt_alpha_max")
+        with _oa3:
+            _alpha_opt_n = st.slider(
+                "α gridpunten", min_value=10, max_value=200, value=60,
+                key="se_opt_alpha_n")
+        _alpha_opt_grid = list(np.linspace(
+            min(float(_alpha_opt_min), float(_alpha_opt_max)),
+            max(float(_alpha_opt_min), float(_alpha_opt_max)),
+            int(_alpha_opt_n),
+        ))
+        st.caption(
+            "Het raster lokaliseert het globale optimum; daarna verfijnt de tool "
+            "het beste interval in drie adaptieve rondes."
+        )
+
     # ── Param-dicts voor alle (x, curve)-punten ───────────────────────────
     def _bouw_param_dicts():
         _dicts = []
@@ -5190,12 +5327,12 @@ with tab_sensitivity:
             help="Maximaal investeringsbudget voor de greedy-selectie per parameterpunt.")
 
     _se_m = st.number_input(
-        "Margin-vereiste m (marge / omzet ≥ m)",
+        "Margin-vereiste m (marge / omzet > m)",
         min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.2f",
         key="se_req_m",
-        help="Minimum vereiste verhouding marge/omzet. Wordt getoond als "
-             "referentielijn 'vereiste marge (m·R)' in de E[Z]-vs-winst-plot. "
-             "0 = geen vereiste (standaard).")
+           help="Minimum vereiste verhouding marge/omzet. Bij een margemetriek op "
+               "de y-as wordt de bijbehorende vereiste marge altijd meegeplot. "
+               "0 = break-even.")
 
     if st.button("📊 Bereken sensitivity", type="primary",
                  disabled=not _cls_codes_se, key="se_bereken"):
@@ -5212,15 +5349,116 @@ with tab_sensitivity:
                     + (" (greedy per punt)" if _se_greedy else " via het kostenmodel")
                     + "…"):
                 try:
-                    _recs = metrieken_voor_wtp_grid(
-                        _ov_se, _bouw_param_dicts(),
-                        _kappa_bpa_se, _kappa_c_se,
-                        excel_file=_excel_arg_se(), codes=_cls_codes_se,
-                        budget=float(_se_budget) if _se_greedy else None,
-                    )
+                    _outer_param_dicts = _bouw_param_dicts()
+                    if _optimal_alpha_mode:
+                        _coarse_param_dicts = [
+                            {**_p, "alpha": float(_alpha)}
+                            for _p in _outer_param_dicts
+                            for _alpha in _alpha_opt_grid
+                        ]
+                        _coarse_recs = metrieken_voor_wtp_grid(
+                            _ov_se, _coarse_param_dicts,
+                            _kappa_bpa_se, _kappa_c_se,
+                            excel_file=_excel_arg_se(), codes=_cls_codes_se,
+                            budget=float(_se_budget) if _se_greedy else None,
+                        )
+                        _candidate_alphas = [
+                            np.asarray(_alpha_opt_grid, dtype=float)
+                            for _ in _outer_param_dicts
+                        ]
+                        _candidate_recs = []
+                        _n_coarse = len(_alpha_opt_grid)
+                        for _point_index in range(len(_outer_param_dicts)):
+                            _start = _point_index * _n_coarse
+                            _candidate_recs.append(
+                                _coarse_recs[_start:_start + _n_coarse]
+                            )
+
+                        for _ in range(3):
+                            _refine_param_dicts = []
+                            _refine_grids = []
+                            for _p, _alphas, _point_recs in zip(
+                                    _outer_param_dicts, _candidate_alphas,
+                                    _candidate_recs):
+                                _margins = np.asarray([
+                                    _r.get("bpa_margin", float("nan"))
+                                    for _r in _point_recs
+                                ], dtype=float)
+                                if np.isfinite(_margins).any():
+                                    _best = int(np.nanargmax(_margins))
+                                    _left = max(0, _best - 1)
+                                    _right = min(len(_alphas) - 1, _best + 1)
+                                    if _left == _right:
+                                        _refined = np.asarray([_alphas[_best]])
+                                    else:
+                                        _refined = np.linspace(
+                                            float(_alphas[_left]),
+                                            float(_alphas[_right]), 11,
+                                        )
+                                else:
+                                    _refined = np.asarray([float(_alphas[0])])
+                                _refine_grids.append(_refined)
+                                _refine_param_dicts.extend(
+                                    {**_p, "alpha": float(_alpha)}
+                                    for _alpha in _refined
+                                )
+                            _refine_recs = metrieken_voor_wtp_grid(
+                                _ov_se, _refine_param_dicts,
+                                _kappa_bpa_se, _kappa_c_se,
+                                excel_file=_excel_arg_se(), codes=_cls_codes_se,
+                                budget=(float(_se_budget)
+                                        if _se_greedy else None),
+                            )
+                            _candidate_alphas = _refine_grids
+                            _candidate_recs = []
+                            _offset = 0
+                            for _refined in _refine_grids:
+                                _count = len(_refined)
+                                _candidate_recs.append(
+                                    _refine_recs[_offset:_offset + _count]
+                                )
+                                _offset += _count
+                    else:
+                        _eval_param_dicts = _outer_param_dicts
+                        _eval_recs = metrieken_voor_wtp_grid(
+                            _ov_se, _eval_param_dicts,
+                            _kappa_bpa_se, _kappa_c_se,
+                            excel_file=_excel_arg_se(), codes=_cls_codes_se,
+                            budget=(float(_se_budget)
+                                    if _se_greedy else None),
+                        )
+                    if _optimal_alpha_mode:
+                        _recs = []
+                        _yvals = []
+                        _result_param_dicts = []
+                        for _p, _alphas, _point_recs in zip(
+                                _outer_param_dicts, _candidate_alphas,
+                                _candidate_recs):
+                            _margins = np.asarray([
+                                _r.get("bpa_margin", float("nan"))
+                                for _r in _point_recs
+                            ], dtype=float)
+                            if np.isfinite(_margins).any():
+                                _best_index = int(np.nanargmax(_margins))
+                                _recs.append(_point_recs[_best_index])
+                                _alpha_best = float(_alphas[_best_index])
+                                _yvals.append(_alpha_best)
+                                _result_param_dicts.append(
+                                    {**_p, "alpha": _alpha_best}
+                                )
+                            else:
+                                _recs.append({})
+                                _yvals.append(float("nan"))
+                                _result_param_dicts.append(dict(_p))
+                    else:
+                        _recs = _eval_recs
+                        _result_param_dicts = _outer_param_dicts
                     _yvals_raw = {r_key: [r.get(r_key, float("nan")) for r in _recs]
-                                  for r_key in ("bpa_margin", "revenue", "total_Z")}
-                    if _y_var == "margin_ratio":
+                                  for r_key in ("bpa_margin", "revenue", "costs",
+                                                "total_Z", "stock_level")}
+                    if _optimal_alpha_mode:
+                        pass
+                    elif _y_var == "margin_ratio":
                         _yvals = [
                             m / v if (np.isfinite(m) and np.isfinite(v) and v > 0)
                             else float("nan")
@@ -5234,20 +5472,151 @@ with tab_sensitivity:
                         ]
                     else:
                         _yvals = [r.get(_y_var, float("nan")) for r in _recs]
+
+                    _margin_peaks = None
+                    if _y_var == "bpa_margin" and not _optimal_alpha_mode:
+                        _peak_grids = [
+                            np.asarray(_x_grid, dtype=float)
+                            for _ in _curve_vals
+                        ]
+                        _peak_recs = [
+                            _recs[_i * len(_x_grid):(_i + 1) * len(_x_grid)]
+                            for _i in range(len(_curve_vals))
+                        ]
+                        _peak_base_params = [
+                            _outer_param_dicts[_i * len(_x_grid)]
+                            for _i in range(len(_curve_vals))
+                        ]
+                        for _ in range(3):
+                            _peak_eval_params = []
+                            _refined_peak_grids = []
+                            for _p, _grid, _point_recs in zip(
+                                    _peak_base_params, _peak_grids, _peak_recs):
+                                _margins = np.asarray([
+                                    _r.get("bpa_margin", float("nan"))
+                                    for _r in _point_recs
+                                ], dtype=float)
+                                if np.isfinite(_margins).any():
+                                    _best = int(np.nanargmax(_margins))
+                                    _left = max(0, _best - 1)
+                                    _right = min(len(_grid) - 1, _best + 1)
+                                    if _left == _right:
+                                        _refined = np.asarray([_grid[_best]])
+                                    else:
+                                        _refined = np.linspace(
+                                            float(_grid[_left]),
+                                            float(_grid[_right]), 11,
+                                        )
+                                else:
+                                    _refined = np.asarray([float(_grid[0])])
+                                _refined_peak_grids.append(_refined)
+                                _peak_eval_params.extend(
+                                    {**_p, _x_var: float(_x_value)}
+                                    for _x_value in _refined
+                                )
+                            _peak_eval_recs = metrieken_voor_wtp_grid(
+                                _ov_se, _peak_eval_params,
+                                _kappa_bpa_se, _kappa_c_se,
+                                excel_file=_excel_arg_se(), codes=_cls_codes_se,
+                                budget=(float(_se_budget)
+                                        if _se_greedy else None),
+                            )
+                            _peak_grids = _refined_peak_grids
+                            _peak_recs = []
+                            _offset = 0
+                            for _refined in _refined_peak_grids:
+                                _count = len(_refined)
+                                _peak_recs.append(
+                                    _peak_eval_recs[_offset:_offset + _count]
+                                )
+                                _offset += _count
+
+                        _margin_peaks = []
+                        for _grid, _point_recs in zip(_peak_grids, _peak_recs):
+                            _margins = np.asarray([
+                                _r.get("bpa_margin", float("nan"))
+                                for _r in _point_recs
+                            ], dtype=float)
+                            if np.isfinite(_margins).any():
+                                _best = int(np.nanargmax(_margins))
+                                _margin_peaks.append({
+                                    "x": float(_grid[_best]),
+                                    "margin": float(_margins[_best]),
+                                })
+                            else:
+                                _margin_peaks.append({
+                                    "x": float("nan"),
+                                    "margin": float("nan"),
+                                })
+                    _required_yvals = None
+                    if _y_var == "bpa_margin":
+                        _required_yvals = [
+                            float(_se_m) * revenue
+                            if np.isfinite(revenue) else float("nan")
+                            for revenue in _yvals_raw["revenue"]
+                        ]
+                    elif _y_var == "margin_ratio":
+                        _required_yvals = [float(_se_m)] * len(_recs)
+                    elif _y_var == "margin_per_sub":
+                        _required_yvals = [
+                            float(_se_m) * revenue / subscriptions
+                            if (np.isfinite(revenue) and np.isfinite(subscriptions)
+                                and subscriptions > 0)
+                            else float("nan")
+                            for revenue, subscriptions in zip(
+                                _yvals_raw["revenue"], _yvals_raw["total_Z"]
+                            )
+                        ]
                     _nx = len(_x_grid)
                     _per_curve = [
                         _yvals[_i * _nx:(_i + 1) * _nx]
                         for _i in range(len(_curve_vals))
                     ]
+                    _margin_context_per_curve = None
+                    if _y_var in {"bpa_margin", "margin_ratio", "margin_per_sub"}:
+                        _margin_context_per_curve = {
+                            _metric: [
+                                _yvals_raw[_metric][_i * _nx:(_i + 1) * _nx]
+                                for _i in range(len(_curve_vals))
+                            ]
+                            for _metric in ("stock_level", "costs", "revenue")
+                        }
+                    _required_per_curve = (
+                        [
+                            _required_yvals[_i * _nx:(_i + 1) * _nx]
+                            for _i in range(len(_curve_vals))
+                        ]
+                        if _required_yvals is not None else None
+                    )
+                    _feasible_vals = []
+                    for _rec in _recs:
+                        _model_feasible = bool(_rec.get("feasible", False))
+                        _margin_feasible = True
+                        if float(_se_m) > 0:
+                            _margin = float(_rec.get("bpa_margin", float("nan")))
+                            _revenue = float(_rec.get("revenue", float("nan")))
+                            _margin_feasible = (
+                                np.isfinite(_margin)
+                                and np.isfinite(_revenue)
+                                and _margin > float(_se_m) * _revenue
+                            )
+                        _feasible_vals.append(_model_feasible and _margin_feasible)
+                    _feasible_per_curve = [
+                        _feasible_vals[_i * _nx:(_i + 1) * _nx]
+                        for _i in range(len(_curve_vals))
+                    ]
                     st.session_state["se_resultaat"] = {
                         "x_grid":      _x_grid,
                         "per_curve":   _per_curve,
+                        "margin_context_per_curve": _margin_context_per_curve,
+                        "feasible_per_curve": _feasible_per_curve,
+                        "required_per_curve": _required_per_curve,
+                        "margin_peaks": _margin_peaks,
                         "x_var":       _x_var,
                         "curve_var":   _curve_var,
                         "curve_vals":  _curve_vals,
                         "x_label":     _spec_x["axis"],
                         "x_fmt":       _spec_x["fmt"],
-                        "x_cur":       _clip_se(_x_var, _seed_se[_x_var]),
                         "y_axis":      _y_spec["axis"],
                         "y_label":     _y_spec["axis"],
                         "y_tbl":       _y_spec["tbl"],
@@ -5255,13 +5624,19 @@ with tab_sensitivity:
                         # verwachte subscripties E[Z] vs. verwachte winst (BPA-marge),
                         # over alle doorgerekende (x, curve)-punten van deze sweep.
                         "z_vals":      list(_yvals_raw["total_Z"]),
+                        "stock_vals":  list(_yvals_raw["stock_level"]),
+                        "component_stock_records": [
+                            dict(_rec.get("component_stocks", {})) for _rec in _recs
+                        ],
+                        "component_codes": [str(_code) for _code in _ov_se.index],
                         "margin_vals": list(_yvals_raw["bpa_margin"]),
                         "revenue_vals": list(_yvals_raw["revenue"]),
                         "m_req":       float(_se_m),
+                        "alpha_opt_grid": _alpha_opt_grid,
                         # param_dicts: altijd bewaard (ook buiten greedy modus),
                         # zodat de α-waarde per sweep-punt beschikbaar is voor
                         # de E[Z]-vs-winst datatabel hieronder.
-                        "param_dicts": _bouw_param_dicts(),
+                        "param_dicts": _result_param_dicts,
                         # greedy detail
                         "greedy_mode": _se_greedy,
                         "greedy_budget": float(_se_budget) if _se_greedy else None,
@@ -5285,14 +5660,58 @@ with tab_sensitivity:
         _cvals     = _res_se["curve_vals"]
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
-        _x_fmt     = _res_se["x_fmt"]
         _y_axis    = _res_se.get("y_axis", "total BPA margin (€)")
         _y_lbl     = _res_se.get("y_label", "total BPA margin (€)")
         _y_tbl     = _res_se.get("y_tbl", "BPA margin (€)")
         _y_kind    = _res_se.get("y_kind", "euro")
+        _feasible_per_curve = _res_se.get("feasible_per_curve")
+        _required_per_curve = _res_se.get("required_per_curve")
+        _margin_peaks = _res_se.get("margin_peaks")
+        _m_req_se = float(_res_se.get("m_req", 0.0))
 
         _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
         _cmap_se = _plt_se.cm.viridis
+        _has_all_feasible_se = False
+        _has_partly_feasible_se = False
+
+        if _feasible_per_curve:
+            from matplotlib.patches import Patch as _Patch_se
+
+            _x_arr_se = np.asarray(_xg, dtype=float)
+            _feasible_arr_se = np.asarray(_feasible_per_curve, dtype=bool)
+            _feasible_count_se = _feasible_arr_se.sum(axis=0)
+            _all_feasible_se = _feasible_count_se == len(_feasible_per_curve)
+            _partly_feasible_se = (
+                (_feasible_count_se > 0)
+                & (_feasible_count_se < len(_feasible_per_curve))
+            )
+            _has_all_feasible_se = bool(_all_feasible_se.any())
+            _has_partly_feasible_se = bool(_partly_feasible_se.any())
+
+            if len(_x_arr_se) == 1:
+                _span_edges_se = np.array([
+                    _x_arr_se[0] - 0.5,
+                    _x_arr_se[0] + 0.5,
+                ])
+            else:
+                _midpoints_se = (_x_arr_se[:-1] + _x_arr_se[1:]) / 2.0
+                _span_edges_se = np.concatenate((
+                    [_x_arr_se[0] - (_midpoints_se[0] - _x_arr_se[0])],
+                    _midpoints_se,
+                    [_x_arr_se[-1] + (_x_arr_se[-1] - _midpoints_se[-1])],
+                ))
+
+            def _shade_feasible_spans(_mask, _color, _alpha):
+                for _idx, _is_feasible in enumerate(_mask):
+                    if _is_feasible:
+                        _ax_se.axvspan(
+                            _span_edges_se[_idx], _span_edges_se[_idx + 1],
+                            color=_color, alpha=_alpha, linewidth=0, zorder=0,
+                        )
+
+            _shade_feasible_spans(_all_feasible_se, "#2E7D32", 0.14)
+            _shade_feasible_spans(_partly_feasible_se, "#F9A825", 0.13)
+
         for _ci, _cval in enumerate(_cvals):
             _ys = _per_curve[_ci]
             if _cval is None:
@@ -5302,12 +5721,17 @@ with tab_sensitivity:
                 _spec_c = _WTP_PARAMS[_cv_var]
                 _ax_se.plot(_xg, _ys, lw=2.0, color=_col, marker="o", ms=3,
                             label=f"{_spec_c['label'].split(' ')[0]} = {_cval:{_spec_c['fmt'][1:]}}")
+            if _required_per_curve is not None and _cv_var == "(geen)":
+                _required_label = (
+                    f"required BPA margin [m={_m_req_se:.0%}]" if _ci == 0 else None
+                )
+                _ax_se.plot(
+                    _xg, _required_per_curve[_ci], color="#2ca02c", lw=1.8,
+                    ls="--", alpha=0.9, label=_required_label,
+                )
 
-        _x_cur = _res_se["x_cur"]
-        if _xg and min(_xg) <= _x_cur <= max(_xg):
-            _ax_se.axvline(_x_cur, color="grey", ls="--", lw=1,
-                           label=f"current {_x_lbl.split(' ')[0]} = {_x_cur:{_x_fmt[1:]}}")
-        _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
+        if _required_per_curve is None or _cv_var != "(geen)":
+            _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
         _ax_se.set_xlabel(_x_lbl, fontsize=11)
         _ax_se.set_ylabel(_y_axis, fontsize=11)
         _ax_se.set_title(f"Sensitivity of {_y_lbl} w.r.t. the WTP elements", fontsize=12)
@@ -5319,21 +5743,187 @@ with tab_sensitivity:
             _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:,.0f}")
         _ax_se.yaxis.set_major_formatter(_yfmt_se)
         _ax_se.grid(True, alpha=0.3)
-        if _cv_var != "(geen)" or (_xg and min(_xg) <= _x_cur <= max(_xg)):
-            _ax_se.legend(fontsize=9)
+        if ((_required_per_curve is not None and _cv_var == "(geen)") or
+            _cv_var != "(geen)" or _has_all_feasible_se or
+            _has_partly_feasible_se):
+            _handles_se, _labels_legend_se = _ax_se.get_legend_handles_labels()
+            if _has_all_feasible_se:
+                _handles_se.append(_Patch_se(
+                    facecolor="#2E7D32", alpha=0.14,
+                    label="feasible region",
+                ))
+            if _has_partly_feasible_se:
+                _handles_se.append(_Patch_se(
+                    facecolor="#F9A825", alpha=0.13,
+                    label="partly feasible (some curves)",
+                ))
+            _ax_se.legend(handles=_handles_se, fontsize=9)
         _fig_se.tight_layout()
         st.pyplot(_fig_se)
         _plt_se.close(_fig_se)
 
+        _component_stock_records = _res_se.get("component_stock_records", [])
+        if _res_se.get("x_var") == "alpha" and _component_stock_records:
+            st.markdown("#### Stock level by component and α")
+            _stock_curve_idx = 0
+            if _cv_var != "(geen)" and len(_cvals) > 1:
+                _stock_curve_spec = _WTP_PARAMS[_cv_var]
+                _stock_curve_idx = st.selectbox(
+                    f"Curve voor stock-heatmap ({_cv_var})",
+                    options=range(len(_cvals)),
+                    format_func=lambda i: (
+                        f"{_stock_curve_spec['label'].split(' ')[0]} = "
+                        f"{_cvals[i]:{_stock_curve_spec['fmt'][1:]}}"
+                    ),
+                    key="se_stock_heatmap_curve",
+                )
+
+            _stock_start = _stock_curve_idx * len(_xg)
+            _stock_curve_records = _component_stock_records[
+                _stock_start:_stock_start + len(_xg)
+            ]
+            _stock_components = sorted(
+                str(_code) for _code in _res_se.get("component_codes", [])
+            )
+            if not _stock_components:
+                _stock_components = sorted({
+                    str(_code)
+                    for _record in _stock_curve_records
+                    for _code in _record
+                })
+            if _stock_components:
+                _stock_heat = np.asarray([
+                    [
+                        float(_record.get(_code, float("nan")))
+                        for _record in _stock_curve_records
+                    ]
+                    for _code in _stock_components
+                ], dtype=float)
+                _stock_heat_masked = np.ma.masked_invalid(_stock_heat)
+                _stock_fig_height = min(16.0, max(5.0, 0.38 * len(_stock_components)))
+                _fig_stock, _ax_stock = _plt_se.subplots(
+                    figsize=(11, _stock_fig_height)
+                )
+                _stock_image = _ax_stock.imshow(
+                    _stock_heat_masked,
+                    aspect="auto",
+                    interpolation="nearest",
+                    cmap="YlGnBu",
+                    vmin=0,
+                )
+                _stock_alpha = np.asarray(_xg, dtype=float)
+                _stock_tick_values = np.arange(
+                    np.ceil(_stock_alpha.min() / 0.05) * 0.05,
+                    _stock_alpha.max() + 0.025,
+                    0.05,
+                )
+                _stock_tick_positions = np.interp(
+                    _stock_tick_values,
+                    _stock_alpha,
+                    np.arange(len(_stock_alpha)),
+                )
+                _ax_stock.set_xticks(_stock_tick_positions)
+                _ax_stock.set_xticklabels(
+                    [f"{_alpha:.0%}" for _alpha in _stock_tick_values],
+                    rotation=45,
+                    ha="right",
+                )
+                _ax_stock.set_yticks(range(len(_stock_components)))
+                _ax_stock.set_yticklabels(_stock_components, fontsize=8)
+                _ax_stock.set_xlabel("α — price percentage")
+                _ax_stock.set_ylabel("Component")
+                _ax_stock.set_title("Base-stock level S* by component and α")
+                _stock_colorbar = _fig_stock.colorbar(
+                    _stock_image, ax=_ax_stock, pad=0.02
+                )
+                _stock_colorbar.set_label("Stock level S* (units)")
+                _stock_colorbar.locator = _mt_se.MultipleLocator(1)
+                _stock_colorbar.formatter = _mt_se.FormatStrFormatter("%d")
+                _stock_colorbar.update_ticks()
+                _fig_stock.tight_layout()
+                st.pyplot(_fig_stock)
+                _plt_se.close(_fig_stock)
+                if _res_se.get("greedy_mode"):
+                    st.caption(
+                        "Stock level 0 betekent dat het component bij die α niet "
+                        "in de budgetselectie is opgenomen."
+                    )
+        if _feasible_per_curve:
+            if _has_all_feasible_se and _has_partly_feasible_se:
+                st.caption(
+                    "Groen = alle curves haalbaar; amber = ten minste één, "
+                    "maar niet alle curves haalbaar. Haalbaar vereist zowel "
+                    "model-feasibility als de ingestelde marge-eis."
+                )
+            elif _has_all_feasible_se:
+                st.caption(
+                    "Groen = feasible region: het model is haalbaar en voldoet "
+                    "aan de ingestelde marge-eis."
+                )
+            elif _has_partly_feasible_se:
+                st.caption(
+                    "Amber = ten minste één, maar niet alle curves zijn haalbaar."
+                )
+            else:
+                st.caption(
+                    "Geen van de doorgerekende punten voldoet aan de "
+                    "model- en margevoorwaarden."
+                )
+
+        if _margin_peaks is not None:
+            _peak_rows = []
+            for _ci, (_cval, _peak) in enumerate(zip(_cvals, _margin_peaks)):
+                _peak_row = {
+                    f"Optimal {_x_lbl.split(' ')[0]}": _peak["x"],
+                    "Maximum BPA margin (€)": _peak["margin"],
+                }
+                if _cval is not None:
+                    _peak_row[_WTP_PARAMS[_cv_var]["label"]] = _cval
+                _peak_rows.append(_peak_row)
+            st.markdown("**Numerically refined maxima**")
+            st.dataframe(
+                pd.DataFrame(_peak_rows), hide_index=True,
+                use_container_width=False,
+            )
+
         # ── Datatabel + download ──────────────────────────────────────────
         with st.expander("📋 Data achter de grafiek"):
             _tbl = {_x_lbl.split(" ")[0]: _xg}
+            _margin_context_per_curve = _res_se.get("margin_context_per_curve")
+            _margin_context_labels = {
+                "stock_level": "Total stock (units)",
+                "costs": "Carrying costs (€)",
+                "revenue": "Revenue (€)",
+            }
             for _ci, _cval in enumerate(_cvals):
                 if _cval is None:
                     _tbl[_y_tbl] = _per_curve[_ci]
+                    if _margin_context_per_curve:
+                        for _metric, _label in _margin_context_labels.items():
+                            _tbl[_label] = _margin_context_per_curve[_metric][_ci]
+                    if _feasible_per_curve:
+                        _tbl["Feasible"] = _feasible_per_curve[_ci]
+                    if _required_per_curve is not None:
+                        _tbl["Required BPA margin"] = _required_per_curve[_ci]
                 else:
                     _spec_c = _WTP_PARAMS[_cv_var]
-                    _tbl[f"{_y_tbl} @ {_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"] = _per_curve[_ci]
+                    _curve_suffix = (
+                        f"{_spec_c['label'].split(' ')[0]}={_cval:{_spec_c['fmt'][1:]}}"
+                    )
+                    _tbl[f"{_y_tbl} @ {_curve_suffix}"] = _per_curve[_ci]
+                    if _margin_context_per_curve:
+                        for _metric, _label in _margin_context_labels.items():
+                            _tbl[f"{_label} @ {_curve_suffix}"] = (
+                                _margin_context_per_curve[_metric][_ci]
+                            )
+                    if _feasible_per_curve:
+                        _tbl[f"Feasible @ {_curve_suffix}"] = (
+                            _feasible_per_curve[_ci]
+                        )
+                    if _required_per_curve is not None:
+                        _tbl[f"Required BPA margin @ {_curve_suffix}"] = (
+                            _required_per_curve[_ci]
+                        )
             _df_se = pd.DataFrame(_tbl)
             st.dataframe(_df_se, use_container_width=True, height=320)
             st.download_button(
@@ -5441,6 +6031,56 @@ with tab_sensitivity:
                             "sensitivity om de datatabel te tonen)."
                         )
 
+        # ── Distributie: verwachte subscripties E[Z] vs. totale stock ─────
+        _stock_pts = _res_se.get("stock_vals")
+        if _z_pts and _stock_pts:
+            with st.expander(
+                    "📦 Distributie: number of subscriptions vs. stock",
+                    expanded=False):
+                st.caption(
+                    "Elk punt is één doorgerekende combinatie uit de huidige "
+                    "sweep. De x-as toont het verwachte aantal subscriptions "
+                    "E[Z] en de y-as de bijbehorende totale base stock Σ Sᵢ."
+                )
+                _stock_arr = np.asarray(_stock_pts, dtype=float)
+                _zs_ok = np.isfinite(_z_arr) & np.isfinite(_stock_arr)
+                if not _zs_ok.any():
+                    st.info("Geen geldige (E[Z], stock)-combinaties in deze sweep.")
+                else:
+                    import matplotlib.pyplot as _plt_zs
+                    import matplotlib.ticker as _mt_zs
+                    _fig_zs, _ax_zs = _plt_zs.subplots(figsize=(9, 5))
+                    _sc_zs = _ax_zs.scatter(
+                        _z_arr[_zs_ok], _stock_arr[_zs_ok],
+                        c=_color_vals[_zs_ok], cmap="viridis",
+                        s=60, edgecolor="white", linewidth=0.5, zorder=3)
+                    _cb_zs = _fig_zs.colorbar(_sc_zs, ax=_ax_zs)
+                    _cb_zs.set_label(_x_lbl)
+                    _ax_zs.set_xlabel("number of subscriptions E[Z]")
+                    _ax_zs.set_ylabel("total base stock Σ Sᵢ (units)")
+                    _ax_zs.yaxis.set_major_formatter(
+                        _mt_zs.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+                    _ax_zs.set_title("Number of subscriptions vs. stock")
+                    _ax_zs.grid(True, alpha=0.3)
+                    _fig_zs.tight_layout()
+                    st.pyplot(_fig_zs)
+                    _plt_zs.close(_fig_zs)
+
+                    _df_zs = pd.DataFrame({
+                        "E[Z] — verwachte subscripties": _z_arr[_zs_ok],
+                        "totale base stock Σ Sᵢ": _stock_arr[_zs_ok],
+                    })
+                    st.dataframe(_df_zs, use_container_width=True, height=280)
+                    st.download_button(
+                        "⬇️ Download E[Z] / stock-data (CSV)",
+                        data=_df_zs.to_csv(
+                            sep=";", decimal=",", index=False
+                        ).encode("utf-8"),
+                        file_name=f"ez_stock_{date.today()}.csv",
+                        mime="text/csv",
+                        key="se_zs_download",
+                    )
+
         # ── Greedy component-detail ───────────────────────────────────────
         if _res_se.get("greedy_mode"):
             with st.expander("🔍 Componentdetail greedy-selectie"):
@@ -5451,7 +6091,7 @@ with tab_sensitivity:
                 _gcv_var  = _res_se["curve_var"]
                 _gx_var   = _res_se["x_var"]
                 _gx_lbl   = _res_se["x_label"].split(" ")[0]
-                _gx_fmt   = _res_se["x_fmt"]
+                _gx_fmt   = _res_se.get("x_fmt", _WTP_PARAMS[_gx_var]["fmt"])
 
                 _col_c, _col_x = st.columns([1, 2])
                 with _col_c:
@@ -5586,16 +6226,16 @@ with tab_sensitivity:
         _sb_feas = st.checkbox(
             "α* alleen over haalbare α zoeken", value=False, key="se_bru_feas",
             help="Bepaal α* per rasterpunt alleen over haalbare α "
-                 "(marge ≥ 0 én alle klanten profiteren).")
+                 "(marge > 0 én alle klanten profiteren).")
 
     _sb_m = st.number_input(
-        "Margin-vereiste m (marge / omzet ≥ m)",
+        "Margin-vereiste m (marge / omzet > m)",
         min_value=0.0, max_value=1.0, value=0.0, step=0.01, format="%.2f",
         key="se_bru_m",
         help="Minimum vereiste verhouding marge/omzet voor een α om mee te "
              "tellen als kandidaat-optimum. "
              "0 = geen vereiste (standaard). "
-             "Bijv. 0.20 = alleen α met brutomarge ≥ 20% van de omzet.")
+             "Bijv. 0.20 = alleen α met brutomarge > 20% van de omzet.")
 
     _sb_eps = st.number_input(
         "ε — chance-constraint niveau",
@@ -6174,8 +6814,6 @@ with tab_sensitivity:
                 label="bandwidth (P95−P5)")
             _ax_xsw2.set_ylabel("bandwidth P95−P5 (%)", color="#d62728")
             _ax_xsw2.tick_params(axis="y", labelcolor="#d62728")
-            _ax_xsw.axvline(_sb["X"], color="grey", ls=":", lw=1,
-                             label=f"current β^tar = {_sb['X']:.3f}")
             _ax_xsw.set_xlabel("service level β^tar")
             _ax_xsw.set_ylabel("optimal α* (%)")
             _ax_xsw.set_title(
