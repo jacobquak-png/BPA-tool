@@ -63,6 +63,47 @@ from classificatie import (
 )
 from model import BPAOptimizationModel
 
+
+def _subscription_threshold(target_service, lambda_per_subscriber, lead_time,
+                            current_subscribers=1, max_extra=100_000):
+    """Find the next base-stock step, also with older model.py versions."""
+    model_method = getattr(BPAOptimizationModel, "subscription_threshold", None)
+    if model_method is not None:
+        return model_method(
+            target_service,
+            lambda_per_subscriber,
+            lead_time,
+            current_subscribers=current_subscribers,
+            max_extra=max_extra,
+        )
+
+    current_subscribers = int(current_subscribers)
+    max_extra = int(max_extra)
+    if (lambda_per_subscriber <= 0 or lead_time <= 0 or
+            current_subscribers < 1 or max_extra < 1):
+        return None
+
+    def stock_for(subscribers):
+        return BPAOptimizationModel.inverse_service_level(
+            target_service,
+            lambda_per_subscriber * subscribers,
+            lead_time,
+        )
+
+    current_stock = stock_for(current_subscribers)
+    low = current_subscribers + 1
+    high = current_subscribers + max_extra
+    if stock_for(high) <= current_stock:
+        return None
+
+    while low < high:
+        midpoint = (low + high) // 2
+        if stock_for(midpoint) > current_stock:
+            high = midpoint
+        else:
+            low = midpoint + 1
+    return low - current_subscribers
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  CACHE-WRAPPERS  (sterk versnellen Streamlit-reruns)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2565,7 +2606,7 @@ with tab_drempel:
                       if _n > 0 and _lam > 0 and _lt_jr > 0 else 0)
 
             if _n > 0 and _lam_pn > 0 and _lt_jr > 0:
-                _extra = BPAOptimizationModel.subscription_threshold(
+                _extra = _subscription_threshold(
                     _sl_d,
                     _lam_pn,
                     _lt_jr,
