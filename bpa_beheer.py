@@ -623,29 +623,34 @@ def regionale_adoptie_parameter(
     return float(p)
 
 
-def adoptie_kans(alpha, kappa_c, q_eq, beta_r) -> float:
-    """Globale logit-adoptiekans q(α) = σ(logit(q_eq) + β_r·ln(κ_c/α)).
+def adoptie_kans(alpha, kappa_c, q_eq, beta_r, eta0=None) -> float:
+    """Globale logit-adoptiekans q(α) = σ(logit(q_eq) + η_r·ln(κ_c/α)).
 
     Discrete-keuze (logit) specificatie: een klant abonneert met kans
-    q(α) = 1/(1+e^(-y)) waarin y = β_0 + β_r·ln(κ_c/α) en de intercept
-    β_0 = logit(q_eq) = ln(q_eq/(1-q_eq)) geijkt is op kostenpariteit
+    q(α) = 1/(1+e^(-y)) waarin y = η_0 + η_r·ln(κ_c/α) en de intercept
+    η_0 = logit(q_eq) = ln(q_eq/(1-q_eq)) geijkt is op kostenpariteit
     (bij α = κ_c geldt ln(κ_c/α) = 0 ⇒ q = q_eq). De kostenratio
     C_i^c/(α·v_i^c) ≈ κ_c/α (zelf-voorraadkosten ≈ κ_c·v_i^c). Eén globale q
     voor alle klanten (geen regio-onderscheid); het service level X zit in het
-    onwaargenomen nut/β_0 en beïnvloedt q niet direct.
+    onwaargenomen nut/η_0 en beïnvloedt q niet direct.
 
     Parameters
     ----------
     alpha   : prijspercentage α (> 0).
     kappa_c : bovengrens/kostenpariteit κ_c (uit de kostenanalyse).
-    q_eq    : adoptiekans bij kostenpariteit (0 < q_eq < 1).
+    q_eq    : adoptiekans bij kostenpariteit (0 < q_eq < 1); wordt afgeleid
+              als ``eta0`` expliciet is opgegeven.
     beta_r  : gevoeligheid voor de kostenratio ln(κ_c/α).
+    eta0    : optionele directe logit-intercept η_0.
     """
     eps = 1e-9
-    q_eq    = float(min(max(q_eq, eps), 1.0 - eps))
     alpha   = max(float(alpha), eps)
     kappa_c = max(float(kappa_c), eps)
-    beta_0  = np.log(q_eq / (1.0 - q_eq))
+    if eta0 is None:
+        q_eq   = float(min(max(q_eq, eps), 1.0 - eps))
+        beta_0 = np.log(q_eq / (1.0 - q_eq))
+    else:
+        beta_0 = float(eta0)
     y       = beta_0 + float(beta_r) * np.log(kappa_c / alpha)
     return float(1.0 / (1.0 + np.exp(-y)))
 
@@ -668,6 +673,27 @@ def aantal_klanten_per_component(excel_file=None, codes=None) -> pd.Series:
     _n = adoptie.groupby('Code')['Klant'].nunique().astype(float)
     _n.index.name = 'Code'
     return _n
+
+
+def _klantenaantallen_met_overzicht_fallback(
+    overzicht_df: pd.DataFrame,
+    n_series: pd.Series,
+) -> pd.Series:
+    """Vul ontbrekende adoptiecodes aan met n_klanten uit het overzicht."""
+    _historisch = {
+        str(code).strip(): float(value)
+        for code, value in (n_series.items() if n_series is not None else [])
+    }
+    _fallback = pd.to_numeric(overzicht_df['n_klanten'], errors='coerce').fillna(0.0)
+    return pd.Series(
+        [
+            _historisch.get(str(code).strip(), float(_fallback.at[code]))
+            for code in overzicht_df.index
+        ],
+        index=overzicht_df.index,
+        dtype=float,
+        name='n_klanten',
+    )
 
 
 def binomiale_verdeling(N, q, k_min=None, k_max=None):
@@ -836,7 +862,7 @@ def pareto_alpha_X(
     Voor elk paar (α, X) uit het cartesisch product van ``alpha_waarden`` en
     ``X_waarden`` wordt de keten doorgerekend:
 
-      1. globale logit-adoptiekans q(α) = σ(logit(q_eq) + β_r·ln(κ_c/α));
+      1. globale logit-adoptiekans q(α) = σ(logit(q_eq) + η_r·ln(κ_c/α));
       2. E[Z_i(α)] = N_i · q(α) per component (N_i = aantal historische
          klanten). X beïnvloedt de adoptie niet, alleen de voorraad/kosten;
       3. een overzicht met n_klanten = Z_i (λ proportioneel meegeschaald);
@@ -845,7 +871,7 @@ def pareto_alpha_X(
 
     ``n_series`` : optioneel vooraf geladen N_i (Series op Code). Wordt gebruikt
     om herhaald inlezen van de Adoptie-tab te vermijden wanneer deze functie
-    vaak wordt aangeroepen (bv. per β_r-rasterpunt in de onzekerheidsband).
+    vaak wordt aangeroepen (bv. per η_r-rasterpunt in de onzekerheidsband).
     ``epsilon``  : geaccepteerde kans dat de service-belofte niet gehaald wordt
     door hogere adoptie dan verwacht. Wanneer opgegeven wordt de base-stock
     berekend op het (1-ε)-kwantiel Z_i^{1-ε} ~ Binomiaal(M_i, q), terwijl de
@@ -948,11 +974,12 @@ def metrieken_voor_wtp_grid(
     codes            = None,
     budget: float    = None,
 ):
-    """Meerdere keten-uitkomsten per parametercombinatie (α, X, q_eq, β_r).
+    """Meerdere keten-uitkomsten per parametercombinatie (α, X, η_0/q_eq, η_r).
 
     Generaliseert de keten van ``pareto_alpha_X``: elke dict in ``param_dicts``
     bevat de sleutels ``alpha``, ``X``, ``q_eq``, ``beta_r`` en optioneel
-    ``kappa_c`` (anders de meegegeven ``kappa_c``). Per combinatie wordt de
+    ``eta0`` en ``kappa_c``. Als ``eta0`` aanwezig is, stuurt die direct de
+    intercept en wordt ``q_eq`` genegeerd. Per combinatie wordt de
     globale logit-adoptiekans q(α), daaruit E[Z_i] = N_i·q(α), en via het
     kostenmodel de BPA-marge en het totale klantsurplus berekend.
 
@@ -970,19 +997,17 @@ def metrieken_voor_wtp_grid(
             'total_Z': float('nan'), 'q': float('nan'), 'feasible': False,
             'revenue': float('nan'), 'costs': float('nan'),
             'stock_level': float('nan'), 'inv_total': float('nan'),
+            'component_stocks': {},
         }
 
     if overzicht_df is None or overzicht_df.empty or not param_dicts:
         return [_leeg() for _ in (param_dicts or [])]
 
-    _n = aantal_klanten_per_component(excel_file, codes)
-    if _n.empty:
-        return [_leeg() for _ in param_dicts]
-
-    # Beperk het overzicht tot componenten waarvoor adoptie-data beschikbaar is.
-    base = overzicht_df.loc[overzicht_df.index.isin(_n.index)]
-    if base.empty:
-        return [_leeg() for _ in param_dicts]
+    _n = _klantenaantallen_met_overzicht_fallback(
+        overzicht_df,
+        aantal_klanten_per_component(excel_file, codes),
+    )
+    base = overzicht_df.copy()
     base_n    = base['n_klanten'].astype(float)
     base_lam  = base['lambda_jr'].astype(float)
     lam_per_cust = (base_lam / base_n.replace(0, np.nan)).fillna(0.0)
@@ -991,14 +1016,19 @@ def metrieken_voor_wtp_grid(
     for p in param_dicts:
         _a  = float(p['alpha'])
         _x  = float(p['X'])
-        _qe = float(p['q_eq'])
+        _eta0 = p.get('eta0')
+        _eta0 = float(_eta0) if _eta0 is not None else None
+        _qe = (
+            float(1.0 / (1.0 + np.exp(-_eta0)))
+            if _eta0 is not None else float(p['q_eq'])
+        )
         _br = float(p['beta_r'])
         _kc      = float(p.get('kappa_c', kappa_c))
         _kb      = float(p.get('kappa_bpa', kappa_bpa))
         _ip_mult = float(p.get('ip_mult', 1.0))
         _n_mult  = float(p.get('n_mult', 1.0))
         _lt_mult = float(p.get('lt_mult', 1.0))
-        _q       = adoptie_kans(_a, _kc, _qe, _br)
+        _q       = adoptie_kans(_a, _kc, _qe, _br, eta0=_eta0)
         # Effective customer base: scale M_i by n_mult (default 1.0 = unchanged).
         _n_eff   = (_n * _n_mult).reindex(base.index).fillna(0.0)
         _ez      = _n_eff * _q
@@ -1008,7 +1038,7 @@ def metrieken_voor_wtp_grid(
         if _bgt is not None:
             _bgt = float(_bgt)
         if _bgt is not None:
-            # Greedy modus: run greedy voor deze (α, X, q_eq, β_r)-combinatie.
+            # Greedy modus: run greedy voor deze (α, X, q_eq, η_r)-combinatie.
             _eps = p.get('epsilon', None)
             if _eps is not None and float(_eps) <= 0:
                 _eps = None
@@ -1033,11 +1063,12 @@ def metrieken_voor_wtp_grid(
                     'surplus':    float('nan'),   # niet beschikbaar bij greedy
                     'total_Z':    float(_row['total_Z']),
                     'q':          float(_row['q']),
-                    'feasible':   float(_row['total_margin']) >= 0,
+                    'feasible':   float(_row['total_margin']) > 0,
                     'revenue':    float(_row.get('total_rev',   float('nan'))),
                     'costs':      float(_row.get('total_cbpa',  float('nan'))),
                     'stock_level': float(_row.get('total_stock', float('nan'))),
                     'inv_total':  float(_row.get('total_inv',   float('nan'))),
+                    'component_stocks': dict(_row.get('component_stocks', {})),
                 })
             continue
 
@@ -1074,7 +1105,11 @@ def metrieken_voor_wtp_grid(
         _rec = {'total_Z': _total_z, 'q': float(_q)}
         if _ez_mod.sum() <= 0:
             _rec.update({'bpa_margin': 0.0, 'surplus': 0.0, 'feasible': False,
-                         'revenue': 0.0, 'costs': 0.0, 'stock_level': 0.0, 'inv_total': 0.0})
+                         'revenue': 0.0, 'costs': 0.0, 'stock_level': 0.0,
+                         'inv_total': 0.0,
+                         'component_stocks': {
+                             str(code): 0 for code in mod.index
+                         }})
         else:
             try:
                 _model, _res = bouw_model_kosten(mod, _a, _kb, _kc, _x)
@@ -1093,18 +1128,21 @@ def metrieken_voor_wtp_grid(
                     'bpa_margin':  _margin_cont,
                     'surplus':     float(sum(
                         v['savings'] for v in _res['customer_benefits'].values())),
-                    'feasible':    (_margin_cont >= 0
+                    'feasible':    (_margin_cont > 0
                                     if np.isfinite(_margin_cont) else False),
                     'revenue':     _rev_cont,
                     'costs':       _costs_cont,
                     'stock_level': _stk_tot,
                     'inv_total':   _inv_tot,
+                    'component_stocks': {
+                        str(code): int(_stk.get(code, 0)) for code in mod.index
+                    },
                 })
             except Exception:
                 _rec.update({'bpa_margin': float('nan'), 'surplus': float('nan'),
                              'feasible': False, 'revenue': float('nan'),
                              'costs': float('nan'), 'stock_level': float('nan'),
-                             'inv_total': float('nan')})
+                             'inv_total': float('nan'), 'component_stocks': {}})
         resultaten.append(_rec)
     return resultaten
 
@@ -1206,9 +1244,9 @@ def beta_r_winstband(
     budget: float          = None,
     margin_ratio_min: float = None,
 ):
-    """β_r-parameteronzekerheid: bandbreedte voor winst-vs-α en optimale α.
+    """η_r-parameteronzekerheid: bandbreedte voor winst-vs-α en optimale α.
 
-    β_r kan niet uit historische subscriptie-data worden geschat. Het is
+    η_r kan niet uit historische subscriptie-data worden geschat. Het is
     **geen kansverdeling** (er is geen kansmodel over de aannemelijkheid van
     een bepaalde waarde) maar een **onzekere parameter met een plausibel
     bereik** [beta_r_min, beta_r_max]. Om de gevoeligheid van de uitkomst
@@ -1216,26 +1254,26 @@ def beta_r_winstband(
     en gelijkmatig doorlopen** via een raster (geen willekeurige trekkingen,
     geen aanname over een onderliggende verdeling)::
 
-        β_r^(k) = beta_r_min + k·(beta_r_max − beta_r_min)/(n_samples − 1),
+        η_r^(k) = beta_r_min + k·(beta_r_max − beta_r_min)/(n_samples − 1),
         k = 0 … n_samples − 1.
 
     Voor elk rasterpunt wordt (bij vast service level ``X_fix``) de volledige
     keten α → q(α) → E[Z_i] → kostenmodel over ``alpha_grid`` doorgerekend
     (via :func:`pareto_alpha_X`). Dit levert per α een bandbreedte van de
-    verwachte BPA-winst E[Π_BPA(α)] over het β_r-bereik en per rasterpunt een
+    verwachte BPA-winst E[Π_BPA(α)] over het η_r-bereik en per rasterpunt een
     winst-maximaliserende α*. De N_i worden één keer geladen en over alle
     rasterpunten hergebruikt.
 
     Parameters
     ----------
-    n_samples : aantal β_r-rasterpunten (K) waarmee het bereik gelijkmatig
+    n_samples : aantal η_r-rasterpunten (K) waarmee het bereik gelijkmatig
                 wordt doorlopen.
     seed      : ongebruikt (geen willekeurige trekkingen meer); alleen nog
                 aanwezig voor achterwaartse compatibiliteit van de signatuur.
     alleen_haalbaar : bepaal α* per rasterpunt alleen over haalbare α
                       (marge ≥ 0 én alle klanten profiteren), met terugval op
                       alle α.
-    percentielen : welke posities over het doorlopen β_r-bereik te
+    percentielen : welke posities over het doorlopen η_r-bereik te
                    rapporteren (default 5/50/95; 0/100 geven exact het
                    minimum/maximum van de band).
 
@@ -1243,11 +1281,11 @@ def beta_r_winstband(
     -------
     dict met sleutels:
         alpha_grid     : np.array van gebruikte α-waarden;
-        beta_r_samples : np.array van gelijkmatig verdeelde β_r-rasterwaarden
+        beta_r_samples : np.array van gelijkmatig verdeelde η_r-rasterwaarden
                          (deterministisch, geen trekkingen);
         margin_matrix  : (n_samples × len(alpha_grid)) marges E[Π_BPA];
         margin_pct     : {p: array over α} band van de winst over het
-                         doorlopen β_r-bereik (p=0/100 = min/max);
+                         doorlopen η_r-bereik (p=0/100 = min/max);
         margin_mean    : np.array gemiddelde winst per α over het raster;
         opt_alpha      : np.array optimale α* per rasterpunt;
         opt_margin     : np.array optimale winst per rasterpunt;
@@ -1266,7 +1304,7 @@ def beta_r_winstband(
     if _n is None or _n.empty:
         return None
 
-    # Deterministisch, gelijkmatig raster over het β_r-bereik — β_r is een
+    # Deterministisch, gelijkmatig raster over het η_r-bereik — η_r is een
     # onzekere parameter met een gedefinieerd bereik, geen kansverdeling, dus
     # geen willekeurige trekkingen (``seed`` wordt niet meer gebruikt).
     _br_samples = np.linspace(float(beta_r_min), float(beta_r_max), int(n_samples))
@@ -1385,6 +1423,212 @@ def beta_r_winstband(
     }
 
 
+def eta0_winstband(
+    overzicht_df,
+    X_fix:      float,
+    alpha_grid,
+    eta0_min:   float,
+    eta0_max:   float,
+    beta_r:     float,
+    kappa_bpa:  float,
+    kappa_c:    float,
+    n_samples:  int = 200,
+    excel_file        = None,
+    codes             = None,
+    seed              = None,
+    alleen_haalbaar:  bool  = False,
+    percentielen           = (5, 50, 95),
+    epsilon: float         = None,
+    budget: float          = None,
+    margin_ratio_min: float = None,
+):
+    """η_0-parameteronzekerheid: bandbreedte voor winst-vs-α en optimale α.
+
+    η_0 (de logit-intercept, geijkt op q_eq = σ(η_0), de adoptiekans bij
+    kostenpariteit) kan net als η_r niet uit historische subscriptie-data
+    worden geschat op een manier die een enkele puntwaarde rechtvaardigt.
+    Het is **geen kansverdeling** maar een **onzekere parameter met een
+    plausibel bereik** [eta0_min, eta0_max]. Om de gevoeligheid van de
+    uitkomst voor deze onzekerheid te tonen, wordt het volledige bereik
+    **deterministisch en gelijkmatig doorlopen** via een raster (geen
+    willekeurige trekkingen, geen aanname over een onderliggende
+    verdeling)::
+
+        η_0^(k) = eta0_min + k·(eta0_max − eta0_min)/(n_samples − 1),
+        k = 0 … n_samples − 1,
+        q_eq^(k) = σ(η_0^(k)) = 1/(1+e^(−η_0^(k))).
+
+    Voor elk rasterpunt wordt (bij vast service level ``X_fix`` en vaste
+    kostenratio-gevoeligheid ``beta_r``) de volledige keten
+    α → q(α) → E[Z_i] → kostenmodel over ``alpha_grid`` doorgerekend (via
+    :func:`pareto_alpha_X`). Dit levert per α een bandbreedte van de
+    verwachte BPA-winst E[Π_BPA(α)] over het η_0-bereik en per rasterpunt
+    een winst-maximaliserende α*. De N_i worden één keer geladen en over
+    alle rasterpunten hergebruikt.
+
+    Parameters
+    ----------
+    n_samples : aantal η_0-rasterpunten (K) waarmee het bereik gelijkmatig
+                wordt doorlopen.
+    seed      : ongebruikt (geen willekeurige trekkingen); alleen aanwezig
+                voor signatuur-symmetrie met :func:`beta_r_winstband`.
+    alleen_haalbaar : bepaal α* per rasterpunt alleen over haalbare α
+                      (marge ≥ 0 én alle klanten profiteren), met terugval
+                      op alle α.
+    percentielen : welke posities over het doorlopen η_0-bereik te
+                   rapporteren (default 5/50/95; 0/100 geven exact het
+                   minimum/maximum van de band).
+
+    Returns
+    -------
+    dict met sleutels:
+        alpha_grid     : np.array van gebruikte α-waarden;
+        eta0_samples   : np.array van gelijkmatig verdeelde η_0-rasterwaarden
+                         (deterministisch, geen trekkingen);
+        qeq_samples    : np.array q_eq = σ(η_0) corresponderend met
+                         eta0_samples;
+        margin_matrix  : (n_samples × len(alpha_grid)) marges E[Π_BPA];
+        margin_pct     : {p: array over α} band van de winst over het
+                         doorlopen η_0-bereik (p=0/100 = min/max);
+        margin_mean    : np.array gemiddelde winst per α over het raster;
+        opt_alpha      : np.array optimale α* per rasterpunt;
+        opt_margin     : np.array optimale winst per rasterpunt;
+        opt_alpha_pct  : {p: float} band van de optimale α* over het bereik;
+        opt_margin_pct : {p: float} band van de optimale winst over het bereik.
+    Of ``None`` wanneer er geen data/overzicht beschikbaar is.
+    """
+    _alpha = np.asarray(list(alpha_grid), dtype=float)
+    if overzicht_df is None or overzicht_df.empty or _alpha.size == 0:
+        return None
+    if float(eta0_max) < float(eta0_min):
+        eta0_min, eta0_max = eta0_max, eta0_min
+
+    # N_i één keer laden (dure Excel-read) en over alle rasterpunten hergebruiken.
+    _n = aantal_klanten_per_component(excel_file, codes)
+    if _n is None or _n.empty:
+        return None
+
+    # Deterministisch, gelijkmatig raster over het η_0-bereik — η_0 is een
+    # onzekere parameter met een gedefinieerd bereik, geen kansverdeling, dus
+    # geen willekeurige trekkingen (``seed`` wordt niet meer gebruikt).
+    _eta0_samples = np.linspace(float(eta0_min), float(eta0_max), int(n_samples))
+    _qeq_samples  = 1.0 / (1.0 + np.exp(-_eta0_samples))
+
+    _margin  = np.full((int(n_samples), _alpha.size), np.nan)
+    _revenue = np.full((int(n_samples), _alpha.size), np.nan)  # R per (grid-punt, α)
+    _opt_a   = np.full(int(n_samples), np.nan)
+    _opt_m   = np.full(int(n_samples), np.nan)
+
+    for _k, _qeq_k in enumerate(_qeq_samples):
+        if budget is not None:
+            # Greedy modus: per trekking de volledige greedy uitvoeren.
+            _gs = greedy_alpha_sweep(
+                overzicht_df, list(_alpha), float(budget),
+                float(X_fix), float(_qeq_k), float(beta_r),
+                float(kappa_bpa), float(kappa_c),
+                n_series=_n,
+                epsilon=epsilon,
+            )
+            if _gs.empty:
+                continue
+            _m_series = _gs.set_index('alpha')['total_margin']
+            _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+            if 'total_rev' in _gs.columns:
+                _revenue[_k, :] = _gs.set_index('alpha')['total_rev'].reindex(_alpha).to_numpy(dtype=float)
+            _valid = _gs.dropna(subset=['total_margin'])
+            if _valid.empty:
+                continue
+            _kandidaten = _valid
+            if alleen_haalbaar:
+                _pos = _valid[_valid['total_margin'] > 0]
+                if not _pos.empty:
+                    _kandidaten = _pos
+            if margin_ratio_min is not None and float(margin_ratio_min) > 0:
+                if 'total_rev' in _kandidaten.columns:
+                    _rev = _kandidaten['total_rev'].fillna(0.0)
+                    _mrm = (_rev > 0) & (
+                        _kandidaten['total_margin'] / _rev
+                        >= float(margin_ratio_min))
+                    if _mrm.any():
+                        _kandidaten = _kandidaten[_mrm]
+            _best = _kandidaten.loc[_kandidaten['total_margin'].idxmax()]
+            _opt_a[_k] = float(_best['alpha'])
+            _opt_m[_k] = float(_best['total_margin'])
+        else:
+            _curve = pareto_alpha_X(
+                overzicht_df, list(_alpha), [float(X_fix)],
+                float(_qeq_k), float(beta_r), float(kappa_bpa), float(kappa_c),
+                codes=codes, n_series=_n,
+                epsilon=epsilon,
+            )
+            if _curve is None or _curve.empty:
+                continue
+            # Uitlijnen op _alpha (identieke floats uit dezelfde grid).
+            _m_series = _curve.set_index('alpha')['margin']
+            _margin[_k, :] = _m_series.reindex(_alpha).to_numpy(dtype=float)
+            if 'revenue' in _curve.columns:
+                _revenue[_k, :] = _curve.set_index('alpha')['revenue'].reindex(_alpha).to_numpy(dtype=float)
+            _valid = _curve.dropna(subset=['margin'])
+            if _valid.empty:
+                continue
+            _kandidaten = _valid
+            if alleen_haalbaar:
+                _haalbaar = _valid[_valid['feasible']]
+                if not _haalbaar.empty:
+                    _kandidaten = _haalbaar
+            if margin_ratio_min is not None and float(margin_ratio_min) > 0:
+                if 'revenue' in _kandidaten.columns:
+                    _rev = _kandidaten['revenue'].fillna(0.0)
+                    _mrm = (_rev > 0) & (
+                        _kandidaten['margin'] / _rev
+                        >= float(margin_ratio_min))
+                    if _mrm.any():
+                        _kandidaten = _kandidaten[_mrm]
+            _best = _kandidaten.loc[_kandidaten['margin'].idxmax()]
+            _opt_a[_k] = float(_best['alpha'])
+            _opt_m[_k] = float(_best['margin'])
+
+    # Percentiel-band alleen berekenen wanneer er ten minste één geldige rij is.
+    def _safe_pct_eta0(arr2d, p):
+        _col_ok = ~np.all(np.isnan(arr2d), axis=0)
+        _out = np.full(arr2d.shape[1], np.nan)
+        if _col_ok.any():
+            _out[_col_ok] = np.nanpercentile(arr2d[:, _col_ok], p, axis=0)
+        return _out
+
+    _margin_pct  = {int(p): _safe_pct_eta0(_margin, p) for p in percentielen}
+    _revenue_pct = {int(p): _safe_pct_eta0(_revenue, p) for p in percentielen}
+    with np.errstate(invalid='ignore'):
+        _margin_mean = np.where(
+            np.all(np.isnan(_margin), axis=0), np.nan, np.nanmean(_margin, axis=0))
+
+    _opt_valid = _opt_a[~np.isnan(_opt_a)]
+    _optm_valid = _opt_m[~np.isnan(_opt_m)]
+    _opt_a_pct = {
+        int(p): (float(np.percentile(_opt_valid, p)) if _opt_valid.size else float('nan'))
+        for p in percentielen
+    }
+    _opt_m_pct = {
+        int(p): (float(np.percentile(_optm_valid, p)) if _optm_valid.size else float('nan'))
+        for p in percentielen
+    }
+
+    return {
+        'alpha_grid':     _alpha,
+        'eta0_samples':   _eta0_samples,
+        'qeq_samples':    _qeq_samples,
+        'margin_matrix':  _margin,
+        'margin_pct':     _margin_pct,
+        'margin_mean':    _margin_mean,
+        'revenue_pct':    _revenue_pct,
+        'opt_alpha':      _opt_a,
+        'opt_margin':     _opt_m,
+        'opt_alpha_pct':  _opt_a_pct,
+        'opt_margin_pct': _opt_m_pct,
+        'budget':         budget,
+    }
+
+
 def greedy_alpha_sweep(
     overzicht_df,
     alpha_grid,
@@ -1414,7 +1658,7 @@ def greedy_alpha_sweep(
         q(α) → Z_i(α) → S_i*(X, Z_i·λ/N·L) → Inv_i / Rev_i / Margin_i → greedy
 
     en laat zo zien hoe de geselecteerde portfolio én de totale marge van de
-    greedy-selectie variëren met α (en impliciet met β_r).
+    greedy-selectie variëren met α (en impliciet met η_r).
 
     Parameters
     ----------
@@ -1422,7 +1666,7 @@ def greedy_alpha_sweep(
     service_level : doel-fillrate X voor S_i*-berekening via Poisson-inverse.
     q_eq          : adoptiekans bij kostenpariteit (logit-intercept).
     beta_r        : kostenratio-gevoeligheid (vaste waarde; voor een band over
-                    β_r run deze functie meerdere keren).
+                    η_r run deze functie meerdere keren).
     epsilon       : kans-constraint niveau (None = verwachte Z_i; anders
                     CC-kwantiel Z_i^{1-ε}).
 
@@ -1441,15 +1685,9 @@ def greedy_alpha_sweep(
 
     # N_i laden (eenmalig)
     _n = n_series if n_series is not None else aantal_klanten_per_component(excel_file, codes)
-    if _n is None or _n.empty:
-        # Fallback: gebruik n_klanten uit het overzicht als vaste M_i.
-        base = overzicht_df.copy()
-        _n_base_v = base['n_klanten'].astype(float).values
-    else:
-        base = overzicht_df.loc[overzicht_df.index.isin(_n.index)].copy()
-        if base.empty:
-            return pd.DataFrame()
-        _n_base_v = _n.reindex(base.index).fillna(0.0).values
+    base = overzicht_df.copy()
+    _n = _klantenaantallen_met_overzicht_fallback(base, _n)
+    _n_base_v = _n.values
 
     _base_n   = base['n_klanten'].astype(float).replace(0, np.nan)
     _base_lam = base['lambda_jr'].astype(float)
@@ -1499,19 +1737,19 @@ def greedy_alpha_sweep(
         _rev_v    = _z_mean * float(_a) * _vp          # omzet op E[Z_i]
         _cbpa_v   = float(kappa_bpa) * _ip * _s_star   # kosten op CC-stock
         _margin_v = _rev_v - _cbpa_v
-        _roi_v    = np.where(_inv_v > 0, _margin_v / _inv_v, np.inf)
+        _eligible = np.isfinite(_margin_v) & (_margin_v > 0)
+        _roi_v    = np.where(
+            _eligible,
+            np.where(_inv_v > 0, _margin_v / _inv_v, np.inf),
+            -np.inf,
+        )
 
         # Greedy: primair ROI desc, secundair inv asc (stabiel, idem UI-logica)
         _order = np.lexsort((_inv_v, -_roi_v))
-        _cum   = np.cumsum(_inv_v[_order])
+        _eligible_order = _order[_eligible[_order]]
+        _cum   = np.cumsum(_inv_v[_eligible_order])
         _sel   = np.zeros(_N, dtype=bool)
-        _sel[_order[_cum <= float(budget)]] = True
-        # Backfill: kleinere items die nog passen
-        _rest = float(budget) - float(_inv_v[_sel].sum())
-        for _pos in _order:
-            if not _sel[_pos] and float(_inv_v[_pos]) <= _rest:
-                _sel[_pos] = True
-                _rest -= float(_inv_v[_pos])
+        _sel[_eligible_order[_cum <= float(budget)]] = True
 
         rijen.append({
             'alpha':          float(_a),
@@ -1525,6 +1763,10 @@ def greedy_alpha_sweep(
             'n_selected':     int(_sel.sum()),
             'n_total':        _N,
             'selected_codes': list(base.index[_sel]),
+            'component_stocks': {
+                str(code): int(_s_star[_j]) if _sel[_j] else 0
+                for _j, code in enumerate(base.index)
+            },
         })
 
     return pd.DataFrame(rijen)
@@ -1556,14 +1798,9 @@ def greedy_detail_for_params(
         return pd.DataFrame()
 
     _n = n_series if n_series is not None else aantal_klanten_per_component(excel_file, codes)
-    if _n is None or _n.empty:
-        base = overzicht_df.copy()
-        _n_base_v = base['n_klanten'].astype(float).values
-    else:
-        base = overzicht_df.loc[overzicht_df.index.isin(_n.index)].copy()
-        if base.empty:
-            return pd.DataFrame()
-        _n_base_v = _n.reindex(base.index).fillna(0.0).values
+    base = overzicht_df.copy()
+    _n = _klantenaantallen_met_overzicht_fallback(base, _n)
+    _n_base_v = _n.values
 
     _base_n   = base['n_klanten'].astype(float).replace(0, np.nan)
     _base_lam = base['lambda_jr'].astype(float)
@@ -1602,18 +1839,19 @@ def greedy_detail_for_params(
     _rev_v    = _z_mean * float(alpha) * _vp
     _cbpa_v   = float(kappa_bpa) * _ip * _s_star
     _margin_v = _rev_v - _cbpa_v
-    _roi_v    = np.where(_inv_v > 0, _margin_v / _inv_v, np.inf)
+    _eligible = np.isfinite(_margin_v) & (_margin_v > 0)
+    _roi_v    = np.where(
+        _eligible,
+        np.where(_inv_v > 0, _margin_v / _inv_v, np.inf),
+        -np.inf,
+    )
 
     # Greedy selectie (zelfde logica als greedy_alpha_sweep)
     _order = np.lexsort((_inv_v, -_roi_v))
-    _cum   = np.cumsum(_inv_v[_order])
+    _eligible_order = _order[_eligible[_order]]
+    _cum   = np.cumsum(_inv_v[_eligible_order])
     _sel   = np.zeros(_N, dtype=bool)
-    _sel[_order[_cum <= float(budget)]] = True
-    _rest = float(budget) - float(_inv_v[_sel].sum())
-    for _pos in _order:
-        if not _sel[_pos] and float(_inv_v[_pos]) <= _rest:
-            _sel[_pos] = True
-            _rest -= float(_inv_v[_pos])
+    _sel[_eligible_order[_cum <= float(budget)]] = True
 
     _omsch_col = next(
         (c for c in ('omschrijving', 'Omschrijving', 'description') if c in base.columns),
