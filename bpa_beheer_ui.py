@@ -18,6 +18,23 @@ import pandas as pd
 import numpy as np
 import json
 
+_ORIGINAL_ST_PYPLOT = getattr(st, "_bpa_original_pyplot", st.pyplot)
+st._bpa_original_pyplot = _ORIGINAL_ST_PYPLOT
+
+
+def _pyplot_zonder_grafiektitel(fig=None, *args, **kwargs):
+    """Render een Matplotlib-figuur zonder figuur- of subplot-titels."""
+    if fig is not None:
+        suptitle = getattr(fig, "_suptitle", None)
+        if suptitle is not None:
+            suptitle.set_text("")
+        for axes in fig.axes:
+            axes.set_title("")
+    return _ORIGINAL_ST_PYPLOT(fig, *args, **kwargs)
+
+
+st.pyplot = _pyplot_zonder_grafiektitel
+
 # Hergebruik alle logica uit bpa_beheer.py
 from bpa_beheer import (
     laad_config,
@@ -104,6 +121,16 @@ def _subscription_threshold(target_service, lambda_per_subscriber, lead_time,
             low = midpoint + 1
     return low - current_subscribers
 
+
+def _component_number_labels(codes):
+    """Map component codes to stable, anonymous labels for charts."""
+    return {
+        code: f"Component {index}"
+        for index, code in enumerate(
+            sorted({str(code) for code in codes}), start=1
+        )
+    }
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  CACHE-WRAPPERS  (sterk versnellen Streamlit-reruns)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -163,6 +190,21 @@ def _cached_bereken_overzicht(cfg_json: str, _excel_mtime: float, _selectie_mtim
 def _cached_aantal_klanten(_excel_mtime: float, upload=None) -> pd.Series:
     """Cached M_i per component. upload = bestandspad (str) of UploadedFile."""
     return aantal_klanten_per_component(upload)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cached_maximale_klanten(_excel_mtime: float) -> pd.Series:
+    """M_i uit Final_data van de vaste abonnementsbron zonder RSPL."""
+    df = pd.read_excel(SUBSCRIPTIES_PATH, sheet_name="Final_data")
+    df = df.rename(columns={
+        "Verkooporderregel artikel.Artikel.Artikelcode": "Code",
+        "Aantal_klantlocaties_5jr": "M_i",
+    })
+    if "Code" not in df.columns or "M_i" not in df.columns:
+        return pd.Series(dtype=float)
+    df["Code"] = df["Code"].astype(str).str.strip()
+    df["M_i"] = pd.to_numeric(df["M_i"], errors="coerce")
+    return df.dropna(subset=["Code", "M_i"]).groupby("Code")["M_i"].max()
 
 
 def get_classificatie_info() -> dict:
@@ -228,6 +270,365 @@ def representatieve_z(default: int = 1) -> int:
         if pd.notna(_med) and _med >= 1:
             return int(round(_med))
     return default
+
+
+def _servicelevel_data_bij_een_unit(componenten: pd.DataFrame) -> pd.DataFrame:
+    """Normaliseer componentdata naar de vraag van precies één abonnee."""
+    vereist = {"lambda_jr", "n_klanten", "LT_dagen", "IP", "VP"}
+    ontbrekend = vereist.difference(componenten.columns)
+    if ontbrekend:
+        raise ValueError(
+            "Ontbrekende kolommen voor servicelevel-efficiency: "
+            + ", ".join(sorted(ontbrekend))
+        )
+
+    data = componenten.copy()
+    for kolom in vereist:
+        data[kolom] = pd.to_numeric(data[kolom], errors="coerce")
+    data = data.dropna(subset=list(vereist))
+    data = data[
+        (data["lambda_jr"] >= 0) & (data["n_klanten"] > 0)
+        & (data["LT_dagen"] >= 0) & (data["IP"] >= 0) & (data["VP"] >= 0)
+    ]
+    data["lambda_per_subscriber"] = data["lambda_jr"] / data["n_klanten"]
+    return data
+
+
+def schaal_componenten_naar_z(componenten: pd.DataFrame, z_niveau,
+                              maximale_abonnees: pd.Series) -> pd.DataFrame:
+    """Schaal componentvraag naar Z_i, begrensd door het potentiële M_i."""
+    data = componenten.copy()
+    lambda_per_subscriber = (
+        pd.to_numeric(data["lambda_jr"], errors="coerce")
+        / pd.to_numeric(data["n_klanten"], errors="coerce")
+    )
+    huidige_aantallen = pd.to_numeric(
+        data["n_klanten"], errors="coerce"
+    ).fillna(1).clip(lower=1)
+    maximale_per_rij = pd.Series([
+        float(maximale_abonnees.get(str(code), huidig))
+        for code, huidig in zip(data.index, huidige_aantallen)
+    ], index=data.index).fillna(huidige_aantallen).clip(lower=1)
+
+    if z_niveau == "M_i":
+        gekozen_z = maximale_per_rij
+    else:
+        gekozen_z = np.minimum(float(z_niveau), maximale_per_rij)
+
+    data["lambda_jr"] = lambda_per_subscriber * gekozen_z
+    data["n_klanten"] = 1
+    data["Z_i"] = gekozen_z.astype(int)
+    return data
+
+
+def bereken_portfolio_servicelevel_efficiency(
+        componenten: pd.DataFrame, kandidaat_betas,
+    maximale_abonnees: pd.Series, budget: float,
+    alpha: float, kappa_bpa: float) -> pd.DataFrame:
+    """Bereken Psi/C_f per beta voor vaste, op M_i begrensde Z-niveaus."""
+    data = _servicelevel_data_bij_een_unit(componenten)
+    if data.empty:
+        return pd.DataFrame()
+
+    mu_bij_een_abonnee = (
+        data["lambda_per_subscriber"].to_numpy(dtype=float)
+        * data["LT_dagen"].to_numpy(dtype=float) / 365.0
+    )
+    baseline_beta = float(np.exp(-mu_bij_een_abonnee.max()))
+
+    kandidaat_betas = np.unique(np.asarray(kandidaat_betas, dtype=float))
+    kandidaat_betas = kandidaat_betas[kandidaat_betas >= baseline_beta]
+    if kandidaat_betas.size == 0:
+        raise ValueError(
+            f"Kies minimaal één kandidaat-β vanaf de baseline {baseline_beta:.4f}."
+        )
+
+    records = []
+    for anker_volgorde, (anker, z_niveau) in enumerate((
+            ("Zᵢ = 1", 1),
+            ("Zᵢ = min(2, Mᵢ)", 2),
+            ("Zᵢ = min(5, Mᵢ)", 5),
+            ("Zᵢ = min(10, Mᵢ)", 10),
+            ("Zᵢ = Mᵢ", "M_i"))):
+        scenario = schaal_componenten_naar_z(
+            componenten, z_niveau, maximale_abonnees
+        )
+        scenario_data = _servicelevel_data_bij_een_unit(scenario)
+        vraag = scenario_data["lambda_per_subscriber"].to_numpy(dtype=float)
+        levertijd = scenario_data["LT_dagen"].to_numpy(dtype=float) / 365.0
+        prijzen = scenario_data["IP"].to_numpy(dtype=float)
+        verkoopprijzen = scenario_data["VP"].to_numpy(dtype=float)
+        abonnees = scenario_data["Z_i"].to_numpy(dtype=float)
+        mu = vraag * levertijd
+
+        baseline_voorraad = np.asarray([
+            BPAOptimizationModel.inverse_service_level(
+                baseline_beta, float(lambda_rate), float(lead_time)
+            )
+            for lambda_rate, lead_time in zip(vraag, levertijd)
+        ], dtype=int)
+        baseline_investering = float(np.dot(baseline_voorraad, prijzen))
+        investering_98 = float(np.dot(np.asarray([
+            BPAOptimizationModel.inverse_service_level(
+                0.98, float(lambda_rate), float(lead_time)
+            )
+            for lambda_rate, lead_time in zip(vraag, levertijd)
+        ], dtype=int), prijzen))
+        totale_vraag = float(vraag.sum())
+
+        for beta in kandidaat_betas:
+            voorraad = np.asarray([
+                BPAOptimizationModel.inverse_service_level(
+                    float(beta), float(lambda_rate), float(lead_time)
+                )
+                for lambda_rate, lead_time in zip(vraag, levertijd)
+            ], dtype=int)
+            investering = float(np.dot(voorraad, prijzen))
+            extra_investering = investering - baseline_investering
+            extra_investering_vanaf_98 = investering - investering_98
+            vermeden_downtime_vanaf_98 = totale_vraag * (float(beta) - 0.98)
+            kosten_per_vermeden_downtime = (
+                extra_investering_vanaf_98 / vermeden_downtime_vanaf_98
+                if extra_investering_vanaf_98 > 0
+                and vermeden_downtime_vanaf_98 > 0
+                else np.nan
+            )
+            component_investeringen = np.sort(voorraad * prijzen)
+            investeringsvolgorde = np.argsort(
+                voorraad * prijzen, kind="stable"
+            )
+            component_investeringen = (voorraad * prijzen)[investeringsvolgorde]
+            cumulatieve_investering = np.cumsum(component_investeringen)
+            binnen_budget = cumulatieve_investering <= float(budget) + 1e-9
+            aantal_componenten_budget = int(binnen_budget.sum())
+            geselecteerde_indices = investeringsvolgorde[
+                :aantal_componenten_budget
+            ]
+            benutte_investering = (
+                float(cumulatieve_investering[aantal_componenten_budget - 1])
+                if aantal_componenten_budget > 0 else 0.0
+            )
+            omzet_budget = float(np.sum(
+                abonnees[geselecteerde_indices]
+                * float(alpha)
+                * verkoopprijzen[geselecteerde_indices]
+            ))
+            voorraadkosten_budget = float(kappa_bpa) * benutte_investering
+            winst_budget = omzet_budget - voorraadkosten_budget
+            omzet_per_investering = (
+                omzet_budget / benutte_investering
+                if benutte_investering > 0 else np.nan
+            )
+            winst_per_investering = (
+                winst_budget / benutte_investering
+                if benutte_investering > 0 else np.nan
+            )
+            psi_per_cf = (
+                totale_vraag * (float(beta) - baseline_beta) / extra_investering
+                if extra_investering > 0 and float(beta) > baseline_beta
+                else np.nan
+            )
+            records.append({
+                "anker": anker,
+                "anker_volgorde": anker_volgorde,
+                "beta": float(beta),
+                "psi_per_cf": psi_per_cf,
+                "baseline_beta": baseline_beta,
+                "lambda_tot": totale_vraag,
+                "baseline_investering": baseline_investering,
+                "investering": investering,
+                "extra_investering": extra_investering,
+                "investering_98": investering_98,
+                "extra_investering_vanaf_98": extra_investering_vanaf_98,
+                "vermeden_downtime_vanaf_98": vermeden_downtime_vanaf_98,
+                "kosten_per_vermeden_downtime": kosten_per_vermeden_downtime,
+                "budget": float(budget),
+                "aantal_componenten_budget": aantal_componenten_budget,
+                "benutte_investering": benutte_investering,
+                "omzet_budget": omzet_budget,
+                "voorraadkosten_budget": voorraadkosten_budget,
+                "winst_budget": winst_budget,
+                "omzet_per_investering": omzet_per_investering,
+                "winst_per_investering": winst_per_investering,
+                "totale_voorraad": int(voorraad.sum()),
+                "totaal_z": int(scenario["Z_i"].sum()),
+            })
+
+    return pd.DataFrame.from_records(records)
+
+
+def bereken_psi_naar_abonnees(
+        componenten: pd.DataFrame, servicelevels,
+        maximale_abonnees: pd.Series) -> pd.DataFrame:
+    """Bereken Psi/C_f voor Z_i(z)=min(z, M_i) over gehele z-niveaus."""
+    data = _servicelevel_data_bij_een_unit(componenten)
+    if data.empty:
+        return pd.DataFrame()
+
+    mu_bij_een_abonnee = (
+        data["lambda_per_subscriber"].to_numpy(dtype=float)
+        * data["LT_dagen"].to_numpy(dtype=float) / 365.0
+    )
+    baseline_beta = float(np.exp(-mu_bij_een_abonnee.max()))
+    huidige_aantallen = pd.to_numeric(
+        data["n_klanten"], errors="coerce"
+    ).fillna(1).clip(lower=1)
+    maximale_per_rij = pd.Series([
+        float(maximale_abonnees.get(str(code), huidig))
+        for code, huidig in zip(data.index, huidige_aantallen)
+    ], index=data.index).fillna(huidige_aantallen).clip(lower=1)
+    maximaal_niveau = int(np.ceil(maximale_per_rij.max()))
+
+    records = []
+    for z_niveau in range(1, maximaal_niveau + 1):
+        scenario = schaal_componenten_naar_z(
+            componenten, z_niveau, maximale_abonnees
+        )
+        scenario_data = _servicelevel_data_bij_een_unit(scenario)
+        vraag = scenario_data["lambda_per_subscriber"].to_numpy(dtype=float)
+        levertijd = scenario_data["LT_dagen"].to_numpy(dtype=float) / 365.0
+        prijzen = scenario_data["IP"].to_numpy(dtype=float)
+        baseline_voorraad = np.asarray([
+            BPAOptimizationModel.inverse_service_level(
+                baseline_beta, float(lambda_rate), float(lead_time)
+            )
+            for lambda_rate, lead_time in zip(vraag, levertijd)
+        ], dtype=int)
+        baseline_investering = float(np.dot(baseline_voorraad, prijzen))
+        investering_98 = float(np.dot(np.asarray([
+            BPAOptimizationModel.inverse_service_level(
+                0.98, float(lambda_rate), float(lead_time)
+            )
+            for lambda_rate, lead_time in zip(vraag, levertijd)
+        ], dtype=int), prijzen))
+        totale_vraag = float(vraag.sum())
+
+        for beta in servicelevels:
+            voorraad = np.asarray([
+                BPAOptimizationModel.inverse_service_level(
+                    float(beta), float(lambda_rate), float(lead_time)
+                )
+                for lambda_rate, lead_time in zip(vraag, levertijd)
+            ], dtype=int)
+            investering = float(np.dot(voorraad, prijzen))
+            extra_investering = investering - baseline_investering
+            extra_investering_vanaf_98 = investering - investering_98
+            vermeden_downtime_vanaf_98 = totale_vraag * (float(beta) - 0.98)
+            kosten_per_vermeden_downtime = (
+                extra_investering_vanaf_98 / vermeden_downtime_vanaf_98
+                if extra_investering_vanaf_98 > 0
+                and vermeden_downtime_vanaf_98 > 0
+                else np.nan
+            )
+            psi_per_cf = (
+                totale_vraag * (float(beta) - baseline_beta) / extra_investering
+                if extra_investering > 0 else np.nan
+            )
+            records.append({
+                "z_niveau": z_niveau,
+                "beta": float(beta),
+                "psi_per_cf": psi_per_cf,
+                "extra_investering": extra_investering,
+                "extra_investering_vanaf_98": extra_investering_vanaf_98,
+                "vermeden_downtime_vanaf_98": vermeden_downtime_vanaf_98,
+                "kosten_per_vermeden_downtime": kosten_per_vermeden_downtime,
+            })
+
+    return pd.DataFrame.from_records(records)
+
+
+def bepaal_servicelevel_baseline(componenten: pd.DataFrame) -> dict:
+    """Bepaal de gegarandeerde S=1-baseline en het bindende component."""
+    data = _servicelevel_data_bij_een_unit(componenten)
+    if data.empty:
+        return {}
+    gerealiseerd = pd.Series([
+        BPAOptimizationModel.service_level(
+            1, float(lambda_per_subscriber), float(lead_time_days) / 365
+        )
+        for lambda_per_subscriber, lead_time_days in zip(
+            data["lambda_per_subscriber"], data["LT_dagen"]
+        )
+    ], index=data.index)
+    bindend_component = str(gerealiseerd.idxmin())
+    bindend_servicelevel = float(gerealiseerd.min())
+    return {
+        "baseline_beta": float(np.floor(bindend_servicelevel * 100) / 100),
+        "bindend_component": bindend_component,
+        "bindend_servicelevel": bindend_servicelevel,
+        "baseline_investering": float(data["IP"].sum()),
+    }
+
+
+def bereken_servicelevel_efficiency(componenten: pd.DataFrame,
+                                    beta_grid,
+                                    baseline: dict | None = None) -> pd.DataFrame:
+    """Bereken psi(beta) ten opzichte van de bindende S=1-baseline."""
+    data = _servicelevel_data_bij_een_unit(componenten)
+    if data.empty:
+        return pd.DataFrame(columns=[
+            "beta", "psi", "baseline_beta", "delta_beta",
+            "delta_investering", "investering"
+        ])
+
+    baseline = baseline or bepaal_servicelevel_baseline(data)
+    baseline_beta = baseline["baseline_beta"]
+
+    beta = np.asarray(beta_grid, dtype=float)
+    beta = np.unique(beta[beta > baseline_beta])
+    if beta.size == 0:
+        raise ValueError("Het beta_grid moet waarden boven de baseline bevatten.")
+
+    baseline_investering = baseline["baseline_investering"]
+    records = []
+    for service_level in beta:
+        voorraad = [
+            BPAOptimizationModel.inverse_service_level(
+                float(service_level), float(lambda_per_subscriber),
+                float(lead_time_days) / 365
+            )
+            for lambda_per_subscriber, lead_time_days in zip(
+                data["lambda_per_subscriber"], data["LT_dagen"]
+            )
+        ]
+        investering = float(np.dot(np.maximum(voorraad, 1), data["IP"].to_numpy()))
+        delta_investering = investering - baseline_investering
+        if delta_investering > 0:
+            records.append({
+                "beta": float(service_level),
+                "psi": (float(service_level) - baseline_beta) / delta_investering,
+                "baseline_beta": baseline_beta,
+                "delta_beta": float(service_level) - baseline_beta,
+                "delta_investering": delta_investering,
+                "investering": investering,
+            })
+
+    resultaat = pd.DataFrame.from_records(records)
+    resultaat.attrs.update(baseline)
+    return resultaat
+
+
+def bereken_budgetdekking(componenten: pd.DataFrame, beta_grid,
+                          totaal_budget: float) -> pd.DataFrame:
+    """Maximaliseer het aantal componenten binnen een vast totaalbudget."""
+    data = _servicelevel_data_bij_een_unit(componenten)
+    records = []
+    for service_level in np.asarray(beta_grid, dtype=float):
+        investering_per_component = []
+        for (_, row) in data.iterrows():
+            voorraad = BPAOptimizationModel.inverse_service_level(
+                float(service_level), float(row["lambda_per_subscriber"]),
+                float(row["LT_dagen"]) / 365
+            )
+            investering_per_component.append(max(voorraad, 1) * float(row["IP"]))
+        cumulatief = np.cumsum(np.sort(investering_per_component))
+        aantal = int(np.count_nonzero(cumulatief <= float(totaal_budget)))
+        records.append({
+            "beta": float(service_level),
+            "aantal_componenten": aantal,
+            "totaal_componenten": len(data),
+        })
+    return pd.DataFrame.from_records(records)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -850,8 +1251,9 @@ with tab_historie:
                 for col in sl_cols:
                     ax.plot(hist_df.index, hist_df[col], marker="o", linewidth=2, label=col)
                     for x, y in zip(hist_df.index, hist_df[col]):
-                        ax.annotate(str(int(y)), (x, y), textcoords="offset points",
-                                    xytext=(0, 6), ha="center", fontsize=8)
+                        if pd.notna(y):
+                            ax.annotate(str(int(y)), (x, y), textcoords="offset points",
+                                        xytext=(0, 6), ha="center", fontsize=8)
 
                 ax.set_xlabel("Update date", fontsize=11)
                 ax.set_ylabel("Total base stock (units)", fontsize=11)
@@ -1925,11 +2327,14 @@ with tab_historie:
                 if _x10_vals:
                     _cmap10  = _mpl_inv.colormaps['tab10']
                     _fig_t10, _ax_t10 = _plt_inv.subplots(figsize=(12, 5))
+                    _component_labels_t10 = _component_number_labels(
+                        _cd10_sl.keys()
+                    )
 
                     for _ci, _c10 in enumerate(_top10):
                         _pts10 = [p['inv'] for p in _cd10_sl.get(_c10['code'], [])]
                         if _pts10:
-                            _lbl10 = f"{_c10['code']} – {_c10.get('descr', '')[:25]}"
+                            _lbl10 = _component_labels_t10[str(_c10['code'])]
                             _ax_t10.plot(
                                 _x10_vals, _pts10,
                                 color=_cmap10(_ci / 10),
@@ -2280,11 +2685,12 @@ with tab_historie:
 
             _comp_cf10 = _mt10d['comp']
             _cmap10mt  = _mt10_mpl.colormaps['tab10']
+            _component_labels_cf10 = _component_number_labels(_comp_cf10)
 
             _fig10c, _ax10c = _plt_mt10.subplots(figsize=(12, 5))
             for _ci10, (_code10, _cdata10) in enumerate(_comp_cf10.items()):
                 _cum10c = _np_mt10.array(_cdata10['cum'])
-                _lbl10c = f"{_code10} – {_cdata10['descr'][:25]}"
+                _lbl10c = _component_labels_cf10[str(_code10)]
                 _ax10c.plot(_xp10, _cum10c, color=_cmap10mt(_ci10 / 10),
                             marker='o', linewidth=1.8, markersize=5, label=_lbl10c)
             _ax10c.axhline(0, color='grey', linewidth=1.0, linestyle='--')
@@ -2321,7 +2727,7 @@ with tab_kosten:
         with col_a:
             k_alpha = st.number_input(
                 "α (abonnementstarief, %)",
-                min_value=1.0, max_value=50.0, value=15.0, step=1.0, format="%.0f",
+                min_value=0.0, max_value=50.0, value=15.0, step=1.0, format="%.0f",
                 help="Abonnementsprijs als percentage van verkoopprijs",
             ) / 100
         with col_b:
@@ -2511,7 +2917,7 @@ with tab_drempel:
         _sl_d = st.selectbox(
             "Service level",
             options=SERVICE_LEVELS,
-            index=SERVICE_LEVELS.index(0.990) if 0.990 in SERVICE_LEVELS else 0,
+            index=SERVICE_LEVELS.index(0.985) if 0.985 in SERVICE_LEVELS else 0,
             format_func=lambda v: f"{v:.1%}",
             key="drempel_sl",
         )
@@ -2545,7 +2951,7 @@ with tab_drempel:
             with _drm_c1:
                 _drm_alpha = st.number_input(
                     "α (abonnementstarief)",
-                    min_value=0.001, max_value=1.0,
+                    min_value=0.0, max_value=1.0,
                     value=float(st.session_state.get("kosten_params", {}).get("alpha", 0.15)),
                     step=0.01, format="%.3f", key="drm_alpha",
                     help="Prijspercentage α waarvoor Z_i(α) = M_i·q(α) wordt berekend.",
@@ -2695,6 +3101,92 @@ with tab_drempel:
                 language=None,
             )
 
+        # ── Pooling scenarios: Z_i = 1, 2, 3, M_i ──────────────────────
+        _pooling_scenarios = (
+            ("Zᵢ = 1", 1),
+            ("Zᵢ = 2", 2),
+            ("Zᵢ = 3", 3),
+            ("Zᵢ = Mᵢ", None),
+        )
+        _pooling_mi = _cached_maximale_klanten(
+            _file_mtime(SUBSCRIPTIES_PATH)
+        )
+        _pooling_results = []
+        for _scenario_label, _scenario_z in _pooling_scenarios:
+            _scenario_subscribers = 0
+            _scenario_stock = 0
+            for _, _row in _df_ov.iterrows():
+                _code = str(_row["Code"])
+                _n_orig = int(_row["n_klanten"])
+                _lam_orig = float(_row["lambda_jr"])
+                _lt_jr = float(_row["LT_dagen"]) / 365
+                _mi = max(1, int(round(float(_pooling_mi.get(_code, _n_orig)))))
+                _zi = _mi if _scenario_z is None else min(_scenario_z, _mi)
+                _lam_per_subscriber = _lam_orig / _n_orig if _n_orig > 0 else 0.0
+                _stock = BPAOptimizationModel.inverse_service_level(
+                    _sl_d,
+                    _lam_per_subscriber * _zi,
+                    _lt_jr,
+                )
+                _scenario_subscribers += _zi
+                _scenario_stock += _stock
+
+            _pooling_results.append({
+                "Scenario": _scenario_label,
+                "Subscriptions": _scenario_subscribers,
+                "Base stock": _scenario_stock,
+                "Stock per subscriber": (
+                    _scenario_stock / _scenario_subscribers
+                    if _scenario_subscribers else 0.0
+                ),
+                "Pooling gain": _scenario_subscribers - _scenario_stock,
+            })
+
+        _pooling_df = pd.DataFrame(_pooling_results)
+        st.markdown("**Pooling scenarios**")
+        st.caption(
+            "For the intermediate scenarios, each component uses "
+            "Zᵢ = min(k, Mᵢ). Stock per subscriber is calculated as "
+            "ΣSᵢ*/ΣZᵢ."
+        )
+
+        import matplotlib.pyplot as _plt_pool
+
+        _pool_colors = ["#2667A8", "#2A9D6F", "#E9A23B", "#C94C4C"]
+        _fig_pool, _axes_pool = _plt_pool.subplots(
+            1, 3, figsize=(14, 4.4), dpi=100, layout="constrained"
+        )
+        _pool_metrics = (
+            ("Base stock", "Total base stock ΣSᵢ*", "{:.0f}"),
+            ("Stock per subscriber", "Stock per subscriber ΣSᵢ*/ΣZᵢ", "{:.3f}"),
+            ("Pooling gain", "Pooling gain Σ(Zᵢ − Sᵢ*)", "{:.0f}"),
+        )
+        for _ax_pool, (_metric, _title, _value_format) in zip(
+                _axes_pool, _pool_metrics):
+            _bars_pool = _ax_pool.bar(
+                _pooling_df["Scenario"],
+                _pooling_df[_metric],
+                color=_pool_colors,
+                width=0.68,
+            )
+            _ax_pool.bar_label(
+                _bars_pool,
+                labels=[_value_format.format(_v) for _v in _pooling_df[_metric]],
+                padding=3,
+                fontsize=9,
+            )
+            _ax_pool.set_title(_title, fontsize=11)
+            _ax_pool.grid(True, axis="y", alpha=0.25)
+            _ax_pool.set_axisbelow(True)
+            _ax_pool.tick_params(axis="x", labelsize=9)
+
+        _fig_pool.suptitle(
+            f"Pooling by adoption scenario (SL = {_sl_d:.1%})",
+            fontsize=13,
+        )
+        st.pyplot(_fig_pool, use_container_width=True)
+        _plt_pool.close(_fig_pool)
+
         # ── Bar chart: Extra N nodig per component ─────────────────────────
         _plot_d = _tbl_d_sorted[_tbl_d_sorted["Extra Z nodig"].notna()].copy()
         if not _plot_d.empty:
@@ -2725,7 +3217,8 @@ with tab_drempel:
             )
             _ax_d.set_xticks(range(len(_plot_d)))
             _ax_d.set_xticklabels(
-                _plot_d.index, rotation=45, ha="right", fontsize=9
+                [f"Component {index}" for index in range(1, len(_plot_d) + 1)],
+                rotation=45, ha="right", fontsize=9,
             )
             _ax_d.set_ylabel("Extra subscriptions for S*+1", fontsize=11)
             _ax_d.set_title(
@@ -3639,6 +4132,58 @@ with tab_budget:
     if _ov_df is None or _ov_df.empty:
         st.warning("Geen componenten beschikbaar. Voer eerst classificatie uit of laad de Excel.")
     else:
+        _ov_df = _ov_df.copy()
+        _adoptie_scenario = st.radio(
+            "Adoptiescenario",
+            options=[
+                "Maximale adoptie (Zᵢ = Mᵢ)",
+                "Geconfigureerde subscripties",
+            ],
+            index=0,
+            horizontal=True,
+            key="bud_adoptie_scenario",
+        )
+        _max_adoptie = _adoptie_scenario.startswith("Maximale adoptie")
+        if _max_adoptie:
+            if not os.path.exists(SUBSCRIPTIES_PATH):
+                st.error("Abonnementenbestand zonder RSPL niet gevonden.")
+                st.stop()
+            _budget_m_raw = _cached_maximale_klanten(_file_mtime(SUBSCRIPTIES_PATH))
+            _budget_m_lookup = {
+                str(code).strip(): float(value)
+                for code, value in _budget_m_raw.items()
+            }
+            _budget_n_base = pd.to_numeric(
+                _ov_df["n_klanten"], errors="coerce"
+            ).fillna(0.0)
+            _budget_lambda_per_customer = (
+                pd.to_numeric(_ov_df["lambda_jr"], errors="coerce").fillna(0.0)
+                / _budget_n_base.replace(0, np.nan)
+            ).fillna(0.0)
+            _budget_m = pd.Series(
+                [
+                    _budget_m_lookup.get(str(code).strip(), float(_budget_n_base.at[code]))
+                    for code in _ov_df.index
+                ],
+                index=_ov_df.index,
+                dtype=float,
+            ).round().clip(lower=0)
+            _budget_missing_m = sum(
+                str(code).strip() not in _budget_m_lookup for code in _ov_df.index
+            )
+            _ov_df["n_klanten"] = _budget_m.astype(int)
+            _ov_df["lambda_jr"] = _budget_m * _budget_lambda_per_customer
+            st.caption(
+                f"Maximale adoptie actief: Zᵢ = Mᵢ voor "
+                f"{len(_ov_df) - _budget_missing_m} van {len(_ov_df)} componenten "
+                f"uit de bron zonder RSPL (max Mᵢ = {int(_budget_m.max())})."
+            )
+            if _budget_missing_m:
+                st.warning(
+                    f"Voor {_budget_missing_m} component ontbreekt Mᵢ in de brondata; "
+                    "daar wordt het geconfigureerde klantenaantal gebruikt."
+                )
+
         _sl_cols_b = [c for c in _ov_df.columns if c.startswith("s@")]
         if not _sl_cols_b:
             st.error("Geen service-level kolommen gevonden in het overzicht.")
@@ -3652,6 +4197,18 @@ with tab_budget:
                     index=len(_sl_cols_b) // 2,
                     key="bud_sl",
                 )
+            if _max_adoptie:
+                _sl_target_b = float(_sl_keuze.removeprefix("s@").removesuffix("%")) / 100
+                _ov_df[_sl_keuze] = [
+                    BPAOptimizationModel.inverse_service_level(
+                        _sl_target_b,
+                        float(lambda_rate),
+                        float(lead_time_days) / 365,
+                    )
+                    for lambda_rate, lead_time_days in zip(
+                        _ov_df["lambda_jr"], _ov_df["LT_dagen"]
+                    )
+                ]
             _inv_per_comp = (_ov_df[_sl_keuze] * _ov_df["IP"]).round(2)
             _totale_inv   = float(_inv_per_comp.sum())
 
@@ -3673,7 +4230,7 @@ with tab_budget:
             with _p1:
                 _alpha_b = st.number_input(
                     "α (abonnementstarief, %)",
-                    min_value=0.1, max_value=50.0,
+                    min_value=0.0, max_value=50.0,
                     value=float(_kp.get("alpha", 0.15)) * 100,
                     step=0.5, format="%.1f",
                     key="bud_alpha",
@@ -4134,7 +4691,7 @@ with tab_subsim:
     col_a1, col_a2, col_a3 = st.columns(3)
     with col_a1:
         _alpha_sim = st.number_input(
-            "α (prijspercentage)", min_value=0.0001, max_value=1.0,
+            "α (prijspercentage)", min_value=0.0, max_value=1.0,
             value=_alpha_def_sim, step=0.01, format="%.2f", key="subsim_alpha",
         )
     with col_a2:
@@ -4205,6 +4762,7 @@ with tab_subsim:
             st.markdown("**Verdeling voor één component**")
             _n_sorted = _n_series.sort_values(ascending=False)
             _codes_sorted = [str(c) for c in _n_sorted.index]
+            _component_labels_bin = _component_number_labels(_codes_sorted)
             _sel_code = st.selectbox(
                 "Component (Code)", options=_codes_sorted,
                 format_func=lambda c: f"{c}  (N={int(_n_series.get(c, 0))})",
@@ -4217,7 +4775,9 @@ with tab_subsim:
                      edgecolor="none")
             _axc.axvline(_mu_i, color="#d62728", ls="--", lw=1.5,
                          label=f"E[Z_i] = {_mu_i:,.1f}")
-            _axc.set_xlabel(f"subscriptions  Z_i  (component {_sel_code})")
+            _axc.set_xlabel(
+                f"subscriptions  Z_i  ({_component_labels_bin[_sel_code]})"
+            )
             _axc.set_ylabel("probability  P(Z_i = k)")
             _axc.set_title(f"Binomial(N_i={_Ni}, q={_q_ad:.3f})")
             _axc.legend(fontsize=9)
@@ -4283,7 +4843,7 @@ with tab_subsim:
         _cga, _cgb, _cgc = st.columns(3)
         with _cga:
             _a_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_sens_amin")
             _a_max = st.number_input(
                 "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
@@ -4385,7 +4945,7 @@ with tab_subsim:
         _cp1, _cp2 = st.columns(2)
         with _cp1:
             _pa_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_par_amin")
             _pa_max = st.number_input(
                 "α-bereik max", min_value=0.01, max_value=1.0, value=0.30,
@@ -4516,7 +5076,7 @@ with tab_subsim:
                 value=float(_X_def_sim), step=0.005, format="%.3f",
                 key="subsim_opt_X")
             _oa_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_opt_amin")
         with _co2:
             _oa_n = st.slider(
@@ -4673,7 +5233,7 @@ with tab_subsim:
                 value=float(_X_def_sim), step=0.005, format="%.3f",
                 key="subsim_bru_X")
             _bra_min = st.number_input(
-                "α-bereik min", min_value=0.0001, max_value=1.0, value=0.02,
+                "α-bereik min", min_value=0.0, max_value=1.0, value=0.02,
                 step=0.01, format="%.2f", key="subsim_bru_amin")
             _bra_max = st.number_input(
                 "α-bereik max", min_value=0.01, max_value=1.0, value=0.40,
@@ -5112,6 +5672,609 @@ with tab_sensitivity:
         "voorraad-/kostenkant."
     )
 
+    st.markdown("### Servicelevel-efficiency $\\psi(\\beta)$")
+    st.markdown(
+        "Over een doorlopend $\\beta^{tar}$-grid wordt $\\Psi/C_f$ vergeleken op "
+        "$Z_i=1$, $Z_i=\\min(2,M_i)$, $Z_i=\\min(5,M_i)$, "
+        "$Z_i=\\min(10,M_i)$ en $Z_i=M_i$. Per ankerpunt geldt "
+        "de vaste launch-baseline $\\beta_0=e^{-\\max_i\\mu_i(1)}$ en "
+        "$\\Psi/C_f=\\Lambda_{tot}(Z)[\\beta-\\beta_0]/"
+        "[w(\\beta;Z)-w(\\beta_0;Z)]$. De maatstaf geeft daarmee de "
+        "serviceverbetering per euro aanvullende BPA-voorraadinvestering. Iedere "
+        "lijn vertegenwoordigt één vast $Z_i$-scenario."
+    )
+    try:
+        _psi_overzicht = get_overzicht_df(cfg)
+    except Exception as _psi_error:
+        _psi_overzicht = pd.DataFrame()
+        st.error(f"Kon componenten voor ψ(β) niet laden: {_psi_error}")
+
+    if _psi_overzicht.empty:
+        st.info("Laad eerst componenten in het overzicht om ψ(β) te berekenen.")
+    else:
+        _psi_codes = [str(code) for code in _psi_overzicht.index]
+        _psi_selected = st.multiselect(
+            "Componenten voor ψ(β)",
+            options=_psi_codes,
+            default=_psi_codes,
+            key="psi_componenten",
+            help="Selecteer de componenten die in iedere Z_i-curve worden meegenomen.",
+        )
+        _psi_selected_df = _psi_overzicht.loc[
+            _psi_overzicht.index.astype(str).isin(_psi_selected)
+        ]
+        _psi_mi = _cached_maximale_klanten(
+            _file_mtime(SUBSCRIPTIES_PATH)
+        )
+        _psi_budget = 35_000.0
+        _psi_c1, _psi_c2 = st.columns(2)
+        with _psi_c1:
+            _psi_beta_max = st.number_input(
+                "βᵗᵃʳ maximum",
+                min_value=0.9811,
+                max_value=0.9999,
+                value=0.999,
+                step=0.001,
+                format="%.4f",
+                key="psi_beta_max_continuous",
+            )
+        with _psi_c2:
+            _psi_beta_points = st.slider(
+                "Aantal βᵗᵃʳ-gridpunten",
+                min_value=20,
+                max_value=500,
+                value=200,
+                key="psi_beta_points_continuous",
+            )
+        st.caption(
+            "Portfoliobudget voor de componentdekking: **€35.000**."
+        )
+        _psi_cost_params = st.session_state.get("kosten_params", {})
+        _psi_econ1, _psi_econ2 = st.columns(2)
+        with _psi_econ1:
+            _psi_alpha = st.number_input(
+                "α voor omzet en winst (%)",
+                min_value=0.0,
+                max_value=50.0,
+                value=float(_psi_cost_params.get("alpha", 0.15)) * 100,
+                step=0.5,
+                format="%.1f",
+                key="psi_economic_alpha",
+            ) / 100
+        with _psi_econ2:
+            _psi_kappa_bpa = st.number_input(
+                "κ_BPA voor jaarlijkse voorraadkosten (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=float(_psi_cost_params.get("kappa_bpa", 0.20)) * 100,
+                step=1.0,
+                format="%.1f",
+                key="psi_economic_kappa_bpa",
+            ) / 100
+        _psi_subscription_betas = [0.985, 0.990, 0.995, 0.999]
+        _psi_candidate_betas = np.unique(np.concatenate((
+            np.linspace(0.981, float(_psi_beta_max), int(_psi_beta_points)),
+            np.asarray([
+                beta for beta in _psi_subscription_betas
+                if beta <= float(_psi_beta_max)
+            ]),
+        )))
+
+        if st.button(
+                "Bereken ψ(β)", key="psi_bereken",
+            disabled=not _psi_selected):
+            st.session_state["psi_resultaat"] = {
+                "portfolio": bereken_portfolio_servicelevel_efficiency(
+                    _psi_selected_df, _psi_candidate_betas, _psi_mi,
+                    float(_psi_budget), float(_psi_alpha),
+                    float(_psi_kappa_bpa),
+                ),
+                "subscriptions": bereken_psi_naar_abonnees(
+                    _psi_selected_df, _psi_subscription_betas, _psi_mi
+                ),
+                "recommendation_sweep": bereken_psi_naar_abonnees(
+                    _psi_selected_df, _psi_candidate_betas, _psi_mi
+                ),
+                "mode": "three_anchors",
+            }
+            st.rerun()
+
+        _psi_resultaat = st.session_state.get("psi_resultaat")
+        if (isinstance(_psi_resultaat, dict)
+                and _psi_resultaat.get("mode") == "three_anchors"):
+            _psi_data = _psi_resultaat["portfolio"]
+            if _psi_data["psi_per_cf"].isna().any():
+                st.caption(
+                    "Ψ/C_f wordt alleen getoond wanneer βᵗᵃʳ boven de exacte "
+                    "S=1-launchbaseline ligt en aanvullende investering vereist."
+                )
+            import matplotlib.pyplot as plt
+            _psi_fig, _psi_ax = plt.subplots(figsize=(10, 5))
+            _psi_colors = plt.colormaps["tab10"].resampled(
+                _psi_data["anker_volgorde"].nunique()
+            )
+            for _anchor_index, (_anchor_order, _anchor_data) in enumerate(
+                    _psi_data.groupby("anker_volgorde", sort=True)):
+                _anchor_data = _anchor_data.sort_values("beta")
+                _anchor_label = str(_anchor_data["anker"].iloc[0])
+                _psi_ax.plot(
+                    _anchor_data["beta"],
+                    _anchor_data["psi_per_cf"],
+                    linewidth=2.0,
+                    color=_psi_colors(_anchor_index),
+                    label=_anchor_label,
+                )
+            _psi_ax.set_xlabel("βᵗᵃʳ")
+            _psi_ax.set_ylabel("Ψ / C_f")
+            _psi_ax.set_yscale("log")
+            _psi_ax.legend(loc="best", fontsize=9)
+            _psi_ax.grid(alpha=0.25)
+            _psi_fig.tight_layout()
+            st.pyplot(_psi_fig)
+            plt.close(_psi_fig)
+            st.caption(
+                "De y-as is logaritmisch, zodat de vijf adoptiescenario's ondanks "
+                "hun verschillende ordegroottes in één grafiek leesbaar blijven."
+            )
+
+            if "extra_investering_vanaf_98" not in _psi_data.columns:
+                st.info(
+                    "Bereken ψ(β) opnieuw om de aanbeveling vanaf βᵗᵃʳ = 0,98 "
+                    "te tonen."
+                )
+            else:
+                _psi_tradeoff_fig, _psi_tradeoff_ax = plt.subplots(
+                    figsize=(10, 5)
+                )
+                _psi_recommendations = []
+                for _anchor_index, (_anchor_order, _anchor_data) in enumerate(
+                        _psi_data.groupby("anker_volgorde", sort=True)):
+                    _anchor_data = _anchor_data.sort_values(
+                        ["extra_investering_vanaf_98", "beta"]
+                    )
+                    _anchor_label = str(_anchor_data["anker"].iloc[0])
+                    _anchor_color = _psi_colors(_anchor_index)
+                    _tradeoff_x = np.insert(
+                        _anchor_data["extra_investering_vanaf_98"].to_numpy(
+                            dtype=float
+                        ),
+                        0,
+                        0.0,
+                    )
+                    _annual_demand = float(_anchor_data["lambda_tot"].iloc[0])
+                    _tradeoff_y = np.insert(
+                        _annual_demand
+                        * (1 - _anchor_data["beta"].to_numpy(dtype=float)),
+                        0,
+                        _annual_demand * (1 - 0.98),
+                    )
+                    _psi_tradeoff_ax.step(
+                        _tradeoff_x,
+                        _tradeoff_y,
+                        where="post",
+                        linewidth=2.0,
+                        color=_anchor_color,
+                        label=_anchor_label,
+                    )
+
+                    _free_options = _anchor_data[
+                        _anchor_data["extra_investering_vanaf_98"] <= 1e-9
+                    ]
+                    _highest_free_beta = (
+                        float(_free_options["beta"].max())
+                        if not _free_options.empty else 0.98
+                    )
+                    _allowed_recommendations = _anchor_data[
+                        np.isclose(
+                            _anchor_data["beta"].to_numpy(dtype=float)[:, None],
+                            np.asarray(_psi_subscription_betas)[None, :],
+                        ).any(axis=1)
+                    ]
+                    _paid_options = _allowed_recommendations.dropna(
+                        subset=["kosten_per_vermeden_downtime"]
+                    )
+                    if not _paid_options.empty:
+                        _minimum_ratio = float(
+                            _paid_options["kosten_per_vermeden_downtime"].min()
+                        )
+                        _best_options = _paid_options[np.isclose(
+                            _paid_options["kosten_per_vermeden_downtime"],
+                            _minimum_ratio,
+                        )]
+                        _recommended = _best_options.sort_values(
+                            "beta", ascending=False
+                        ).iloc[0]
+                        _recommended_unmet = (
+                            _annual_demand * (1 - float(_recommended["beta"]))
+                        )
+                        _psi_tradeoff_ax.scatter(
+                            [_recommended["extra_investering_vanaf_98"]],
+                            [_recommended_unmet],
+                            marker="*",
+                            s=140,
+                            color=_anchor_color,
+                            edgecolor="black",
+                            linewidth=0.7,
+                            zorder=5,
+                        )
+                        _psi_recommendations.append({
+                            "Scenario": _anchor_label,
+                            "Subscriptions per component": float(
+                                _recommended["totaal_z"] / len(_psi_selected_df)
+                            ),
+                            "Hoogste β zonder extra investering": _highest_free_beta,
+                            "Aanbevolen βᵗᵃʳ": float(_recommended["beta"]),
+                            "Extra investering (€)": float(
+                                _recommended["extra_investering_vanaf_98"]
+                            ),
+                            "Vermeden downtime/jaar": float(
+                                _recommended["vermeden_downtime_vanaf_98"]
+                            ),
+                            "€ per vermeden downtime": _minimum_ratio,
+                        })
+                _psi_tradeoff_ax.set_xlabel(
+                    "Additional inventory investment from βᵗᵃʳ = 0.98 (€)"
+                )
+                _psi_tradeoff_ax.set_ylabel("Expected unmet annual demand")
+                _psi_tradeoff_ax.legend(loc="best", fontsize=9)
+                _psi_tradeoff_ax.grid(alpha=0.25)
+                _psi_tradeoff_fig.tight_layout()
+                st.pyplot(_psi_tradeoff_fig)
+                plt.close(_psi_tradeoff_fig)
+                st.caption(
+                    "Verwachte niet-gedekte jaarlijkse demand = "
+                    "Λ_tot × (1 − βᵗᵃʳ). De ster minimaliseert de cumulatieve "
+                    "extra investering per vermeden downtime-eenheid vanaf 0,98."
+                )
+                if _psi_recommendations:
+                    st.markdown("**Recommended service level per scenario**")
+                    st.dataframe(
+                        pd.DataFrame(_psi_recommendations),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Hoogste β zonder extra investering":
+                                st.column_config.NumberColumn(format="%.3f"),
+                            "Aanbevolen βᵗᵃʳ":
+                                st.column_config.NumberColumn(format="%.3f"),
+                            "Extra investering (€)":
+                                st.column_config.NumberColumn(format="€ %.2f"),
+                            "Vermeden downtime/jaar":
+                                st.column_config.NumberColumn(format="%.4f"),
+                            "€ per vermeden downtime":
+                                st.column_config.NumberColumn(format="€ %.2f"),
+                        },
+                    )
+                    _psi_continuous_data = _psi_resultaat.get(
+                        "recommendation_sweep"
+                    )
+                    if (isinstance(_psi_continuous_data, pd.DataFrame)
+                            and "kosten_per_vermeden_downtime"
+                            in _psi_continuous_data.columns):
+                        def _recommended_betas_by_z(_recommendation_data):
+                            _recommendations = []
+                            for _z_level, _z_data in _recommendation_data.groupby(
+                                    "z_niveau", sort=True):
+                                _paid_z = _z_data.dropna(
+                                    subset=["kosten_per_vermeden_downtime"]
+                                )
+                                if not _paid_z.empty:
+                                    _best_ratio_z = float(
+                                        _paid_z[
+                                            "kosten_per_vermeden_downtime"
+                                        ].min()
+                                    )
+                                    _best_z = _paid_z[np.isclose(
+                                        _paid_z[
+                                            "kosten_per_vermeden_downtime"
+                                        ],
+                                        _best_ratio_z,
+                                    )].sort_values(
+                                        "beta", ascending=False
+                                    ).iloc[0]
+                                else:
+                                    _free_z = _z_data[
+                                        _z_data[
+                                            "extra_investering_vanaf_98"
+                                        ] <= 1e-9
+                                    ]
+                                    if _free_z.empty:
+                                        continue
+                                    _best_z = _free_z.sort_values(
+                                        "beta", ascending=False
+                                    ).iloc[0]
+                                    _best_ratio_z = 0.0
+                                _recommendations.append({
+                                    "z_niveau": int(_z_level),
+                                    "recommended_beta": float(_best_z["beta"]),
+                                    "kosten_per_vermeden_downtime": _best_ratio_z,
+                                })
+                            return pd.DataFrame(_recommendations)
+
+                        _psi_continuous_recommendation_df = (
+                            _recommended_betas_by_z(_psi_continuous_data)
+                        )
+                        _psi_candidate_recommendation_df = pd.DataFrame()
+                        _psi_candidate_data = _psi_resultaat.get("subscriptions")
+                        if (isinstance(_psi_candidate_data, pd.DataFrame)
+                                and not _psi_candidate_data.empty):
+                            _psi_candidate_recommendation_df = (
+                                _recommended_betas_by_z(_psi_candidate_data)
+                            )
+                        _psi_recommendation_fig, _psi_recommendation_ax = (
+                            plt.subplots(figsize=(10, 4.5))
+                        )
+                        _psi_recommendation_ax.step(
+                            _psi_continuous_recommendation_df["z_niveau"],
+                            _psi_continuous_recommendation_df[
+                                "recommended_beta"
+                            ],
+                            where="post",
+                            linewidth=2.0,
+                            color="#2667A8",
+                            label="Volledig β-grid",
+                        )
+                        _psi_recommendation_ax.scatter(
+                            _psi_continuous_recommendation_df["z_niveau"],
+                            _psi_continuous_recommendation_df[
+                                "recommended_beta"
+                            ],
+                            s=20,
+                            color="#2667A8",
+                            zorder=3,
+                        )
+                        if not _psi_candidate_recommendation_df.empty:
+                            _psi_recommendation_ax.step(
+                                _psi_candidate_recommendation_df["z_niveau"],
+                                _psi_candidate_recommendation_df[
+                                    "recommended_beta"
+                                ],
+                                where="post",
+                                linewidth=2.0,
+                                linestyle="--",
+                                color="#D97706",
+                                label=r"candidate $\beta^{tar}$",
+                            )
+                            _psi_recommendation_ax.scatter(
+                                _psi_candidate_recommendation_df["z_niveau"],
+                                _psi_candidate_recommendation_df[
+                                    "recommended_beta"
+                                ],
+                                s=28,
+                                marker="s",
+                                color="#D97706",
+                                zorder=4,
+                            )
+                        _psi_recommendation_ax.set_xlabel(r"$z$", fontsize=13)
+                        _psi_recommendation_ax.set_ylabel(
+                            r"$\hat{\beta}$", fontsize=13
+                        )
+                        _plotted_beta_max = float(
+                            _psi_continuous_recommendation_df[
+                                "recommended_beta"
+                            ].max()
+                        )
+                        if not _psi_candidate_recommendation_df.empty:
+                            _plotted_beta_max = max(
+                                _plotted_beta_max,
+                                float(_psi_candidate_recommendation_df[
+                                    "recommended_beta"
+                                ].max()),
+                            )
+                        _psi_recommendation_ax.set_ylim(
+                            0.98, min(1.0, _plotted_beta_max + 0.001)
+                        )
+                        _psi_recommendation_ax.xaxis.set_major_locator(
+                            plt.MaxNLocator(integer=True)
+                        )
+                        _psi_recommendation_ax.grid(alpha=0.25)
+                        _psi_recommendation_ax.legend(loc="best", fontsize=9)
+                        _psi_recommendation_fig.tight_layout()
+                        st.pyplot(_psi_recommendation_fig)
+                        plt.close(_psi_recommendation_fig)
+                        st.caption(
+                            "Voor ieder geheel niveau z wordt de aanbevolen βᵗᵃʳ "
+                            "gekozen uit het volledige ingestelde β-grid (blauw) en "
+                            "uitsluitend uit de kandidaatniveaus 0,985, 0,990, 0,995 "
+                            "en 0,999 (oranje). Ieder component groeit mee als "
+                            "Zᵢ(z) = min(z, Mᵢ)."
+                        )
+                    else:
+                        st.info(
+                            "Bereken ψ(β) opnieuw om de doorlopende aanbeveling "
+                            "naar het abonnementsniveau te tonen."
+                        )
+
+            _psi_subscription_data = _psi_resultaat.get("subscriptions")
+            if (isinstance(_psi_subscription_data, pd.DataFrame)
+                    and not _psi_subscription_data.empty):
+                _psi_subscription_fig, _psi_subscription_ax = plt.subplots(
+                    figsize=(10, 5)
+                )
+                _psi_beta_colors = plt.colormaps["viridis"].resampled(
+                    len(_psi_subscription_betas)
+                )
+                for _beta_index, (_beta, _beta_data) in enumerate(
+                        _psi_subscription_data.groupby("beta", sort=True)):
+                    _psi_subscription_ax.plot(
+                        _beta_data["z_niveau"],
+                        _beta_data["psi_per_cf"],
+                        linewidth=2.0,
+                        color=_psi_beta_colors(_beta_index),
+                        label=f"βᵗᵃʳ = {_beta:.1%}",
+                    )
+                _psi_subscription_ax.set_xlabel("Number of subscriptions")
+                _psi_subscription_ax.set_ylabel("Ψ / C_f")
+                _psi_subscription_ax.set_yscale("log")
+                _psi_subscription_ax.xaxis.set_major_locator(
+                    plt.MaxNLocator(integer=True)
+                )
+                _psi_subscription_ax.legend(loc="best", fontsize=9)
+                _psi_subscription_ax.grid(alpha=0.25)
+                _psi_subscription_fig.tight_layout()
+                st.pyplot(_psi_subscription_fig)
+                plt.close(_psi_subscription_fig)
+                st.caption(
+                    "Per x-waarde geldt Z_i(z) = min(z, M_i): ieder component "
+                    "groeit mee met het uniforme abonnementsniveau totdat zijn "
+                    "eigen maximale potentieel M_i is bereikt. De y-as is "
+                    "logaritmisch."
+                )
+            else:
+                st.info(
+                    "Bereken ψ(β) opnieuw om Ψ/C_f naar het aantal "
+                    "subscripties te tonen."
+                )
+
+            if "aantal_componenten_budget" in _psi_data.columns:
+                _psi_count_fig, _psi_count_ax = plt.subplots(figsize=(10, 4.5))
+                for _anchor_index, (_anchor_order, _anchor_data) in enumerate(
+                        _psi_data.groupby("anker_volgorde", sort=True)):
+                    _anchor_data = _anchor_data.sort_values("beta")
+                    _anchor_label = str(_anchor_data["anker"].iloc[0])
+                    _psi_count_ax.step(
+                        _anchor_data["beta"],
+                        _anchor_data["aantal_componenten_budget"],
+                        where="post",
+                        linewidth=2.0,
+                        color=_psi_colors(_anchor_index),
+                        label=_anchor_label,
+                    )
+                _psi_count_ax.set_xlabel("βᵗᵃʳ")
+                _psi_count_ax.set_ylabel("Components offered within budget")
+                _psi_count_ax.set_ylim(0, len(_psi_selected_df) + 0.5)
+                _psi_count_ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+                _psi_count_ax.legend(loc="best", fontsize=9)
+                _psi_count_ax.grid(alpha=0.25)
+                _psi_count_fig.tight_layout()
+                st.pyplot(_psi_count_fig)
+                plt.close(_psi_count_fig)
+                st.caption(
+                    f"Budget: € {_psi_budget:,.0f}. De telling maximaliseert het aantal "
+                    "aangeboden componenten door per punt de goedkoopste benodigde "
+                    "componentinvesteringen eerst op te nemen; omzet en winst maken "
+                    "geen deel uit van deze ranking."
+                )
+            else:
+                st.info(
+                    "Bereken ψ(β) opnieuw om de componentdekking binnen het "
+                    "budget van €35.000 te tonen."
+                )
+
+            if "omzet_per_investering" in _psi_data.columns:
+                _psi_econ_fig, (_psi_rev_ax, _psi_profit_ax) = plt.subplots(
+                    1, 2, figsize=(12, 4.5), sharex=True
+                )
+                for _anchor_index, (_anchor_order, _anchor_data) in enumerate(
+                        _psi_data.groupby("anker_volgorde", sort=True)):
+                    _anchor_data = _anchor_data.sort_values("beta")
+                    _anchor_label = str(_anchor_data["anker"].iloc[0])
+                    _anchor_color = _psi_colors(_anchor_index)
+                    _psi_rev_ax.step(
+                        _anchor_data["beta"],
+                        _anchor_data["omzet_per_investering"],
+                        where="post", linewidth=2.0,
+                        color=_anchor_color, label=_anchor_label,
+                    )
+                    _psi_profit_ax.step(
+                        _anchor_data["beta"],
+                        _anchor_data["winst_per_investering"],
+                        where="post", linewidth=2.0,
+                        color=_anchor_color, label=_anchor_label,
+                    )
+                _psi_rev_ax.set_xlabel("βᵗᵃʳ")
+                _psi_rev_ax.set_ylabel("Annual revenue / investment")
+                _psi_profit_ax.set_xlabel("βᵗᵃʳ")
+                _psi_profit_ax.set_ylabel("Annual BPA profit / investment")
+                for _psi_econ_ax in (_psi_rev_ax, _psi_profit_ax):
+                    _psi_econ_ax.axhline(0, color="black", lw=0.8, alpha=0.6)
+                    _psi_econ_ax.grid(alpha=0.25)
+                    _psi_econ_ax.legend(loc="best", fontsize=9)
+                _psi_econ_fig.tight_layout()
+                st.pyplot(_psi_econ_fig)
+                plt.close(_psi_econ_fig)
+                st.caption(
+                    f"Economische ratio's voor dezelfde goedkoopste-eerstportfolio "
+                    f"binnen €35.000, bij α = {_psi_alpha:.1%} en "
+                    f"κ_BPA = {_psi_kappa_bpa:.1%}. Winst is jaarlijkse "
+                    "abonnementsomzet minus jaarlijkse BPA-voorraadkosten."
+                )
+
+            _psi_anchor_table = (
+                _psi_data.sort_values("anker_volgorde")
+                .drop_duplicates("anker_volgorde")
+                [["anker", "totaal_z", "baseline_beta", "lambda_tot",
+                  "baseline_investering"]]
+                .rename(columns={
+                    "anker": "Anker",
+                    "totaal_z": "ΣZᵢ",
+                    "baseline_beta": "β₀",
+                    "lambda_tot": "Λ_tot(Zᵢ)",
+                    "baseline_investering": "w(β₀;Zᵢ) (€)",
+                })
+            )
+            st.dataframe(
+                _psi_anchor_table,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "β₀": st.column_config.NumberColumn(format="%.4f"),
+                    "Λ_tot(Zᵢ)": st.column_config.NumberColumn(format="%.4f"),
+                    "w(β₀;Zᵢ) (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                },
+            )
+
+            _psi_detail_columns = [
+                "beta", "anker", "totale_voorraad", "investering",
+                "extra_investering", "psi_per_cf",
+            ]
+            if "aantal_componenten_budget" in _psi_data.columns:
+                _psi_detail_columns[5:5] = [
+                    "aantal_componenten_budget", "benutte_investering",
+                ]
+            if "omzet_per_investering" in _psi_data.columns:
+                _psi_detail_columns[7:7] = [
+                    "omzet_budget", "voorraadkosten_budget", "winst_budget",
+                    "omzet_per_investering", "winst_per_investering",
+                ]
+            _psi_detail = _psi_data.sort_values(
+                ["beta", "anker_volgorde"]
+            )[_psi_detail_columns].rename(columns={
+                "beta": "βᵗᵃʳ",
+                "anker": "Anker",
+                "totale_voorraad": "ΣSᵢ*",
+                "investering": "w(β;Zᵢ) (€)",
+                "extra_investering": "w(β;Zᵢ) − w(β₀;Zᵢ) (€)",
+                "aantal_componenten_budget": "Components within budget",
+                "benutte_investering": "Used budget (€)",
+                "omzet_budget": "Annual revenue (€)",
+                "voorraadkosten_budget": "Annual carrying costs (€)",
+                "winst_budget": "Annual BPA profit (€)",
+                "omzet_per_investering": "Revenue / investment",
+                "winst_per_investering": "Profit / investment",
+                "psi_per_cf": "Ψ/C_f",
+            })
+            st.dataframe(
+                _psi_detail,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "βᵗᵃʳ": st.column_config.NumberColumn(format="%.3f"),
+                    "w(β;Zᵢ) (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                    "w(β;Zᵢ) − w(β₀;Zᵢ) (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                    "Components within budget": st.column_config.NumberColumn(format="%d"),
+                    "Used budget (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                    "Annual revenue (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                    "Annual carrying costs (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                    "Annual BPA profit (€)": st.column_config.NumberColumn(format="€ %.2f"),
+                    "Revenue / investment": st.column_config.NumberColumn(format="%.4f"),
+                    "Profit / investment": st.column_config.NumberColumn(format="%.4f"),
+                    "Ψ/C_f": st.column_config.NumberColumn(format="%.6e"),
+                },
+            )
+
+    st.divider()
+
     # ── Registry van WTP-elementen (label, grenzen, stap, default) ─────────
     _WTP_PARAMS = {
         "alpha":   {"label": "α — prijspercentage",            "axis": "α — price percentage",         "min": 0.0001, "max": 1.0,    "step": 0.01,  "fmt": "%.3f"},
@@ -5159,7 +6322,7 @@ with tab_sensitivity:
 
     # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
     _Y_METRICS = {
-        "bpa_margin":    {"label": "Total BPA margin (€)",                 "axis": "total BPA margin (€)",                  "tbl": "BPA margin (€)",       "kind": "euro"},
+        "bpa_margin":    {"label": "Total Profit (€)",                     "axis": "Total Profit (€)",                      "tbl": "BPA margin (€)",       "kind": "euro"},
         "revenue":       {"label": "Subscription revenue (€)",             "axis": "subscription revenue (€)",              "tbl": "Revenue (€)",          "kind": "euro"},
         "costs":         {"label": "BPA carrying costs (€)",               "axis": "BPA carrying costs (€)",                "tbl": "Carrying costs (€)",   "kind": "euro"},
         "surplus":       {"label": "Total customer surplus (€)",           "axis": "total customer surplus (€)",            "tbl": "Customer surplus (€)", "kind": "euro"},
@@ -5214,7 +6377,9 @@ with tab_sensitivity:
     # Opgeslagen min/max-waarden van een vorige x-variabele kunnen buiten de
     # grenzen van de nieuwe variabele vallen -> Streamlit exception -> tab breekt.
     for _se_key, _se_def in (("se_x_min", _spec_x["min"]), ("se_x_max", _spec_x["max"])):
-        if _se_key in st.session_state:
+        if _se_key not in st.session_state:
+            st.session_state[_se_key] = _se_def
+        else:
             _sv = st.session_state[_se_key]
             if not (_spec_x["min"] <= _sv <= _spec_x["max"]):
                 st.session_state[_se_key] = _se_def
@@ -5222,43 +6387,51 @@ with tab_sensitivity:
     with _cx1:
         _x_min = st.number_input(
             "min", min_value=_spec_x["min"], max_value=_spec_x["max"],
-            value=_spec_x["min"], step=_spec_x["step"], format=_spec_x["fmt"],
+            step=_spec_x["step"], format=_spec_x["fmt"],
             key="se_x_min")
     with _cx2:
         _x_max = st.number_input(
             "max", min_value=_spec_x["min"], max_value=_spec_x["max"],
-            value=_spec_x["max"], step=_spec_x["step"], format=_spec_x["fmt"],
+            step=_spec_x["step"], format=_spec_x["fmt"],
             key="se_x_max")
     with _cx3:
         _x_n = st.slider("gridpunten", min_value=5, max_value=200, value=60,
                          key="se_x_n")
 
     # ── Curve-variabele waarden ───────────────────────────────────────────
+    _Q_EQ_CURVE_VALUES = [0.01, 0.05, 0.10, 0.15, 0.20]
     _curve_vals = [None]
     if _curve_var != "(geen)":
         _spec_c = _active_params[_curve_var]
         st.markdown(f"**Curve-waarden — {_spec_c['label']}**")
-        # Zelfde guard als voor se_x_min/se_x_max: reset bij wisselen curve-var.
-        for _se_key, _se_def in (("se_c_min", _clip_se(_curve_var, _seed_se[_curve_var])), ("se_c_max", _spec_c["max"])):
-            if _se_key in st.session_state:
-                _sv = st.session_state[_se_key]
-                if not (_spec_c["min"] <= _sv <= _spec_c["max"]):
+        if _curve_var == "q_eq":
+            _curve_vals = _Q_EQ_CURVE_VALUES.copy()
+            st.caption(
+                "Vaste $q_{eq}$-curves: 0.01, 0.05, 0.10, 0.15 en 0.20."
+            )
+        else:
+            # Zelfde guard als voor se_x_min/se_x_max: reset bij wisselen curve-var.
+            for _se_key, _se_def in (("se_c_min", _clip_se(_curve_var, _seed_se[_curve_var])), ("se_c_max", _spec_c["max"])):
+                if _se_key not in st.session_state:
                     st.session_state[_se_key] = _se_def
-        _cc1, _cc2, _cc3 = st.columns(3)
-        with _cc1:
-            _c_min = st.number_input(
-                "curve min", min_value=_spec_c["min"], max_value=_spec_c["max"],
-                value=_clip_se(_curve_var, _seed_se[_curve_var]),
-                step=_spec_c["step"], format=_spec_c["fmt"], key="se_c_min")
-        with _cc2:
-            _c_max = st.number_input(
-                "curve max", min_value=_spec_c["min"], max_value=_spec_c["max"],
-                value=_spec_c["max"], step=_spec_c["step"], format=_spec_c["fmt"],
-                key="se_c_max")
-        with _cc3:
-            _c_n = st.slider("aantal curves", min_value=1, max_value=8, value=4,
-                             key="se_c_n")
-        _curve_vals = list(np.linspace(float(_c_min), float(_c_max), int(_c_n)))
+                else:
+                    _sv = st.session_state[_se_key]
+                    if not (_spec_c["min"] <= _sv <= _spec_c["max"]):
+                        st.session_state[_se_key] = _se_def
+            _cc1, _cc2, _cc3 = st.columns(3)
+            with _cc1:
+                _c_min = st.number_input(
+                    "curve min", min_value=_spec_c["min"], max_value=_spec_c["max"],
+                    step=_spec_c["step"], format=_spec_c["fmt"], key="se_c_min")
+            with _cc2:
+                _c_max = st.number_input(
+                    "curve max", min_value=_spec_c["min"], max_value=_spec_c["max"],
+                    step=_spec_c["step"], format=_spec_c["fmt"],
+                    key="se_c_max")
+            with _cc3:
+                _c_n = st.slider("aantal curves", min_value=1, max_value=8, value=4,
+                                 key="se_c_n")
+            _curve_vals = list(np.linspace(float(_c_min), float(_c_max), int(_c_n)))
 
     # ── Vaste waarden voor de overige elementen ───────────────────────────
     _fixed = {k: _clip_se(k, _seed_se[k]) for k in _WTP_PARAMS}
@@ -5322,11 +6495,11 @@ with tab_sensitivity:
         _oa1, _oa2, _oa3 = st.columns(3)
         with _oa1:
             _alpha_opt_min = st.number_input(
-                "α minimum", min_value=0.0001, max_value=1.0,
+                "α minimum", min_value=0.0, max_value=1.0,
                 value=0.01, step=0.01, format="%.3f", key="se_opt_alpha_min")
         with _oa2:
             _alpha_opt_max = st.number_input(
-                "α maximum", min_value=0.0001, max_value=1.0,
+                "α maximum", min_value=0.0, max_value=1.0,
                 value=0.50, step=0.01, format="%.3f", key="se_opt_alpha_max")
         with _oa3:
             _alpha_opt_n = st.slider(
@@ -5654,6 +6827,7 @@ with tab_sensitivity:
                         "required_per_curve": _required_per_curve,
                         "margin_peaks": _margin_peaks,
                         "x_var":       _x_var,
+                        "y_var":       _y_var,
                         "curve_var":   _curve_var,
                         "curve_vals":  _curve_vals,
                         "x_label":     _spec_x["axis"],
@@ -5694,6 +6868,7 @@ with tab_sensitivity:
     _res_se = st.session_state.get("se_resultaat")
     if _res_se:
         import matplotlib.pyplot as _plt_se
+        import matplotlib.colors as _mc_se
         import matplotlib.ticker as _mt_se
 
         _xg        = _res_se["x_grid"]
@@ -5701,109 +6876,95 @@ with tab_sensitivity:
         _cvals     = _res_se["curve_vals"]
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
-        _y_axis    = _res_se.get("y_axis", "total BPA margin (€)")
-        _y_lbl     = _res_se.get("y_label", "total BPA margin (€)")
+        _y_axis    = _res_se.get("y_axis", "Total Profit (€)")
+        _y_lbl     = _res_se.get("y_label", "Total Profit (€)")
         _y_tbl     = _res_se.get("y_tbl", "BPA margin (€)")
         _y_kind    = _res_se.get("y_kind", "euro")
+        if _res_se.get("y_var") == "bpa_margin":
+            _y_axis = _y_lbl = "Total Profit (€)"
         _feasible_per_curve = _res_se.get("feasible_per_curve")
         _required_per_curve = _res_se.get("required_per_curve")
         _margin_peaks = _res_se.get("margin_peaks")
-        _m_req_se = float(_res_se.get("m_req", 0.0))
 
         _fig_se, _ax_se = _plt_se.subplots(figsize=(10, 5))
         _cmap_se = _plt_se.cm.viridis
-        _has_all_feasible_se = False
-        _has_partly_feasible_se = False
-
-        if _feasible_per_curve:
-            from matplotlib.patches import Patch as _Patch_se
-
-            _x_arr_se = np.asarray(_xg, dtype=float)
-            _feasible_arr_se = np.asarray(_feasible_per_curve, dtype=bool)
-            _feasible_count_se = _feasible_arr_se.sum(axis=0)
-            _all_feasible_se = _feasible_count_se == len(_feasible_per_curve)
-            _partly_feasible_se = (
-                (_feasible_count_se > 0)
-                & (_feasible_count_se < len(_feasible_per_curve))
-            )
-            _has_all_feasible_se = bool(_all_feasible_se.any())
-            _has_partly_feasible_se = bool(_partly_feasible_se.any())
-
-            if len(_x_arr_se) == 1:
-                _span_edges_se = np.array([
-                    _x_arr_se[0] - 0.5,
-                    _x_arr_se[0] + 0.5,
-                ])
-            else:
-                _midpoints_se = (_x_arr_se[:-1] + _x_arr_se[1:]) / 2.0
-                _span_edges_se = np.concatenate((
-                    [_x_arr_se[0] - (_midpoints_se[0] - _x_arr_se[0])],
-                    _midpoints_se,
-                    [_x_arr_se[-1] + (_x_arr_se[-1] - _midpoints_se[-1])],
-                ))
-
-            def _shade_feasible_spans(_mask, _color, _alpha):
-                for _idx, _is_feasible in enumerate(_mask):
-                    if _is_feasible:
-                        _ax_se.axvspan(
-                            _span_edges_se[_idx], _span_edges_se[_idx + 1],
-                            color=_color, alpha=_alpha, linewidth=0, zorder=0,
-                        )
-
-            _shade_feasible_spans(_all_feasible_se, "#2E7D32", 0.14)
-            _shade_feasible_spans(_partly_feasible_se, "#F9A825", 0.13)
+        _show_margin_feasibility = (
+            _res_se.get("x_var") == "alpha"
+            and _res_se.get("y_var") == "bpa_margin"
+            and _cv_var == "(geen)"
+        )
+        _x_values = np.asarray(_xg, dtype=float)
 
         for _ci, _cval in enumerate(_cvals):
-            _ys = _per_curve[_ci]
+            _ys = np.asarray(_per_curve[_ci], dtype=float)
             if _cval is None:
-                _ax_se.plot(_xg, _ys, color="#1f77b4", lw=2.2, marker="o", ms=3)
+                _col = "#174a7e"
+                _ax_se.plot(
+                    _xg, _ys, color=_col, lw=2.2, marker="o", ms=3,
+                    label="Total Profit (€)" if _show_margin_feasibility else None,
+                )
             else:
                 _col = _cmap_se(_ci / max(1, len(_cvals) - 1))
                 _spec_c = _WTP_PARAMS[_cv_var]
                 _ax_se.plot(_xg, _ys, lw=2.0, color=_col, marker="o", ms=3,
                             label=f"{_spec_c['label'].split(' ')[0]} = {_cval:{_spec_c['fmt'][1:]}}")
-            if _required_per_curve is not None and _cv_var == "(geen)":
-                _required_label = (
-                    f"required BPA margin [m={_m_req_se:.0%}]" if _ci == 0 else None
-                )
-                _ax_se.plot(
-                    _xg, _required_per_curve[_ci], color="#2ca02c", lw=1.8,
-                    ls="--", alpha=0.9, label=_required_label,
+
+            _required = None
+            if _show_margin_feasibility and _required_per_curve is not None:
+                _required = np.asarray(
+                    _required_per_curve[_ci], dtype=float
                 )
 
-        if _required_per_curve is None or _cv_var != "(geen)":
-            _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
+            if (_show_margin_feasibility and _feasible_per_curve
+                    and _required is not None):
+                _feasible = np.asarray(
+                    _feasible_per_curve[_ci], dtype=bool
+                )
+                _valid = np.isfinite(_ys) & np.isfinite(_required)
+                _ax_se.fill_between(
+                    _x_values, _ys, _required,
+                    where=_valid & _feasible,
+                    color="#2e8b57", alpha=0.22, interpolate=True,
+                    label="Feasible area" if _ci == 0 else None,
+                )
+
+            if _required is not None:
+                _ax_se.plot(
+                    _xg, _required, color="#d97706", lw=2.0, ls="--",
+                    alpha=0.95,
+                    label=(
+                        f"Required margin (m·R), m={_res_se.get('m_req', 0.0):.0%}"
+                        if _ci == 0 else None
+                    ),
+                )
+
+        _ax_se.axhline(0.0, color="black", lw=0.8, alpha=0.6)
         _ax_se.set_xlabel(_x_lbl, fontsize=11)
         _ax_se.set_ylabel(_y_axis, fontsize=11)
         _ax_se.set_title(f"Sensitivity of {_y_lbl} w.r.t. the WTP elements", fontsize=12)
         if _y_kind == "euro":
             _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"€{v:,.0f}")
+        elif _res_se.get("y_var") == "optimal_alpha":
+            _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:.2f}")
         elif _y_kind == "pct":
             _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:.0%}")
         else:
             _yfmt_se = _mt_se.FuncFormatter(lambda v, _: f"{v:,.0f}")
         _ax_se.yaxis.set_major_formatter(_yfmt_se)
+        if (_res_se.get("y_var") == "optimal_alpha"
+                or _y_axis.strip().lower() == "optimal α"):
+            _ax_se.set_ylim(bottom=0.0)
         _ax_se.grid(True, alpha=0.3)
-        if ((_required_per_curve is not None and _cv_var == "(geen)") or
-            _cv_var != "(geen)" or _has_all_feasible_se or
-            _has_partly_feasible_se):
-            _handles_se, _labels_legend_se = _ax_se.get_legend_handles_labels()
-            if _has_all_feasible_se:
-                _handles_se.append(_Patch_se(
-                    facecolor="#2E7D32", alpha=0.14,
-                    label="feasible region",
-                ))
-            if _has_partly_feasible_se:
-                _handles_se.append(_Patch_se(
-                    facecolor="#F9A825", alpha=0.13,
-                    label="partly feasible (some curves)",
-                ))
-            _ax_se.legend(handles=_handles_se, fontsize=9)
+        if _cv_var != "(geen)" or _show_margin_feasibility:
+            _ax_se.legend(fontsize=9)
         _fig_se.tight_layout()
         st.pyplot(_fig_se)
         _plt_se.close(_fig_se)
 
         _component_stock_records = _res_se.get("component_stock_records", [])
+        _anonymous_component_labels = _component_number_labels(
+            _res_se.get("component_codes", [])
+        )
         if _res_se.get("x_var") == "alpha" and _component_stock_records:
             st.markdown("#### Stock level by component and α")
             _stock_curve_idx = 0
@@ -5823,15 +6984,16 @@ with tab_sensitivity:
             _stock_curve_records = _component_stock_records[
                 _stock_start:_stock_start + len(_xg)
             ]
-            _stock_components = sorted(
-                str(_code) for _code in _res_se.get("component_codes", [])
-            )
+            _stock_components = list(_anonymous_component_labels)
             if not _stock_components:
                 _stock_components = sorted({
                     str(_code)
                     for _record in _stock_curve_records
                     for _code in _record
                 })
+                _anonymous_component_labels = _component_number_labels(
+                    _stock_components
+                )
             if _stock_components:
                 _stock_heat = np.asarray([
                     [
@@ -5845,12 +7007,25 @@ with tab_sensitivity:
                 _fig_stock, _ax_stock = _plt_se.subplots(
                     figsize=(11, _stock_fig_height)
                 )
+                _stock_max = max(
+                    0,
+                    int(np.nanmax(_stock_heat))
+                    if np.isfinite(_stock_heat).any() else 0,
+                )
+                _stock_levels = np.arange(_stock_max + 1)
+                _stock_cmap = _plt_se.colormaps["YlGnBu"].resampled(
+                    len(_stock_levels)
+                )
+                _stock_norm = _mc_se.BoundaryNorm(
+                    np.arange(-0.5, _stock_max + 1.5, 1.0),
+                    _stock_cmap.N,
+                )
                 _stock_image = _ax_stock.imshow(
                     _stock_heat_masked,
                     aspect="auto",
                     interpolation="nearest",
-                    cmap="YlGnBu",
-                    vmin=0,
+                    cmap=_stock_cmap,
+                    norm=_stock_norm,
                 )
                 _stock_alpha = np.asarray(_xg, dtype=float)
                 _stock_tick_values = np.arange(
@@ -5865,20 +7040,27 @@ with tab_sensitivity:
                 )
                 _ax_stock.set_xticks(_stock_tick_positions)
                 _ax_stock.set_xticklabels(
-                    [f"{_alpha:.0%}" for _alpha in _stock_tick_values],
+                    [f"{_alpha:.2f}" for _alpha in _stock_tick_values],
                     rotation=45,
                     ha="right",
                 )
                 _ax_stock.set_yticks(range(len(_stock_components)))
-                _ax_stock.set_yticklabels(_stock_components, fontsize=8)
+                _stock_component_labels = [
+                    _anonymous_component_labels[_code]
+                    for _code in _stock_components
+                ]
+                _ax_stock.set_yticklabels(_stock_component_labels, fontsize=8)
                 _ax_stock.set_xlabel("α — price percentage")
                 _ax_stock.set_ylabel("Component")
                 _ax_stock.set_title("Base-stock level S* by component and α")
                 _stock_colorbar = _fig_stock.colorbar(
-                    _stock_image, ax=_ax_stock, pad=0.02
+                    _stock_image,
+                    ax=_ax_stock,
+                    pad=0.02,
+                    ticks=_stock_levels,
+                    boundaries=np.arange(-0.5, _stock_max + 1.5, 1.0),
                 )
                 _stock_colorbar.set_label("Stock level S* (units)")
-                _stock_colorbar.locator = _mt_se.MultipleLocator(1)
                 _stock_colorbar.formatter = _mt_se.FormatStrFormatter("%d")
                 _stock_colorbar.update_ticks()
                 _fig_stock.tight_layout()
@@ -5889,27 +7071,6 @@ with tab_sensitivity:
                         "Stock level 0 betekent dat het component bij die α niet "
                         "in de budgetselectie is opgenomen."
                     )
-        if _feasible_per_curve:
-            if _has_all_feasible_se and _has_partly_feasible_se:
-                st.caption(
-                    "Groen = alle curves haalbaar; amber = ten minste één, "
-                    "maar niet alle curves haalbaar. Haalbaar vereist zowel "
-                    "model-feasibility als de ingestelde marge-eis."
-                )
-            elif _has_all_feasible_se:
-                st.caption(
-                    "Groen = feasible region: het model is haalbaar en voldoet "
-                    "aan de ingestelde marge-eis."
-                )
-            elif _has_partly_feasible_se:
-                st.caption(
-                    "Amber = ten minste één, maar niet alle curves zijn haalbaar."
-                )
-            else:
-                st.caption(
-                    "Geen van de doorgerekende punten voldoet aan de "
-                    "model- en margevoorwaarden."
-                )
 
         if _margin_peaks is not None:
             _peak_rows = []
@@ -6198,15 +7359,137 @@ with tab_sensitivity:
                             return [bg] * len(row)
 
                         _disp_df = _det_df.copy()
-                        if not _disp_df["omschrijving"].any():
-                            _disp_df = _disp_df.drop(columns=["omschrijving"])
+                        _disp_df["code"] = _disp_df["code"].astype(str).map(
+                            _anonymous_component_labels
+                        )
+                        _disp_df = _disp_df.rename(columns={"code": "Component"})
+                        _disp_df = _disp_df.drop(columns=["omschrijving"])
+
+                        _selected_codes = set(
+                            _det_df.loc[
+                                _det_df["geselecteerd"], "code"
+                            ].astype(str)
+                        )
+                        _pooling_base = _ov_det.loc[
+                            _ov_det.index.astype(str).isin(_selected_codes)
+                        ].copy()
+                        if not _pooling_base.empty:
+                            _pooling_current_z = pd.to_numeric(
+                                _pooling_base["n_klanten"], errors="coerce"
+                            ).fillna(1).clip(lower=1)
+                            _pooling_max_lookup = _cached_maximale_klanten(
+                                _file_mtime(SUBSCRIPTIES_PATH)
+                            )
+                            _pooling_max_z = pd.Series([
+                                float(_pooling_max_lookup.get(str(_code), _current))
+                                for _code, _current in zip(
+                                    _pooling_base.index, _pooling_current_z
+                                )
+                            ], index=_pooling_base.index).fillna(
+                                _pooling_current_z
+                            ).clip(lower=1)
+                            _pooling_lambda_per_subscription = (
+                                pd.to_numeric(
+                                    _pooling_base["lambda_jr"], errors="coerce"
+                                ).fillna(0.0)
+                                / _pooling_current_z
+                            ).to_numpy(dtype=float)
+                            _pooling_lead_time = (
+                                pd.to_numeric(
+                                    _pooling_base["LT_dagen"], errors="coerce"
+                                ).fillna(0.0).to_numpy(dtype=float) / 365.0
+                            )
+                            _pooling_rows = []
+                            for _z_level in range(
+                                    1, int(np.ceil(_pooling_max_z.max())) + 1):
+                                _pooling_z_i = np.minimum(
+                                    float(_z_level),
+                                    _pooling_max_z.to_numpy(dtype=float),
+                                )
+                                _pooling_stock = np.asarray([
+                                    BPAOptimizationModel.inverse_service_level(
+                                        float(_det_p["X"]),
+                                        float(_z_i * _lambda_per_subscription),
+                                        float(_lead_time),
+                                    )
+                                    for _z_i, _lambda_per_subscription, _lead_time
+                                    in zip(
+                                        _pooling_z_i,
+                                        _pooling_lambda_per_subscription,
+                                        _pooling_lead_time,
+                                    )
+                                ], dtype=int)
+                                _pooling_rows.append({
+                                    "z_niveau": _z_level,
+                                    "subscriptions ΣZᵢ": float(_pooling_z_i.sum()),
+                                    "base stock ΣSᵢ*": int(_pooling_stock.sum()),
+                                })
+                            _pooling_df = pd.DataFrame(_pooling_rows)
+
+                            import matplotlib.pyplot as _plt_pooling
+                            import matplotlib.ticker as _mt_pooling
+                            _fig_pooling, _ax_pooling = _plt_pooling.subplots(
+                                figsize=(10, 5)
+                            )
+                            _ax_pooling.step(
+                                _pooling_df["subscriptions ΣZᵢ"],
+                                _pooling_df["base stock ΣSᵢ*"],
+                                where="post",
+                                linewidth=2.4,
+                                color="#16825D",
+                            )
+                            _ax_pooling.scatter(
+                                _pooling_df["subscriptions ΣZᵢ"],
+                                _pooling_df["base stock ΣSᵢ*"],
+                                s=28,
+                                color="#16825D",
+                                edgecolor="white",
+                                linewidth=0.5,
+                                zorder=3,
+                            )
+                            _ax_pooling.set_xlabel(
+                                r"Total subscriptions $\sum_i Z_i$", fontsize=11
+                            )
+                            _ax_pooling.set_ylabel(
+                                r"Total base stock $\sum_i S_i^*$", fontsize=11
+                            )
+                            _ax_pooling.set_title(
+                                "Pooling effect: subscriptions vs. base stock "
+                                f"(βᵗᵃʳ = {float(_det_p['X']):.1%})"
+                            )
+                            _ax_pooling.xaxis.set_major_locator(
+                                _mt_pooling.MaxNLocator(integer=True)
+                            )
+                            _ax_pooling.yaxis.set_major_locator(
+                                _mt_pooling.MaxNLocator(integer=True)
+                            )
+                            _ax_pooling.grid(True, alpha=0.3)
+                            _fig_pooling.tight_layout()
+                            st.pyplot(_fig_pooling)
+                            _plt_pooling.close(_fig_pooling)
+                            st.caption(
+                                "De greedy-geselecteerde componentset blijft vast. "
+                                "Per niveau z geldt Zᵢ(z) = min(z, Mᵢ); de "
+                                "afvlakkende trapcurve toont dat extra subscripties "
+                                "steeds minder extra base stock vereisen."
+                            )
+                            st.download_button(
+                                "⬇️ Download poolingcurve (CSV)",
+                                data=_pooling_df.to_csv(
+                                    sep=";", decimal=",", index=False
+                                ).encode("utf-8"),
+                                file_name=f"poolingcurve_{date.today()}.csv",
+                                mime="text/csv",
+                                key="se_pooling_download",
+                            )
+
                         st.dataframe(
                             _disp_df.style.apply(_highlight_sel, axis=1),
                             use_container_width=True, height=450,
                         )
                         st.download_button(
                             "⬇️ Download componentdetail (CSV)",
-                            data=_det_df.to_csv(
+                            data=_disp_df.to_csv(
                                 sep=";", decimal=",", index=False
                             ).encode("utf-8"),
                             file_name=f"greedy_detail_{date.today()}.csv",
@@ -6243,7 +7526,7 @@ with tab_sensitivity:
             step=0.1, format="%.2f", key="se_bru_brhi",
             help="Bovengrens van het plausibele η_r-bereik.")
         _sb_amin = st.number_input(
-            "α-grid min", min_value=0.0001, max_value=1.0, value=0.02,
+            "α-grid min", min_value=0.0, max_value=1.0, value=0.02,
             step=0.01, format="%.2f", key="se_bru_amin")
         _sb_amax = st.number_input(
             "α-grid max", min_value=0.01,   max_value=1.0, value=0.40,
@@ -6488,6 +7771,7 @@ with tab_sensitivity:
                 label=f"required margin (m·R)  [m={_bo_m_req:.0%}]")
         _ax_bo.set_xlabel("η_r — cost-ratio sensitivity")
         _ax_bo.set_ylabel("optimal α* (%)")
+        _ax_bo.set_ylim(bottom=0.0)
         _ax_bo.set_title(
             ("Greedy o" if _bo_data.get("greedy") else "O")
             + "ptimal α* as function of η_r"
@@ -6857,6 +8141,7 @@ with tab_sensitivity:
             _ax_xsw2.tick_params(axis="y", labelcolor="#d62728")
             _ax_xsw.set_xlabel("service level β^tar")
             _ax_xsw.set_ylabel("optimal α* (%)")
+            _ax_xsw.set_ylim(bottom=0.0)
             _ax_xsw.set_title(
                 f"Bandwidth of optimal α* vs. service level β^tar"
                 f"\n(η_r ∈ [{_sb['brlo']:.2f}, {_sb['brhi']:.2f}], "
@@ -6923,6 +8208,7 @@ with tab_sensitivity:
                 _mt_sb.FuncFormatter(lambda v, _: f"€{v:,.0f}"))
             _ax_brsw.set_xlabel("η_r — cost-ratio sensitivity")
             _ax_brsw.set_ylabel("optimal α* (%)")
+            _ax_brsw.set_ylim(bottom=0.0)
             _ax_brsw.set_title(
                 ("Greedy o" if _sb.get("greedy") else "O")
                 + "ptimal α* as function of η_r"
