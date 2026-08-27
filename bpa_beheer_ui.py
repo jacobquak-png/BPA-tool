@@ -6481,16 +6481,19 @@ with tab_sensitivity:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    _excel_se = BytesIO(_excel_bytes)
-    st.caption(f"Bron-Excel: **{st.session_state['bron_excel_naam']}**")
+    _excel_se = SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None
+    if _excel_se is None:
+        st.error(
+            "Sensitivity-bron ontbreekt: "
+            "`annual_use_abc_met_artikeldata_subscripties_europa_zonder_rspl.xlsx`."
+        )
+    else:
+        st.caption(
+            "Sensitivity-bron: "
+            "**annual_use_abc_met_artikeldata_subscripties_europa_zonder_rspl.xlsx**"
+        )
 
     def _excel_arg_se():
-        if _excel_se is None:
-            return None
-        try:
-            _excel_se.seek(0)
-        except (AttributeError, ValueError):
-            pass
         return _excel_se
 
     _x_grid = list(np.linspace(float(_x_min), float(_x_max), int(_x_n)))
