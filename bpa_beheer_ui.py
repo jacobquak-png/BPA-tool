@@ -17,6 +17,7 @@ from datetime import date
 import pandas as pd
 import numpy as np
 import json
+from io import BytesIO
 
 _ORIGINAL_ST_PYPLOT = getattr(st, "_bpa_original_pyplot", st.pyplot)
 st._bpa_original_pyplot = _ORIGINAL_ST_PYPLOT
@@ -63,8 +64,6 @@ from bpa_beheer import (
     HISTORY_PATH,
     SCRIPT_DIR,
     SELECTIE_PATH,
-    EXCEL_PATH,
-    SUBSCRIPTIES_PATH,
 )
 from classificatie import (
     ClassificatieParams,
@@ -157,7 +156,7 @@ def _cached_laad_classificatie_selectie(_mtime: float) -> dict:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, upload=None) -> pd.DataFrame:
+def _cached_laad_ruwe_dataset(excel_bytes: bytes, sheet_name) -> pd.DataFrame:
     """Cache de (trage) Excel-parse voor de classificatie.
 
     Keyed op bestand-mtime + sheet voor de repo-Excel, of op de geüploade
@@ -167,35 +166,28 @@ def _cached_laad_ruwe_dataset(_excel_mtime: float, sheet_name, upload=None) -> p
     Excel maar één keer geparsed per uniek bestand; daarna gaan parameter-tweaks
     razendsnel omdat alleen de gevectoriseerde scoring opnieuw draait.
     """
-    if upload is not None:
-        # Reset de leespositie: een eerder gelezen/gehashte buffer kan aan het
-        # einde staan, waardoor pd.read_excel niets zou inlezen.
-        try:
-            upload.seek(0)
-        except (AttributeError, ValueError):
-            pass
-        bron = upload
-    else:
-        bron = EXCEL_PATH
-    return laad_ruwe_dataset(bron, sheet_name=sheet_name)
+    return laad_ruwe_dataset(BytesIO(excel_bytes), sheet_name=sheet_name)
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def _cached_bereken_overzicht(cfg_json: str, _excel_mtime: float, _selectie_mtime: float) -> pd.DataFrame:
-    """Cached versie van bereken_overzicht — keyed op JSON-config + bestand-mtimes."""
-    return bereken_overzicht(json.loads(cfg_json))
+def _cached_bereken_overzicht(cfg_json: str, excel_bytes: bytes,
+                              _selectie_mtime: float) -> pd.DataFrame:
+    """Cached overzicht op basis van config en de geüploade workbook-inhoud."""
+    return bereken_overzicht(json.loads(cfg_json), BytesIO(excel_bytes))
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def _cached_aantal_klanten(_excel_mtime: float, upload=None) -> pd.Series:
-    """Cached M_i per component. upload = bestandspad (str) of UploadedFile."""
-    return aantal_klanten_per_component(upload)
+def _cached_aantal_klanten(excel_bytes: bytes) -> pd.Series:
+    """Cached M_i per component uit de geüploade workbook."""
+    return aantal_klanten_per_component(BytesIO(excel_bytes))
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def _cached_maximale_klanten(_excel_mtime: float) -> pd.Series:
-    """M_i uit Final_data van de vaste abonnementsbron zonder RSPL."""
-    df = pd.read_excel(SUBSCRIPTIES_PATH, sheet_name="Final_data")
+def _cached_maximale_klanten(excel_bytes: bytes) -> pd.Series:
+    """M_i uit Final_data, of uit Filtered als Final_data ontbreekt."""
+    workbook = pd.ExcelFile(BytesIO(excel_bytes))
+    sheet_name = "Final_data" if "Final_data" in workbook.sheet_names else "Filtered "
+    df = workbook.parse(sheet_name)
     df = df.rename(columns={
         "Verkooporderregel artikel.Artikel.Artikelcode": "Code",
         "Aantal_klantlocaties_5jr": "M_i",
@@ -213,11 +205,11 @@ def get_classificatie_info() -> dict:
 
 
 def get_overzicht_df(cfg: dict) -> pd.DataFrame:
-    """Bereken het overzicht (cached). Auto-invalideert bij config- of bestand-wijziging."""
+    """Bereken het overzicht uit de geüploade workbook (cached)."""
     cfg_json = json.dumps(cfg, sort_keys=True, default=str)
     return _cached_bereken_overzicht(
         cfg_json,
-        _file_mtime(EXCEL_PATH),
+        st.session_state["bron_excel_bytes"],
         _file_mtime(SELECTIE_PATH),
     )
 
@@ -659,8 +651,67 @@ if "cfg" not in st.session_state:
 
 cfg = st.session_state.cfg
 
-# ── Excel altijd uit de repository ────────────────────────────────────────
-_excel_file = None  # gebruik altijd EXCEL_PATH uit de repo
+# ── Centrale databron ─────────────────────────────────────────────────────
+_bron_upload = st.file_uploader(
+    "Excelbestand met component- en klantdata",
+    type=["xlsx", "xlsm"],
+    help=("Vereist tabblad 'Filtered '. Voor adoptieanalyses is daarnaast "
+          "'Adoptie' of 'Adoption_rate_per_klant' nodig."),
+    key="bron_excel_upload",
+)
+if _bron_upload is None:
+    st.info("Upload een Excelbestand om de tool te starten.")
+    st.stop()
+
+_excel_bytes = _bron_upload.getvalue()
+try:
+    _sheet_names = pd.ExcelFile(BytesIO(_excel_bytes)).sheet_names
+except Exception as exc:
+    st.error(f"Excelbestand kon niet worden gelezen: {exc}")
+    st.stop()
+if "Filtered " not in _sheet_names:
+    st.error("Het verplichte tabblad 'Filtered ' ontbreekt in het Excelbestand.")
+    st.stop()
+
+try:
+    _upload_df = laad_ruwe_dataset(BytesIO(_excel_bytes), sheet_name="Filtered ")
+except Exception as exc:
+    st.error(f"Tabblad 'Filtered ' kon niet worden gelezen: {exc}")
+    st.stop()
+
+_overzicht_columns = {
+    "Verkooporderregel artikel.Artikel.Artikelcode",
+    "Omschrijving_standaard_artikelen",
+    "Standaard verkoopprijs",
+    "Inkoopprijs (standaard)",
+    "Totaal_orders_5jr",
+    "Aantal_klantlocaties_5jr",
+    "Hoofdleverancier.Levertijd",
+    "MTBF(years)",
+}
+_missing_columns = sorted(
+    _overzicht_columns.difference(_upload_df.columns)
+    | set(controleer_kolommen(_upload_df))
+)
+if _missing_columns:
+    st.error(
+        "De volgende verplichte kolommen ontbreken in 'Filtered ': "
+        + ", ".join(_missing_columns)
+    )
+    st.stop()
+
+if st.session_state.get("bron_excel_bytes") != _excel_bytes:
+    st.session_state["bron_excel_bytes"] = _excel_bytes
+    st.session_state["bron_excel_naam"] = _bron_upload.name
+    st.session_state.pop("overzicht_df", None)
+    st.session_state.pop("cls_result", None)
+    invalidate_caches()
+
+_excel_file = BytesIO(_excel_bytes)
+st.caption(
+    f"Databron: `{_bron_upload.name}` · tabbladen: "
+    f"{', '.join(_sheet_names)}"
+)
 
 # Overzicht altijd vers berekenen bij opstarten van de sessie
 if "overzicht_df" not in st.session_state:
@@ -696,16 +747,9 @@ tab_overzicht, tab_subscripties, tab_toevoegen, tab_verwijderen, tab_config, tab
 with tab_overzicht:
     st.subheader("Basisvoorraden per component")
 
-    # Excel-bestandsdatum ophalen
-    try:
-        from bpa_beheer import EXCEL_PATH as _EXCEL_PATH
-        _excel_mtime = date.fromtimestamp(os.path.getmtime(_EXCEL_PATH)).isoformat()
-    except Exception:
-        _excel_mtime = "onbekend"
-
     st.write(
         f"Configuratie bijgewerkt: **{cfg['aangepast']}** · "
-        f"Excel gewijzigd: **{_excel_mtime}**"
+        f"Databron: **{st.session_state['bron_excel_naam']}**"
     )
 
     # ── Classificatie-koppeling status ────────────────────────────────────
@@ -967,7 +1011,7 @@ with tab_subscripties:
             # Snapshot vóór recompute (zelfde patroon als bij 'Opslaan overrides')
             if "overzicht_df" in st.session_state:
                 st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
-            sla_config_op(cfg)
+            sla_config_op(cfg, BytesIO(_excel_bytes))
             st.toast(f"Z = {_z} gezet voor {len(_codes)} componenten.", icon="✅")
             st.session_state.pop("overzicht_df", None)
             st.rerun()
@@ -1030,7 +1074,7 @@ with tab_subscripties:
         # Bewaar huidige overzicht_df als vorige snapshot vóór recompute
         if "overzicht_df" in st.session_state:
             st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
-        sla_config_op(cfg)
+        sla_config_op(cfg, BytesIO(_excel_bytes))
         st.toast(f"Overrides opgeslagen — {len(n_ov)} Z, {len(ip_ov)} IP, {len(lt_ov)} LT.", icon="✅")
         st.session_state.pop("overzicht_df", None)
         st.rerun()
@@ -1079,7 +1123,7 @@ with tab_toevoegen:
                 "n_klanten":       int(f_n),
                 "ip":              float(f_ip),
             }
-            sla_config_op(cfg)
+            sla_config_op(cfg, BytesIO(_excel_bytes))
             st.success(f"Component '{f_code}' toegevoegd.")
 
             # Preview berekende basisvoorraden
@@ -1143,7 +1187,7 @@ with tab_verwijderen:
             st.warning("Dit component wordt permanent verwijderd.")
             if st.button("🗑️ Verwijder permanent", type="primary"):
                 del cfg["handmatige_componenten"][keuze]
-                sla_config_op(cfg)
+                sla_config_op(cfg, BytesIO(_excel_bytes))
                 st.success(f"'{keuze}' verwijderd.")
                 st.rerun()
         else:
@@ -1152,7 +1196,7 @@ with tab_verwijderen:
             if st.button("🚫 Uitsluiten van model", type="primary"):
                 if keuze not in uitgesloten:
                     uitgesloten.append(keuze)
-                sla_config_op(cfg)
+                sla_config_op(cfg, BytesIO(_excel_bytes))
                 st.success(f"'{keuze}' uitgesloten.")
                 st.rerun()
 
@@ -1167,7 +1211,7 @@ with tab_verwijderen:
         )
         if st.button("↩️ Zet terug in model"):
             uitgesloten.remove(terugzetten)
-            sla_config_op(cfg)
+            sla_config_op(cfg, BytesIO(_excel_bytes))
             st.success(f"'{terugzetten}' is weer actief.")
             st.rerun()
 
@@ -2774,13 +2818,8 @@ with tab_kosten:
                     # Adoptie-bewuste overzicht: vervang n_klanten/lambda_jr door Z_i(α)
                     _k_ov = st.session_state.overzicht_df.copy()
                     try:
-                        _k_excel_src = st.session_state.get("subsim_upload") or (
-                            SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None)
-                        if _k_excel_src is not None:
-                            _k_n_mi = _cached_aantal_klanten(
-                                _file_mtime(_k_excel_src if isinstance(_k_excel_src, str) else ""),
-                                upload=_k_excel_src,
-                            )
+                        if _excel_bytes:
+                            _k_n_mi = _cached_aantal_klanten(_excel_bytes)
                             if not _k_n_mi.empty:
                                 _k_q    = adoptie_kans(k_alpha, k_kappa_c, k_q_eq, k_beta_r)
                                 _k_base = _k_ov.loc[_k_ov.index.isin(_k_n_mi.index)].copy()
@@ -2976,13 +3015,8 @@ with tab_drempel:
         # Laad M_i (cached) voor Z_i(α) = M_i·q(α)
         _drm_n_mi = pd.Series(dtype=float)
         try:
-            _drm_excel_src = st.session_state.get("subsim_upload") or (
-                SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else None)
-            if _drm_excel_src is not None:
-                _drm_n_mi = _cached_aantal_klanten(
-                    _file_mtime(_drm_excel_src if isinstance(_drm_excel_src, str) else ""),
-                    upload=_drm_excel_src,
-                )
+            if _excel_bytes:
+                _drm_n_mi = _cached_aantal_klanten(_excel_bytes)
         except Exception:
             pass
         if not _drm_conservative and not _drm_n_mi.empty:
@@ -3108,9 +3142,7 @@ with tab_drempel:
             ("Zᵢ = 3", 3),
             ("Zᵢ = Mᵢ", None),
         )
-        _pooling_mi = _cached_maximale_klanten(
-            _file_mtime(SUBSCRIPTIES_PATH)
-        )
+        _pooling_mi = _cached_maximale_klanten(_excel_bytes)
         _pooling_results = []
         for _scenario_label, _scenario_z in _pooling_scenarios:
             _scenario_subscribers = 0
@@ -3243,10 +3275,8 @@ with tab_classificatie:
         "doorgezet naar het tabblad 📊 Overzicht."
     )
 
-    # ── Bron-Excel: vaste repo-Excel ────────────────────────────────────
-    _cls_upload = None  # upload niet meer nodig; bestand staat in de repo
-    _cls_bron = EXCEL_PATH
-    st.caption(f"Bron-Excel: `{os.path.basename(EXCEL_PATH)}`")
+    # ── Bron-Excel: centrale upload ──────────────────────────────────────
+    st.caption(f"Bron-Excel: `{st.session_state['bron_excel_naam']}`")
     _cls_sheet = st.text_input(
         "Sheet-naam (leeg = eerste sheet)",
         value="Filtered ",
@@ -3403,14 +3433,8 @@ with tab_classificatie:
             with st.spinner("Classificatie berekenen…"):
                 # De (trage) Excel-parse wordt gecachet, zodat alleen de
                 # gevectoriseerde scoring opnieuw draait bij parameter-tweaks.
-                if _cls_upload is not None:
-                    _df_raw = _cached_laad_ruwe_dataset(0.0, _cls_sheet, _cls_upload)
-                    _bron_excel = None
-                else:
-                    _df_raw = _cached_laad_ruwe_dataset(
-                        _file_mtime(EXCEL_PATH), _cls_sheet
-                    )
-                    _bron_excel = str(EXCEL_PATH)
+                _df_raw = _cached_laad_ruwe_dataset(_excel_bytes, _cls_sheet)
+                _bron_excel = None
                 _miss = controleer_kolommen(_df_raw)
                 if _miss:
                     raise ValueError(f"Ontbrekende kolommen: {_miss}")
@@ -4145,10 +4169,7 @@ with tab_budget:
         )
         _max_adoptie = _adoptie_scenario.startswith("Maximale adoptie")
         if _max_adoptie:
-            if not os.path.exists(SUBSCRIPTIES_PATH):
-                st.error("Abonnementenbestand zonder RSPL niet gevonden.")
-                st.stop()
-            _budget_m_raw = _cached_maximale_klanten(_file_mtime(SUBSCRIPTIES_PATH))
+            _budget_m_raw = _cached_maximale_klanten(_excel_bytes)
             _budget_m_lookup = {
                 str(code).strip(): float(value)
                 for code, value in _budget_m_raw.items()
@@ -4162,8 +4183,10 @@ with tab_budget:
             ).fillna(0.0)
             _budget_m = pd.Series(
                 [
-                    _budget_m_lookup.get(str(code).strip(), float(_budget_n_base.at[code]))
-                    for code in _ov_df.index
+                    _budget_m_lookup.get(str(code).strip(), float(n_base))
+                    for code, n_base in zip(
+                        _ov_df.index, _budget_n_base.to_numpy()
+                    )
                 ],
                 index=_ov_df.index,
                 dtype=float,
@@ -4534,7 +4557,7 @@ with tab_budget:
                 for c in _uit_codes:
                     if c not in cfg["uitgesloten_componenten"]:
                         cfg["uitgesloten_componenten"].append(c)
-                sla_config_op(cfg)
+                sla_config_op(cfg, BytesIO(_excel_bytes))
                 st.session_state.pop("overzicht_df", None)
                 st.success(
                     f"{len(_uit_codes)} componenten toegevoegd aan uitsluitingen. "
@@ -4661,10 +4684,9 @@ with tab_subsim:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    # ── Bron-Excel: vaste subscriptie-dataset uit de repo ────────────────
-    _subsim_upload = None  # upload niet meer nodig; bestand staat in de repo
-    _excel_bron = SUBSCRIPTIES_PATH
-    st.caption(f"Bron-Excel: `{os.path.basename(SUBSCRIPTIES_PATH)}`")
+    # ── Bron-Excel: centrale upload ──────────────────────────────────────
+    _excel_bron = BytesIO(_excel_bytes)
+    st.caption(f"Bron-Excel: `{st.session_state['bron_excel_naam']}`")
 
     def _excel_arg():
         """Geef een leesbare bron terug; reset de upload-buffer naar het begin."""
@@ -4817,7 +4839,7 @@ with tab_subsim:
                     cfg["n_klanten_overrides"] = _n_ov
                     if "overzicht_df" in st.session_state:
                         st.session_state.overzicht_df_prev = st.session_state.overzicht_df.copy()
-                    sla_config_op(cfg)
+                    sla_config_op(cfg, BytesIO(_excel_bytes))
                     invalidate_caches()
                     st.session_state.pop("overzicht_df", None)
                     st.session_state["subsim_auto_sig"] = _auto_sig
@@ -5472,10 +5494,7 @@ with tab_subsim:
                     _bdet_br  = _bdet_lo + _bdet_br_pct / 100.0 * (_bdet_hi - _bdet_lo)
                     _bdet_a   = float(_ag[_bdet_a_idx])
 
-                    _bdet_n = _cached_aantal_klanten(
-                        _file_mtime(_excel_bron if isinstance(_excel_bron, str) else ""),
-                        upload=_excel_arg() if _excel_bron else None,
-                    )
+                    _bdet_n = _cached_aantal_klanten(_excel_bytes)
                     try:
                         _ov_bdet = get_overzicht_df(cfg)
                     except Exception:
@@ -5703,9 +5722,7 @@ with tab_sensitivity:
         _psi_selected_df = _psi_overzicht.loc[
             _psi_overzicht.index.astype(str).isin(_psi_selected)
         ]
-        _psi_mi = _cached_maximale_klanten(
-            _file_mtime(SUBSCRIPTIES_PATH)
-        )
+        _psi_mi = _cached_maximale_klanten(_excel_bytes)
         _psi_budget = 35_000.0
         _psi_c1, _psi_c2 = st.columns(2)
         with _psi_c1:
@@ -6322,7 +6339,7 @@ with tab_sensitivity:
 
     # ── Registry van afhankelijke (y-as) uitkomsten ───────────────────────
     _Y_METRICS = {
-        "bpa_margin":    {"label": "Total Profit (€)",                     "axis": "Total Profit (€)",                      "tbl": "BPA margin (€)",       "kind": "euro"},
+        "bpa_margin":    {"label": "Total expected profit (€)",            "axis": "Total expected profit (€)",             "tbl": "BPA margin (€)",       "kind": "euro"},
         "revenue":       {"label": "Subscription revenue (€)",             "axis": "subscription revenue (€)",              "tbl": "Revenue (€)",          "kind": "euro"},
         "costs":         {"label": "BPA carrying costs (€)",               "axis": "BPA carrying costs (€)",                "tbl": "Carrying costs (€)",   "kind": "euro"},
         "surplus":       {"label": "Total customer surplus (€)",           "axis": "total customer surplus (€)",            "tbl": "Customer surplus (€)", "kind": "euro"},
@@ -6464,19 +6481,8 @@ with tab_sensitivity:
             "Voer eerst de classificatie uit via tab 🏷️ Classificatie."
         )
 
-    # Bron-Excel met de tab 'Adoptie': zelfde resolutie als de Subscriptie-
-    # simulatie-tab — eerst de daar geüploade Excel (`subsim_upload`), dan de
-    # classificatie-upload (`cls_upload`), anders SUBSCRIPTIES_PATH uit de repo,
-    # en als laatste redmiddel EXCEL_PATH.
-    _excel_se = (
-        st.session_state.get("subsim_upload")
-        or st.session_state.get("cls_upload")
-        or (SUBSCRIPTIES_PATH if os.path.exists(SUBSCRIPTIES_PATH) else EXCEL_PATH)
-    )
-    if hasattr(_excel_se, "name"):
-        st.caption(f"Bron-Excel: **{_excel_se.name}**")
-    else:
-        st.caption(f"Bron-Excel: repo-Excel (`{os.path.basename(_excel_se)}`)")
+    _excel_se = BytesIO(_excel_bytes)
+    st.caption(f"Bron-Excel: **{st.session_state['bron_excel_naam']}**")
 
     def _excel_arg_se():
         if _excel_se is None:
@@ -6876,12 +6882,12 @@ with tab_sensitivity:
         _cvals     = _res_se["curve_vals"]
         _cv_var    = _res_se["curve_var"]
         _x_lbl     = _res_se["x_label"]
-        _y_axis    = _res_se.get("y_axis", "Total Profit (€)")
-        _y_lbl     = _res_se.get("y_label", "Total Profit (€)")
+        _y_axis    = _res_se.get("y_axis", "Total expected profit (€)")
+        _y_lbl     = _res_se.get("y_label", "Total expected profit (€)")
         _y_tbl     = _res_se.get("y_tbl", "BPA margin (€)")
         _y_kind    = _res_se.get("y_kind", "euro")
         if _res_se.get("y_var") == "bpa_margin":
-            _y_axis = _y_lbl = "Total Profit (€)"
+            _y_axis = _y_lbl = "Total expected profit (€)"
         _feasible_per_curve = _res_se.get("feasible_per_curve")
         _required_per_curve = _res_se.get("required_per_curve")
         _margin_peaks = _res_se.get("margin_peaks")
@@ -6901,7 +6907,7 @@ with tab_sensitivity:
                 _col = "#174a7e"
                 _ax_se.plot(
                     _xg, _ys, color=_col, lw=2.2, marker="o", ms=3,
-                    label="Total Profit (€)" if _show_margin_feasibility else None,
+                    label="Total expected profit (€)" if _show_margin_feasibility else None,
                 )
             else:
                 _col = _cmap_se(_ci / max(1, len(_cvals) - 1))
@@ -7319,10 +7325,7 @@ with tab_sensitivity:
                 _pd_idx = _cv_idx * len(_gxg) + _xv_idx
                 if 0 <= _pd_idx < len(_pd_list):
                     _det_p  = _pd_list[_pd_idx]
-                    _det_n  = _cached_aantal_klanten(
-                        _file_mtime(_excel_se if isinstance(_excel_se, str) else ""),
-                        upload=_excel_arg_se() if _excel_se else None,
-                    )
+                    _det_n = _cached_aantal_klanten(_excel_bytes)
                     try:
                         _ov_det = get_overzicht_df(cfg)
                     except Exception:
@@ -7378,7 +7381,7 @@ with tab_sensitivity:
                                 _pooling_base["n_klanten"], errors="coerce"
                             ).fillna(1).clip(lower=1)
                             _pooling_max_lookup = _cached_maximale_klanten(
-                                _file_mtime(SUBSCRIPTIES_PATH)
+                                _excel_bytes
                             )
                             _pooling_max_z = pd.Series([
                                 float(_pooling_max_lookup.get(str(_code), _current))
@@ -8273,10 +8276,7 @@ with tab_sensitivity:
                              + _sbdet_br_pct / 100.0
                              * (_sb["brhi"] - _sb["brlo"]))
                 _sbdet_a  = float(_sbdet_ag[_sbdet_a_idx])
-                _sbdet_n  = _cached_aantal_klanten(
-                    _file_mtime(_excel_se if isinstance(_excel_se, str) else ""),
-                    upload=_excel_arg_sb() if _excel_se else None,
-                )
+                _sbdet_n = _cached_aantal_klanten(_excel_bytes)
                 try:
                     _ov_sbdet = get_overzicht_df(cfg)
                 except Exception:
